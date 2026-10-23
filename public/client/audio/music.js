@@ -7,11 +7,14 @@
 //
 // The theme is eight bars at 116 BPM in two halves that do not sound alike.
 //
-// Bars 1-4 are a relaxed four-on-the-floor funk vamp: Am7 Cmaj7 Em7 D9 — a vi-I-iii-II shape —
-// over a bass that walks down A G E D, with a muted guitar chank on the offbeats and dry disco
-// hats. The major II at the end wants to go somewhere and the loop goes back to the Am7 instead,
-// which is what lets four bars repeat without ever sounding finished. There is no lead here and
-// no arpeggio: in funk the guitar is the movement, and anything else on top of it is clutter.
+// Both halves are the same four chords — Dm Bb F C — and the difference between them is
+// ARRANGEMENT, not harmony. That is the oldest structure in synthwave and it works because the
+// second time round, the ear already knows where the chords are going and is free to follow the
+// tune instead.
+//
+// Bars 1-4 are the statement: a driving octave bass on the eighths, a gated pad, and the
+// arpeggio running at half density through a filter that is barely open. No melody at all. The
+// last bar is a build — the arp fills in, the snare runs, and a noise sweep rises into bar 5.
 //
 // Bars 5-8 are the pirate half: Dm Bb F C, a three-octave sixteenth arpeggio, and a hook built
 // like a shanty — one rhythmic cell stated, answered, then restated a fourth higher, landing on
@@ -48,41 +51,43 @@ const TIMER_MS = 25;
 // a track they cannot hear yet.
 const XFADE_S = 2.5;
 
-// `notes` is the pad and arpeggio voicing, `chank` the guitar cluster, and `bass` the root the
-// walking pattern is measured from. Sevenths and ninths rather than triads throughout the first
-// half: the maj7/min7 colour is most of what makes this read as funk instead of as rock.
+// `notes` is the pad and arpeggio voicing; `bass` is the root the pulse is measured from.
+/* Dm Bb F C, twice. The progression every pirate tune ever written sits on.
+ *
+ * Same bass both times — the octave pulse lives in one register and moving it would just make
+ * half the track sound thin. What changes is the VOICING above it: the first pass is an octave
+ * down, so the statement sits under the restatement rather than beside it.
+ */
 const CHORDS = [
-  { bass: 45, notes: [60, 64, 67], chank: [64, 67, 72] },   // Am7
-  { bass: 43, notes: [64, 67, 71], chank: [64, 67, 71] },   // Cmaj7
-  { bass: 40, notes: [62, 67, 71], chank: [62, 67, 71] },   // Em7
-  { bass: 38, notes: [66, 69, 76], chank: [64, 66, 69] },   // D9
-  // The back half moves to D minor. The arpeggio engine is unchanged — it is the chords under
-  // it that decide whether a sea shanty or a car advert comes out, and Dm-Bb-F-C is the
-  // progression every pirate tune ever written sits on.
-  { bass: 38, notes: [62, 65, 69] },   // Dm
+  { bass: 38, notes: [50, 53, 57] },   // Dm, voiced low
+  { bass: 34, notes: [50, 53, 58] },   // Bb
+  { bass: 41, notes: [48, 53, 57] },   // F
+  { bass: 36, notes: [48, 52, 55] },   // C
+  { bass: 38, notes: [62, 65, 69] },   // Dm, open
   { bass: 34, notes: [62, 65, 70] },   // Bb
   { bass: 41, notes: [60, 65, 69] },   // F
   { bass: 36, notes: [60, 64, 67] },   // C, pulling back round to the Dm
 ];
 
-// Semitones above the bar's root; null is a rest. The root lands on the downbeat and then the
-// line leaves it alone — a disco bass that sits on the root turns the groove into a march. The
-// last bar climbs 9-7-5-4 so the loop is pulled back round to the Am7 rather than stopping.
-const FUNK_BASS = [
-  [0, null, null, 0, null, null, 12, null, null, 7, null, null, 10, null, 0, null],
-  [0, null, null, 0, null, 12, null, null, 7, null, null, 4, null, null, 0, null],
-  [0, null, null, 0, null, null, 12, null, null, 10, null, 7, null, null, 0, null],
-  [0, null, null, 0, null, 12, null, null, 9, null, null, 7, null, 5, null, 4],
-];
+/* The octave bass, in semitones above the bar's root. Eighth notes, root and octave alternating.
+ *
+ * This one pattern is most of what synthwave IS. It never rests and it never wanders: the point
+ * is relentlessness, and a bass line with ideas in it fights the arpeggio for the same job. The
+ * root on the beat and the octave off it is the entire trick.
+ */
+const PULSE_BASS = [0, null, 12, null, 0, null, 12, null, 0, null, 12, null, 0, null, 12, null];
 
-// Where the guitar chank lands. Never on a downbeat — step 0, 4, 8 and 12 belong to the kick, and
-// a chank on top of one stops being an offbeat and becomes a chord stab. The gaps carry this
-// pattern more than the hits do; filling them in is what turns funk into strumming.
-const CHANK = [
-  [0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 1, 0],
-  [0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 1, 0],
-  [0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 0],
-  [0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0, 1],
+/* How much of the arpeggio plays, bar by bar, through the front half.
+ *
+ * A 1 is a sixteenth that sounds. Starting at a quarter and filling in over four bars is a
+ * build: the listener hears the same figure getting denser rather than a new thing arriving,
+ * which is why bar 5 lands as a chorus instead of as a change of subject.
+ */
+const ARP_GATE = [
+  [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0],
+  [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+  [1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0],
+  [1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
 ];
 
 /* The synthwave engine room. Indices into a three-octave stack of the bar's chord.
@@ -114,7 +119,7 @@ const LEAD = [
   null, 62, 62, 69, null, 69, 67, 69,   // Dm — pickup, then hammer the fifth. This is the hook.
   null, 70, 69, 67, 65, null, null, null, // Bb — answer it falling, and leave a bar of air
   null, 60, 60, 69, null, 69, 72, 69,   // F  — the SAME cell a fourth up: repetition is the hook
-  74, 72, 69, 67, 65, null, 62, null,   // C  — run home down the scale, land on the tonic
+  74, 72, 69, 67, 62, null, null, null, // C  — run home down the scale, land on the tonic
 ];
 
 /* An octave shout on the strong beats of bars 1 and 3.
@@ -182,31 +187,26 @@ function createTheme({ bus }) {
   }
 
   /**
-   * The muted funk guitar — the "chank". Three things make it, and all three are load-bearing:
-   * a 40 ms gate, a high-Q band around 1.9 kHz, and no body underneath. Lengthen the envelope and
-   * it becomes a pad; drop the Q and it becomes a synth stab; keep the low end and it fights the
-   * bass. It deliberately does not feed the delay, because a dotted-eighth echo on a sixteenth
-   * note pattern this dense is mud.
+   * The build: filtered noise rising across a bar.
+   *
+   * One of the two things synthwave uses to mark a section — the other is silence — and the
+   * cheaper of the two. A bandpass climbing two octaves while it gets louder reads as "here it
+   * comes" to anybody who has heard a record made after 1983.
    */
-  function chank(t, notes) {
-    const f = ctx.createBiquadFilter(), g = ctx.createGain();
+  function sweep(t, dur) {
+    const src = noiseSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
     f.type = 'bandpass';
-    f.frequency.value = 1900;
-    f.Q.value = 5;
-    envelope(g, t, { a: 0.004, d: 0.042, peak: 0.1 });
-    for (const [i, n] of notes.entries()) {
-      const o = ctx.createOscillator();
-      o.type = 'sawtooth';
-      o.frequency.value = hz(n);
-      // A few cents apart so the cluster sounds plucked rather than pressed by a machine.
-      o.detune.value = (i - 1) * 7;
-      o.connect(f);
-      o.start(t);
-      o.stop(t + 0.09);
-    }
-    f.connect(g);
-    g.connect(gain);
+    f.Q.value = 2.5;
+    f.frequency.setValueAtTime(hz(60), t);
+    f.frequency.exponentialRampToValueAtTime(hz(96), t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.05, t + dur * 0.92);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f); f.connect(g); g.connect(gain);
+    src.start(t);
+    src.stop(t + dur + 0.05);
   }
+
 
   function arp(t, note, level = 0.045) {
     const o = ctx.createOscillator(), g = ctx.createGain();
@@ -306,12 +306,20 @@ function createTheme({ bus }) {
     if (n === 4 || n === 12) snare(t, funk ? 0.085 : 0.12);
 
     if (funk) {
-      // Closed hats on the eighths, open on the "and" of 4. In disco the hats are the clock, so
-      // they stay dry and quiet; the open one is the only thing in the bar that says "turnaround".
-      if (n % 2 === 0) hat(t, n === 14);
-      const walk = FUNK_BASS[bar][n];
-      if (walk !== null) bass(t, chord.bass + walk, STEP_DUR * 1.4);
-      if (CHANK[bar][n]) chank(t, chord.chank);
+      // Offbeat sixteenth hats: the shuffle between the kick and the bass, and the only thing
+      // in the front half moving faster than an eighth until the build.
+      if (n % 2 === 1) hat(t, n === 15);
+      const step = PULSE_BASS[n];
+      if (step !== null) bass(t, chord.bass + step, STEP_DUR * 1.5);
+      // The same arpeggio as the back half, gated down and voiced low — so bar 5 is the figure
+      // you have been hearing all along, finally let out.
+      if (ARP_GATE[bar][n]) {
+        const idx = ARP_ROLL[n];
+        arp(t, chord.notes[idx % 3] + Math.floor(idx / 3) * 12, 0.028);
+      }
+      // The build: a rising noise sweep across the last bar, which is the thing that makes the
+      // hook arrive rather than merely start.
+      if (bar === 3 && n === 0) sweep(t, STEP_DUR * STEPS_PER_BAR);
     } else {
       if (n % 2 === 1) hat(t, n === 7 || n === 15);
       if (n % 2 === 0) bass(t, chord.bass + (n === 6 || n === 14 ? 12 : 0), STEP_DUR * 1.6);

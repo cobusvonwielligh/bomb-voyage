@@ -50,10 +50,11 @@ const number = (src, name) => {
 };
 
 const CHORDS = literal(musicSrc, 'CHORDS');
-const FUNK_BASS = literal(musicSrc, 'FUNK_BASS');
-const CHANK = literal(musicSrc, 'CHANK');
+const PULSE_BASS = literal(musicSrc, 'PULSE_BASS');
+const ARP_GATE = literal(musicSrc, 'ARP_GATE');
 const ARP_ROLL = literal(musicSrc, 'ARP_ROLL');
 const LEAD = literal(musicSrc, 'LEAD');
+const LEAD_OCTAVE = literal(musicSrc, 'LEAD_OCTAVE');
 const ARPS = Object.fromEntries(['DRIFT_ARP', 'SUSPEND_ARP', 'UNDERTOW_ARP']
   .map(n => [n, literal(ambientSrc, n)]));
 const BEDS = literal(ambientSrc, 'BEDS', ARPS);
@@ -63,54 +64,84 @@ const BEDS = literal(ambientSrc, 'BEDS', ARPS);
 test('the theme has one chord per bar and four bars per half', () => {
   assert.equal(number(musicSrc, 'BARS'), 8);
   assert.equal(CHORDS.length, 8, 'the sequencer indexes CHORDS by bar, so it needs BARS entries');
-  // The funk half owns bars 0-3 and is the only half with a guitar voicing.
   for (const [i, c] of CHORDS.entries()) {
-    assert.equal('chank' in c, i < 4, `bar ${i}: chank voicing on the wrong half`);
     assert.equal(c.notes.length, 3,
       `bar ${i}: the arpeggio reads notes[idx % 3], so a voicing must be exactly 3 notes`);
   }
 });
 
-test('the first half walks its bass down and never resolves', () => {
-  const roots = CHORDS.slice(0, 4).map(c => c.bass);
-  assert.deepEqual(roots, [45, 43, 40, 38], 'the descending line A-G-E-D is the hook');
-  for (let i = 1; i < roots.length; i++) {
-    assert.ok(roots[i] < roots[i - 1], `bar ${i} does not continue the descent`);
-  }
-  // vi-I-iii-II in C: Am7, Cmaj7, Em7 and a major II. A minor II would resolve and the vamp
-  // would stop being a vamp.
-  assert.ok(CHORDS[3].chank.includes(66), 'the II is not major — F# is what makes it lift');
-});
-
-test('every first-half pattern is exactly one bar long', () => {
-  for (const [name, table] of [['FUNK_BASS', FUNK_BASS], ['CHANK', CHANK]]) {
-    assert.equal(table.length, 4, `${name} needs one pattern per funk bar`);
-    for (const [i, row] of table.entries()) {
-      assert.equal(row.length, STEPS_PER_BAR, `${name}[${i}] is ${row.length} steps, not 16`);
-    }
+test('both halves are the same progression, the second one voiced higher', () => {
+  // The whole structure rests on this. Same four chords twice means the second pass is a
+  // chorus rather than a new section, and the ear is free to follow the tune because it
+  // already knows where the harmony is going.
+  //
+  // The bass stays put: the octave pulse lives in one register, and moving it between halves
+  // would make one of them sound thin rather than making the other sound bigger. It is the
+  // voicing above it that lifts.
+  const low = CHORDS.slice(0, 4), high = CHORDS.slice(4);
+  assert.deepEqual(low.map(c => c.bass), high.map(c => c.bass), 'the roots changed');
+  for (let i = 0; i < 4; i++) {
+    assert.ok(Math.max(...low[i].notes) < Math.max(...high[i].notes),
+      `bar ${i} is not voiced under its restatement`);
   }
 });
 
-test('the bass walk leaves the root on every downbeat and nowhere else', () => {
-  for (const [i, row] of FUNK_BASS.entries()) {
-    assert.equal(row[0], 0, `bar ${i} does not land on its root`);
-    const hits = row.filter(v => v !== null).length;
-    assert.ok(hits >= 5 && hits <= 9, `bar ${i} has ${hits} bass notes; that is not a walk`);
-    for (const v of row) {
-      assert.ok(v === null || (Number.isInteger(v) && v >= 0 && v <= 12),
-        `bar ${i} has an offset of ${v}, which is outside one octave`);
-    }
+test('the progression is D minor, and stays in it', () => {
+  // Dm Bb F C. The flat seventh is the whole difference between a sea shanty and a horror
+  // film, so a C# anywhere in here is a bug rather than a flourish.
+  const D_MINOR = new Set([2, 4, 5, 7, 9, 10, 0]);        // D E F G A Bb C
+  const every = CHORDS.flatMap(c => [c.bass, ...c.notes]).concat(LEAD.filter(n => n !== null));
+  const strays = [...new Set(every.filter(n => !D_MINOR.has(n % 12)))];
+  assert.deepEqual(strays, [], `notes outside D natural minor: ${strays}`);
+  assert.deepEqual(CHORDS.slice(4).map(c => c.bass % 12), [2, 10, 5, 0], 'not Dm Bb F C');
+});
+
+test('the octave bass pulses and never wanders', () => {
+  // Relentlessness is the point. A bass line with ideas in it fights the arpeggio for the
+  // same job, and the root-on-the-beat octave-off-it figure IS synthwave.
+  assert.equal(PULSE_BASS.length, STEPS_PER_BAR);
+  for (const [n, v] of PULSE_BASS.entries()) {
+    if (n % 4 === 0) assert.equal(v, 0, `step ${n} should be the root`);
+    else if (n % 2 === 0) assert.equal(v, 12, `step ${n} should be the octave`);
+    else assert.equal(v, null, `step ${n} should be silent — this is eighths, not sixteenths`);
   }
 });
 
-test('the guitar chank never lands on a downbeat', () => {
-  for (const [i, row] of CHANK.entries()) {
-    for (const n of [0, 4, 8, 12]) {
-      assert.equal(row[n], 0,
-        `bar ${i} step ${n}: a chank on the kick is a chord stab, not an offbeat`);
-    }
-    const hits = row.filter(Boolean).length;
-    assert.ok(hits >= 5 && hits <= 9, `bar ${i} has ${hits} chank hits; the gaps carry this`);
+test('the front half builds, bar by bar, into the hook', () => {
+  // The listener has to hear the same figure getting denser, not a new thing arriving. If the
+  // gate did not grow, bar 5 would be a change of subject instead of a chorus.
+  assert.equal(ARP_GATE.length, 4, 'one gate per bar of the front half');
+  const density = ARP_GATE.map(row => {
+    assert.equal(row.length, STEPS_PER_BAR, 'a gate must be one bar of sixteenths');
+    return row.filter(Boolean).length;
+  });
+  for (let i = 1; i < density.length; i++) {
+    assert.ok(density[i] > density[i - 1],
+      `bar ${i} is no denser than bar ${i - 1}: ${density}`);
+  }
+  assert.ok(density[0] <= 4, 'the first bar is already too busy to build from');
+  assert.ok(density[3] >= 14, 'the last bar does not fill in');
+  for (const row of ARP_GATE) assert.equal(row[0], 1, 'every bar has to start on the downbeat');
+});
+
+test('the hook states a cell, answers it, and restates it higher', () => {
+  // What makes a shanty singable, and the reason the melody is not just four long notes.
+  assert.equal(LEAD.length, 32, 'eight eighth-notes a bar, four bars');
+  assert.equal(LEAD_OCTAVE.length, LEAD.length, 'the octave doubling must line up with the lead');
+  const bar = i => LEAD.slice(i * 8, i * 8 + 8);
+  const shape = row => row.map(n => (n === null ? '.' : 'x')).join('');
+  assert.equal(shape(bar(0)), shape(bar(2)), 'bars 1 and 3 do not share a rhythm');
+  assert.notDeepEqual(bar(0), bar(2), 'the restatement is at the same pitch — that is a repeat');
+  for (const i of [1, 3]) {
+    assert.ok(bar(i).slice(-2).every(n => n === null), `bar ${i} never stops to breathe`);
+  }
+  assert.equal(LEAD.filter(n => n !== null).at(-1), 62, 'the phrase does not land on the tonic');
+  // And the accent is an accent, not a second melody.
+  const doubled = LEAD_OCTAVE.filter(Boolean).length;
+  assert.ok(doubled > 0 && doubled < LEAD.filter(n => n !== null).length / 2,
+    `${doubled} doubled notes is not an accent`);
+  for (const [i, on] of LEAD_OCTAVE.entries()) {
+    if (on) assert.ok(LEAD[i] !== null, `slot ${i} doubles a rest`);
   }
 });
 
@@ -229,8 +260,9 @@ test('the three beds are audibly different, not three spellings of one bed', () 
 
 test('every note in every table maps to a frequency a person can hear', () => {
   const all = [
-    ...CHORDS.flatMap(c => [c.bass, ...c.notes, ...(c.chank || [])]),
-    ...FUNK_BASS.flatMap((row, i) => row.filter(v => v !== null).map(v => CHORDS[i].bass + v)),
+    ...CHORDS.flatMap(c => [c.bass, ...c.notes]),
+    ...CHORDS.slice(0, 4).flatMap((c, i) =>
+      PULSE_BASS.filter(v => v !== null).map(v => c.bass + v)),
     ...CHORDS.slice(4).flatMap(c => ARP_ROLL.map(i => c.notes[i % 3] + Math.floor(i / 3) * 12)),
     ...LEAD.filter(n => n !== null),
     ...BEDS.flatMap(b => b.chords.flatMap(c => [c.bass, ...c.voice])),
