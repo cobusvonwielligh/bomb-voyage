@@ -14,16 +14,24 @@ them in the first playtest. They all live in one file so that is a two-minute jo
 - Tile size: **32 px**. Grid-aligned blocks, free pixel movement for players.
 - Internal position unit: **1 tile = 256 units**, integers only. Never store a float position.
 - Simulation: **30 ticks/second**, fixed step. 1 tick = 33.333 ms.
-- Rounds last **16 minutes** = 28 800 ticks, then a 20-second scoreboard, then the next map.
-- Maps rotate: Arena → Catacombs → Islands → Arena …
+- Rounds last **10 minutes** = 18 000 ticks, then a 20-second scoreboard, then the next map.
+  The host can change the length live with `/roundtime N`, in tenths of a minute.
+- Maps rotate in order, starting from a random one — the server restarts on every deploy, and
+  always starting at index 0 meant nobody ever saw the later maps.
 
 | Map | Size (tiles) | Character |
 |---|---|---|
-| Arena | 31 × 25 | Open, classic grid, few hard walls. Fast and brutal. |
-| Catacombs | 41 × 29 | Corridors and reinforced blocks. Rewards kicking people into dead ends. |
-| Islands | 35 × 35 | Clusters separated by indestructible gaps and shrubs. Lots of ambush. |
+| Arena | 37 × 23 | Open lattice. Nowhere to hide. |
+| Cove | 37 × 23 | An organic island; the coastline makes the chokepoints. |
+| Twins | 39 × 23 | Two discs joined by one five-wide causeway. |
+| Lagoon | 39 × 25 | A crescent round open water. The two tips are the far ends of the map. |
+| Crossroads | 37 × 25 | Four arms off a central plaza, contested by construction. |
 
-Camera follows your player and clamps to the map edge. Viewport is 32×20 tiles at 1× zoom.
+The board is scaled so the **island** plus two tiles of sea fits the window exactly. Not the map
+rectangle — every map but Arena is a shape drawn inside its grid and the rest is water, so
+fitting the rectangle frames several tiles of empty ocean before the margin is even added. Below
+`MIN_ZOOM` (0.68) the board stops shrinking and the camera follows you instead: a map you cannot
+read is worse than a map you cannot see all of.
 
 ---
 
@@ -31,11 +39,24 @@ Camera follows your player and clamps to the map edge. Viewport is 32×20 tiles 
 
 | Property | Value |
 |---|---|
-| Base speed | **34 units/tick** ≈ 4.0 tiles/s **(TUNE)** |
-| Per Roller-skate | **+5 units/tick** |
-| Max skates | **4** → 54 units/tick ≈ 6.3 tiles/s |
+| Base speed | **27 units/tick** ≈ 3.2 tiles/s |
+| Per Boots | **+8 units/tick** |
+| Max boots | **4** → 59 units/tick ≈ 6.9 tiles/s |
 | Slowdown status | speed × 0.5, rounded down |
+| Exhausted | speed × 0.5, rounded down — see §9 |
 | Player hitbox | 20 × 20 units, centred (smaller than a tile — generous) |
+
+**Diagonals.** Holding two directions still moves one axis per tick — that is what keeps a tile
+game feeling like one, and what lets remote interpolation draw an L rather than a diagonal. What
+the game picks is the axis that *works*: the one you are facing if it is open, the other if it
+is not. So a held diagonal slides along whatever it meets instead of stopping dead against it.
+Boxed into a corner where neither axis is open, you stop.
+
+**Lane centring** has three limits, and all three matter. It never runs faster than your legs,
+it moves a seventh of the remaining offset per tick so it decelerates into the lane, and it is
+capped at 6 units per tick absolutely. Without that last one, every future speed increase makes
+the assist more violent — at `speed × 2` a booted player was moved half a tile sideways in a
+single tick, which reads as the game taking the controls off you.
 
 **Corner assist.** This is what makes Bomberman feel good and it is not optional. When you move
 into a blocked tile but the perpendicular offset from the tile centre is **≤ 96 units (0.375
@@ -86,6 +107,15 @@ ascending `bombId` everywhere.
 
 ---
 
+**An arm stops at another bomb.** The tile still burns — so the bomb still chains and goes off
+this same tick with its own radius — but the arm does not continue past it. That is the
+difference between a bomb being a link in a chain and a bomb being transparent: a line of three
+bombs should propagate along itself, not have the first one's fire overshoot the other two and
+reach further than any of them could. It is a per-arm rule; the other three directions are
+unaffected.
+
+---
+
 ## 4. Blocks
 
 | Block | HP | Fire passes | Walk | Notes |
@@ -118,11 +148,30 @@ Drop weights, applied after the drop roll:
 
 | Perk | Weight | Effect | Cap |
 |---|---:|---|---|
-| Bomb | 30 | +1 max bombs | 16 |
-| Fire | 30 | +1 blast radius | 6 |
-| Roller-skates | 20 | +1 speed step | 4 |
+| Bomb | 26 | +1 max bombs | 8 |
+| Fire | 24 | +1 blast radius | 6 |
+| Stim | 20 | +75 maximum stamina, and tops you up | 4 |
+| Boots | 18 | +1 speed step | 4 |
 | Shield | 12 | Survive one death | 1 held |
-| Gift | 8 | Rolls again on this table, excluding Gift | — |
+| Gift | **0** | Rolls again on this table, excluding Gift | — |
+
+The Gift is **switched off**, not removed: it hands out diseases and that mechanic is
+unfinished. It is still implemented and still tested, and a single weight turns it back on.
+
+**The drop rate is not flat.** A fixed 35% is wrong at both ends of a round — sixteen players
+opening walls at once buries the floor in perks, and once the soft walls are gone nothing drops
+for minutes. Two multipliers on the base chance fix both ends:
+
+- **Supply** — perks on the floor against a target that scales with *players alive*, because
+  that is who is competing for them. Bare floor runs at 2.2×, at or past target 0.25×.
+- **Demand** — a decaying average of pickups, 8-second half-life, worth up to +80%. A board
+  being stripped refills faster.
+
+**Perks are fireproof.** They used to burn, on the reasoning that a tile with a perk on it
+should not be the safest square on the map. In practice it did the opposite: the only way to
+open a wall is with a bomb, and that bomb is usually still burning when the perk appears, so the
+player who did the work watched their own blast eat the reward. Expiry already stops a contested
+drop sitting there forever.
 
 A perk at its cap still gives **+15 score** instead of nothing, so late-round pickups are not
 dead.
@@ -138,11 +187,18 @@ charge, Blue fire, Heart, Key.
 Touching fire kills you, unless you are Invulnerable or hold a Shield.
 
 - **Shield** absorbs the death, is consumed, and grants **60 ticks (2 s)** Invulnerability.
-- **Death** drops your stats to the starting values (1 bomb, radius 1, 0 skates) and clears all
+- **Death** drops your stats to the starting values (1 bomb, radius 1, 0 boots) and clears all
   statuses.
 - On death you drop **up to 3 perks** on nearby free tiles, so a good kill is rewarded.
-- You respawn by pressing **SPACE**, at a spawn point maximally far from the nearest living
-  player, with **90 ticks (3 s)** Invulnerability.
+- You respawn by pressing **SPACE** after a **10-second** cooldown, with **90 ticks (3 s)**
+  Invulnerability.
+
+**Where you respawn.** Every legal spawn is a candidate, weighted by the *square* of the
+distance to the nearest living player — twice as far away is four times as likely. Not "the best
+few, shuffled": that kept sending everyone back to the same handful of corners, and a corner you
+can predict is a corner somebody can camp. Weighting the whole list means any spot on the map
+can come up, a busy one is merely unlikely rather than impossible, and there is no set of tiles
+to watch.
 - While dead you are in observer mode (§9).
 
 Faithful note: Game of Bombs' Heart perk keeps half your bonuses through death. It is a reserved
@@ -184,17 +240,75 @@ contagious and is never overwritten by a weaker status.**
 | Block destroyed | +2 |
 | Alive at round end | +50 |
 
-Round score resets each round. **Lifetime score persists** per `playerId` and drives rank.
+Round score resets each round. **Lifetime score persists** per `playerId` and is your XP.
 
-Rank titles, in order (these are Game of Bombs' own 16):
+**Levels replaced ranks.** Sixteen military titles were flavour nobody could place on a scale;
+a level with a bar under it is a number you can feel moving. The curve is anchored at one real
+quantity — **100 hours of play reaches Veteran, level 20** — and `XP_LEVEL_EXP` is derived from
+that rather than hand-tuned, so changing the target changes the whole curve consistently.
 
-`Rookie, Private, Private First Class, Corporal, Sergeant, Second Lieutenant, First Lieutenant,
-Captain, Major, Lieutenant Colonel, Colonel, Brigadier General, Major General,
-Lieutenant General, General, Marshal`
+| Levels | Tier |
+|---|---|
+| 0–10 | Rookie |
+| 11–15 | Been around the block |
+| 16–19 | Pro |
+| 20+ | Veteran |
 
-Thresholds: rank *n* requires `1024 × n^1.6` lifetime score, rounded to the nearest 64. Rank 1 is
-1 024, matching the Game of Bombs profile screen. The array is generated once in
-`shared/constants.js` — do not hand-maintain it.
+The level, the tier and the bar's `into / need / fraction` are all computed **on the server** and
+sent in the 1 Hz scores broadcast. The client does no arithmetic on them, because two
+implementations of one curve drift.
+
+---
+
+## 8a. Stamina
+
+Running costs something. Ten seconds of continuous movement empties the bar; once empty you move
+at **half pace** until you have recovered a third of it.
+
+| | |
+|---|---|
+| Capacity | 300, plus 75 per Stim, to a maximum of 4 Stims |
+| Drain | 1 per tick while moving |
+| Regen | 2 per tick standing still, 1 per tick while limping |
+| Exhausted | speed × ½ until stamina reaches a third of capacity |
+
+Two details carry the whole system.
+
+**The exhausted flag is a latch with hysteresis.** A plain "zero means slow" rule flips the
+speed every single tick at the boundary — regain a point, sprint, spend it, crawl — which is
+unplayable and reads as packet loss rather than as a mechanic. It is set at zero and cleared
+only once a third of the bar is back.
+
+**It regenerates whether you are moving or not**, just twice as fast when you stand still. That
+makes stopping a tactical choice rather than a punishment, and it means an exhausted player is
+never stuck: limping still refills, slowly.
+
+It is shown twice over. A bar appears beside the player below 70% and drains; and the sprite
+itself heaves, scaled on one axis so it reads as breathing, with a warm pulse on the ground once
+genuinely exhausted. On the sprite rather than only in the HUD on purpose — at the moment you
+need to know you are about to be slow, you are looking at your pirate, not at a bar.
+
+---
+
+## 8b. Powder kegs
+
+A rare destructible block that **detonates on the tick it breaks**, at radius 7 against a bomb's
+1 to 6.
+
+| | |
+|---|---|
+| Per round | at most 6, at least 1 guaranteed |
+| HP | 1 — the point is the explosion, not a siege |
+| Drops | nothing. It holds powder. |
+
+A keg **is** a bomb as far as the blast code is concerned: on destruction it joins the same
+chain queue any caught bomb uses. Nothing in `fire.js` or `detonate()` knows kegs exist, and
+chaining keg → keg → bomb falls out for free rather than being coded for.
+
+Placement rides the wall-regrowth cycle, which already knows which tiles are quiet — a keg
+appearing next to somebody would be a free kill nobody could read coming. It runs *before* that
+function's wall-fill cap, because a guarantee that only fires on maps which happen to be open is
+not a guarantee, and a full map is exactly when a keg is most wanted.
 
 ---
 
@@ -250,3 +364,15 @@ spectators follow the action. It is a core feature, not decoration.
 ENTER focuses the input, ENTER again sends, ESC cancels. 140 characters, 1 message per second per
 player, last 50 messages kept. No censorship, no channels, no moderation — it is 12 colleagues.
 Kill feed lines share the chat panel.
+
+### Commands
+
+Anyone: `/bots N`, `/who`, `/logout`, `/help`.
+
+Host only: `/restart`, `/godmode`, `/kick bot N`, `/kick NAME [hours]`, `/map 0-4`,
+`/gamespeed 1-200`, `/roundtime 0.1-60`.
+
+**The host is a role, not a name.** It is the configured admin while they are connected and the
+longest-standing human otherwise, so a room is never left without somebody who can restart it —
+which is the whole reason the commands exist. It passes down the instant they leave, and the
+scoreboard shows a crown so you can see who has it.

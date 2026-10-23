@@ -82,7 +82,13 @@ export function createWorld() {
   w.burstBomb = bomb => {
     if (!bomb || w.burst.has(bomb.id) || !w.map) return;
     w.burst.add(bomb.id);
-    const { cells } = spread(w.map, { tx: bomb.tx, ty: bomb.ty, radius: bomb.r ?? bomb.radius });
+    // Same bomb list the server used, from the same snapshot, so the derived blast matches —
+    // including where its arms stop against other bombs.
+    const { cells } = spread(
+      w.map,
+      { id: bomb.id, tx: bomb.tx, ty: bomb.ty, radius: bomb.r ?? bomb.radius },
+      w.bombs,
+    );
     const until = w.tick + FIRE_TICKS;
     for (const c of cells) w.fires.push({ ...c, until, owner: bomb.o ?? bomb.owner });
     w.bombs = w.bombs.filter(b => b.id !== bomb.id);

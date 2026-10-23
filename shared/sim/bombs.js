@@ -61,7 +61,8 @@ export function detonate(state) {
     if (burst.has(bomb.id)) continue;
     burst.add(bomb.id);
 
-    const { cells, hits } = spread(state.map, bomb);
+    // The live bomb list goes in so arms stop at other bombs instead of overshooting them.
+    const { cells, hits } = spread(state.map, bomb, state.bombs);
 
     // `boom` must come out BEFORE the block events this same blast produces.
     //

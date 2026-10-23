@@ -16,10 +16,13 @@ const DESTRUCTIBLE = new Set([BLOCK.SOFT, BLOCK.REINFORCED, BLOCK.MONOLITH, BLOC
 const SHRUB = new Set([BLOCK.SHRUB_WALK, BLOCK.SHRUB_SOLID]);
 
 /**
+ * @param bombs every live bomb, so an arm can stop at one. Optional — omit it and arms pass
+ *   straight through other bombs, which is what this did before and what the tests that do not
+ *   care about chaining still exercise.
  * @returns {{cells: Array<{tx,ty,kind,rot}>, hits: Array<{tx,ty}>}}
  *   `cells` is what to draw and what kills; `hits` is the blocks that take a point of damage.
  */
-export function spread(map, bomb) {
+export function spread(map, bomb, bombs = null) {
   const cells = [{ tx: bomb.tx, ty: bomb.ty, kind: 'core', rot: 0 }];
   const hits = [];
 
@@ -43,7 +46,19 @@ export function spread(map, bomb) {
 
       if (SHRUB.has(t)) reach -= SHRUB_RADIUS_PENALTY;  // passes through, weakened
 
+      /* An arm stops at another bomb, the way Game of Bombs does.
+       *
+       * The tile still burns — it is in `cells`, so it still kills and still chains that bomb,
+       * which goes off this same tick with its own radius. What it does not do is continue
+       * past. That is the difference between a bomb being a link in a chain and a bomb being
+       * transparent: a line of three bombs should propagate along itself, not have the first
+       * one's fire overshoot the other two and reach further than any of them could.
+       *
+       * Checked AFTER the tile is pushed so the bomb's own tile is lit, and the bomb's own
+       * origin is excluded or every blast would stop on itself at step 1.
+       */
       cells.push({ tx, ty, kind: step >= reach ? 'tip' : 'arm', rot: d });
+      if (bombs && bombs.some(b => b.tx === tx && b.ty === ty && b.id !== bomb.id)) break;
       step++;
     }
   }

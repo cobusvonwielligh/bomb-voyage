@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createState, createPlayer, setTile, tileAt, hpAt, tileCentre, hashState } from '../shared/sim/state.js';
 import { spread } from '../shared/sim/fire.js';
-import { place } from '../shared/sim/bombs.js';
+import { place, detonate } from '../shared/sim/bombs.js';
 import { tick } from '../shared/sim/round.js';
 import { drop, maybeDrop } from '../shared/sim/perks.js';
 import {
@@ -265,5 +265,59 @@ test('bombs in the round loop', async t => {
       return hashState(st);
     };
     assert.equal(go(), go());
+  });
+});
+
+test('a blast arm stops at another bomb', async t => {
+  const room = () => {
+    const st = createState({ id: 't', name: 't', w: 15, h: 15, seed: 1, density: 0, reinforced: 0, shrubs: 0 });
+    for (let y = 0; y < 15; y++) for (let x = 0; x < 15; x++) {
+      setTile(st.map, x, y, (x === 0 || y === 0 || x === 14 || y === 14) ? BLOCK.IRON : BLOCK.FLOOR);
+    }
+    return st;
+  };
+
+  await t.test('the arm lights the bomb tile and goes no further', () => {
+    const st = room();
+    const a = { id: 1, tx: 5, ty: 7, owner: 0, radius: 5, at: 0 };
+    const b = { id: 2, tx: 7, ty: 7, owner: 1, radius: 1, at: 99 };
+    st.bombs.push(a, b);
+
+    const { cells } = spread(st.map, a, st.bombs);
+    const on = (x, y) => cells.some(c => c.tx === x && c.ty === y);
+    assert.ok(on(6, 7), 'stopped before reaching the bomb');
+    assert.ok(on(7, 7), 'the bomb tile must still burn, or it would never chain');
+    assert.ok(!on(8, 7), 'the arm carried on past the bomb');
+    // The other three arms are untouched: this is a per-arm rule, not a per-blast one.
+    assert.ok(on(5, 2) && on(5, 12) && on(1, 7));
+  });
+
+  await t.test('a bomb never stops its own blast', () => {
+    const st = room();
+    const a = { id: 1, tx: 5, ty: 7, owner: 0, radius: 3, at: 0 };
+    st.bombs.push(a);
+    const { cells } = spread(st.map, a, st.bombs);
+    assert.ok(cells.some(c => c.tx === 8 && c.ty === 7), 'the blast stopped on itself');
+  });
+
+  await t.test('a line of three still chains the whole way along', () => {
+    // The behaviour this rule must not break: stopping at a bomb is only acceptable because
+    // that bomb then goes off with its own radius and carries the blast on.
+    const st = room();
+    for (const [i, x] of [5, 7, 9].entries()) {
+      st.bombs.push({ id: i + 1, tx: x, ty: 7, o: 0, owner: 0, r: 3, radius: 3, at: i === 0 ? 0 : 500 });
+    }
+    detonate(st);
+    const booms = st.events.filter(e => e.e === 'boom');
+    assert.equal(booms.length, 3, `only ${booms.length} of the three went off`);
+    assert.equal(st.bombs.length, 0, 'a bomb survived the chain');
+  });
+
+  await t.test('without a bomb list, arms pass through — the old behaviour', () => {
+    const st = room();
+    const a = { id: 1, tx: 5, ty: 7, owner: 0, radius: 5, at: 0 };
+    st.bombs.push(a, { id: 2, tx: 7, ty: 7, owner: 1, radius: 1, at: 99 });
+    const { cells } = spread(st.map, a);
+    assert.ok(cells.some(c => c.tx === 9 && c.ty === 7), 'the optional argument is not optional');
   });
 });

@@ -30,6 +30,70 @@ duplicated logic to drift.
 
 ## 2. Directory layout
 
+The planned layout is below under "as designed"; what actually got built is flatter. Several
+planned files were never needed (`protocol.js`, `inputs.js`, `snapshot.js`, `predict.js`, the
+`render/` and `ui/` folders) because the thing they would have held turned out to be twenty
+lines inside its neighbour. A file per concept is a cost when the concept is one function.
+
+### As built
+
+```
+shared/
+  constants.js                 every tuning number and enum. FROZEN: agree before changing.
+  maps.js                      map definitions, land masks, spawn placement, cell encoding
+  wire.js                      framing + which channel a message belongs on. Both ends use it.
+  sim/
+    state.js                   createState / createPlayer / tile accessors / seeded rng
+    movement.js                step() — walking, corner assist, centring, diagonals, stamina
+    bombs.js                   placement, fuses, same-tick chains, powder kegs
+    fire.js                    spread() — pure (map, bomb) → cells. No state, no clock.
+    blocks.js                  damage, destruction, wall regrowth, keg placement
+    perks.js                   drop table, supply-and-demand drop rate, pickup, death scatter
+    statuses.js                timers, contagion
+    round.js                   tick orchestration: the one place that fixes the order
+  util/
+    rng.js                     seeded PRNG — the sim NEVER calls Math.random()
+    interp.js                  pickPair() — the snapshot pair that BRACKETS a render time
+
+server/
+  index.js                     http(s) + static + /healthz + the deploy webhook
+  net.js                       socket lifecycle, chat commands, bans, seating
+  webtransport.js              the HTTP/3 listener, every session wrapped to look like a ws
+  room.js                      one round: the loop, seats, snapshots, hosts, respawn
+  ai.js                        bot brains: danger map, pathing, fleeing
+  bots.js                      headless clients for load testing
+  leaderboard.js               load/save JSON, XP and levels
+  config.js                    config.ini + env overrides
+  canonical.js                 hostname redirects
+
+public/
+  index.html                   one page, everything
+  style.css
+  client/
+    main.js                    boot, the loop, HUD, event handling
+    transport.js               dials WebTransport and WebSocket, races them
+    net.js                     clock sync, reconnect, identity
+    world.js                   prediction, reconciliation, interpolation
+    render.js                  canvas, camera, chunks, sea, boulders, the ship
+    input.js                   keyboard → bitmask
+    quips.js                   what the mascot says
+    audio/
+      engine.js                one AudioContext, buses, helpers
+      sfx.js                   named one-shots
+      music.js                 the theme
+      ambient.js               the in-round beds
+  assets/
+    art.js                     everything in the game, drawn from shapes
+    *.png                      four decorative images: mascot, face, kegs, icon
+
+infra/
+  bootstrap.sh deploy.sh rollback.sh logs.sh bomb-voyage.service
+
+test/                          23 files, 201 tests, node --test
+```
+
+### As designed
+
 ```
 shared/                        ← FROZEN DAY 1, changes need both devs to agree
   constants.js                 tuning numbers, enums, derived tables

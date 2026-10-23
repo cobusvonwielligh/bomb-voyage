@@ -5,36 +5,41 @@ Friday-afternoon games at eezi.
 
 **Live:** https://bombvoyage.online · **Health:** [/healthz](https://bombvoyage.online/healthz)
 · **Sprites:** [/art-preview.html](https://bombvoyage.online/art-preview.html)
+· **Where we stand:** [docs/STATUS.md](docs/STATUS.md)
 
 ---
 
 ## Status
 
+**The game is built and live.** Read [docs/STATUS.md](docs/STATUS.md) first — it is the current
+state of play, what changed direction, and what is still missing. `docs/PLAN.md` is the original
+work breakdown and is now history.
+
 | | |
 |---|---|
-| ✅ Spec | All of `docs/`. Read [docs/PLAN.md](docs/PLAN.md) first. |
-| ✅ Deployment spine | Server, TLS, systemd, smoke tests, reboot-safe. |
-| ✅ CI | Tests on every push and PR. No secrets needed. |
-| ✅ Deploy | Manual, ~4 s, with one-level rollback. Auto-deploy is built but switched off. |
+| ✅ The game | 16 players, 5 maps, 10-minute rounds, bots, perks, stamina, powder kegs |
+| ✅ Transport | **WebTransport over QUIC**, racing WebSocket, whichever connects first wins |
+| ✅ Deployment | TLS, systemd, reboot-safe, one-level rollback, ~6 s end to end |
+| ✅ Tests | 201, `node --test`, no framework. Green on every push. |
 | ✅ Domain | `bombvoyage.online`, canonical. Aliases redirect to it. |
-| ⬜ The game | Not started. Phase 0 onward in [docs/PLAN.md](docs/PLAN.md). |
+| ⬜ Observer mode | Specced in DESIGN.md, never built |
 
-What works end to end today: HTTPS on 443, `wss://` on the same origin, static serving, the
-`/shared` dual-mount, seating up to 16 players, health, certificate auto-renewal, and automatic
-recovery after a reboot (verified: back in ~50 s unattended).
-
-Measured round trip from Cape Town to the box: **62 ms min / 73 ms median**. The netcode is
-designed to survive 180 ms, so there is plenty of headroom.
+Measured round trip from Cape Town to the box: **62 ms min / 73 ms median**, and a QUIC session
+is ready in about **50 ms**. The netcode is designed to survive 180 ms, so there is headroom.
 
 ---
 
 ## What this is
 
-- Up to **16 players**, 3 maps, 16-minute rounds.
-- Grid-based Bomberman rules, matched closely enough that Game of Bombs veterans feel at home.
-- One server, one hostname, one port (443). No CDNs, no third-party domains, no build step.
-- Vanilla JS + jQuery on the client, Node + `ws` on the server. No framework.
-- Art and audio are generated in code. There are no binary assets to download.
+- Up to **16 players**, 5 maps, 10-minute rounds (`/roundtime` to change it live).
+- Grid-based Bomberman rules, matched closely enough that Game of Bombs veterans feel at home,
+  plus **stamina** and **powder kegs** of our own.
+- One server, one hostname, one port — **443, both TCP and UDP**. No CDNs, no third-party
+  domains, no build step.
+- Vanilla JS on the client, Node on the server. Two runtime dependencies: `ws` and the
+  WebTransport/QUIC pair. No framework.
+- Art and audio are generated in code. Four decorative PNGs on the landing page are the only
+  binary assets; nothing inside the game is an image.
 
 What it is **not**: see [docs/DESIGN.md](docs/DESIGN.md) → Non-goals. Short version: no accounts,
 no payments, no persistent world, no mobile, no matchmaking, no anti-cheat.
@@ -44,11 +49,14 @@ no payments, no persistent world, no mobile, no matchmaking, no anti-cheat.
 ## Run it locally
 
 ```bash
-npm install                        # one dependency: ws
+npm install                        # ws, plus the WebTransport pair
 cp config.example.ini config.ini   # optional — defaults work without it
 npm start                          # http://localhost:8080
-npm test                           # node --test, no framework
+npm test                           # 201 tests, node --test, no framework
 ```
+
+WebTransport needs TLS and a native addon, so locally you get WebSocket and the client never
+notices. That is the same fallback everybody behind a UDP-blocking firewall gets in production.
 
 Open two tabs. No database, no Docker.
 
@@ -67,12 +75,12 @@ everything else. See [docs/NETCODE.md](docs/NETCODE.md) §7.
 
 ## Deploy
 
-Manual, and quick — about **4 seconds** end to end. Pushes your working tree, uncommitted work
+Manual, and quick — about **6 seconds** end to end. Pushes your working tree, uncommitted work
 included.
 
 ```bash
-npm run deploy        # tests, then deploy          ~5s
-npm run deploy:fast   # skip the tests              ~4s
+npm run deploy        # tests, then deploy          ~6s
+npm run deploy:fast   # skip the tests              ~5s
 npm run rollback      # back to the previous deploy ~2s
 npm run logs          # follow the server journal
 ```
@@ -102,12 +110,13 @@ First-time server setup, the domain switch, and operations:
 | `server/` | Node process: static serving, WebSocket hub, authoritative loop, persistence. | NET, ROUND |
 | `public/` | Everything the browser downloads. Served raw, no bundler. | — |
 | `public/client/` | Game client: prediction, renderer, input, audio. | MOVE, ARENA, SHELL, ART |
-| `public/assets/` | Art and map data (code and JSON, no images). | ART, ARENA |
+| `public/assets/` | `art.js` — everything in the game, drawn from shapes. Four decorative PNGs. | ART, ARENA |
 | `infra/` | `bootstrap.sh` (once per box), `deploy.sh`, systemd unit. | DEPLOY |
 | `test/` | `node --test` suites. | whichever slice owns the system |
 
 Slice boundaries and file ownership: [docs/PLAN.md](docs/PLAN.md) §2 and
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §5.
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §5. What each file actually does today:
+[docs/STATUS.md](docs/STATUS.md) §3.
 
 ---
 
@@ -117,7 +126,8 @@ Settled. Reopen one before writing code, not after.
 
 | Decision | Why | Detail |
 |---|---|---|
-| JSON over WebSocket, not a binary codec | 16 players is tiny. Debuggable in devtools. | [PROTOCOL.md](docs/PROTOCOL.md) |
+| JSON, not a binary codec | 16 players is tiny. Debuggable in devtools, on either transport. | [PROTOCOL.md](docs/PROTOCOL.md) |
+| Two transports, raced, never one | QUIC where UDP is allowed; WebSocket where it is not. Nobody is ever locked out. | [NETCODE.md](docs/NETCODE.md) §8 |
 | Explosions are **derived**, not pushed | Fuse is deterministic, so a 180 ms client predicts fire perfectly and nobody dies to lag | [NETCODE.md](docs/NETCODE.md) |
 | Players do not collide with each other | Deletes the entire "I'm seeing you 150 ms in the past" problem | [RULES.md](docs/RULES.md) |
 | No build step, raw ES modules | One less thing to break at 16:45 on a Friday | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |

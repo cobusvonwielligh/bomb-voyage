@@ -22,6 +22,29 @@ then.
 
 ---
 
+## 1a. Two transports, one protocol
+
+Every message in this document is identical on both transports. What changes is the **channel**,
+and `shared/wire.js` decides for both ends:
+
+| Message | WebTransport | WebSocket |
+|---|---|---|
+| `input`, `snap`, `ping`, `pong` | **datagram** — unreliable, unordered | ordinary message |
+| everything else | reliable bidirectional stream | ordinary message |
+
+Only continuously-replaced state goes unreliable: each of those is superseded within 66 ms, so a
+lost one costs nothing and waiting for a retransmit costs a frame. Anything above
+`DATAGRAM_SAFE_BYTES` (1100) falls back to the stream, because an oversized datagram is dropped
+*silently* rather than rejected.
+
+The stream carries newline-delimited JSON. `JSON.stringify` never emits a raw newline, so `0x0A`
+is unambiguously a record boundary with no escaping layer. A WebSocket is already
+message-oriented and needs none of this.
+
+Full rationale: [NETCODE.md](NETCODE.md) §8.
+
+---
+
 ## 2. Envelope
 
 Every message is an object with a `t` (type) field. Nothing else is required at the envelope
@@ -130,8 +153,9 @@ client deploy. The client must read these, never hardcode them.
   "tick": 10404,
   "ack": 10402,                   // last input tick the server processed from YOU
   "players": [
-    { "i": 0, "x": 4096, "y": 2816, "d": 2, "st": 1, "hp": 1,
-      "b": 3, "f": 2, "sp": 1, "sh": 1, "s": 12, "k": 4, "dd": 2, "stat": 36 }
+    { "i": 0, "x": 4096, "y": 2816, "d": 2, "st": 1,
+      "b": 3, "f": 2, "sp": 1, "sh": 1, "s": 12, "k": 4, "dd": 2, "stat": 36,
+      "sta": 240, "stl": 1, "tr": 0 }
   ],
   "bombs": [
     { "id": 812, "x": 10, "y": 7, "o": 3, "r": 2, "at": 10470 }
@@ -142,7 +166,15 @@ client deploy. The client must read these, never hardcode them.
 
 Player fields: `i` index · `x`,`y` position units · `d` facing 0R 1U 2L 3D · `st` state
 (0 dead, 1 alive, 2 observing) · `b` bombs · `f` fire radius · `sp` speed step · `sh` shields ·
-`s` round score · `k` kills · `dd` deaths · `stat` status bitmask.
+`s` round score · `k` kills · `dd` deaths · `stat` status bitmask · `sta` stamina ·
+`stl` stim level · `tr` exhausted.
+
+Stamina rides along for **every** player, not just you: seeing that the pirate chasing you is
+limping is the entire reason to draw it at all.
+
+**Names are deliberately absent.** They change once per join and the snapshot goes out fifteen
+times a second, so carrying them would spend most of the bandwidth on a constant string. They
+arrive in `welcome` and are refreshed by `scores` — see the note there.
 
 Bomb fields: `id` · `x`,`y` **tile** coords · `o` owner index · `r` radius at placement ·
 `at` the tick it explodes. **`at` is what makes client-side fire prediction work — it is
@@ -179,15 +211,38 @@ client must tolerate an event for an entity it has never seen by ignoring it.
 { "t": "chat", "i": 3, "name": "Cobus", "msg": "behind you", "tick": 10480 }
 ```
 
-### `scores` — 1 Hz, and at round end
+### `scores` — 1 Hz
 
 ```json
 {
   "t": "scores",
-  "round": [ { "i": 0, "name": "Cobus", "s": 420, "k": 4, "d": 2, "rank": 3, "c": 7 } ],
-  "allTime": [ { "name": "Cobus", "s": 18402, "rank": 3 } ]
+  "host": 0,
+  "ranks": [ { "i": 0, "name": "Cobus", "bot": false, "xp": 18402, "level": 7,
+               "tier": "Rookie", "into": 1403, "need": 4220, "nextAt": 21219,
+               "fraction": 0.332 } ],
+  "top": [ { "playerId": "p_7f3", "name": "Cobus", "xp": 18402, "level": 7, "tier": "Rookie" } ]
 }
 ```
+
+`xp` is **banked plus the round in progress**. The board is only written on disconnect and at
+round end, so without the addition your level would visibly refuse to move for ten minutes while
+you earned it.
+
+Everything the XP bar needs — `into`, `need`, `nextAt`, `fraction` — is computed here rather
+than on the client. Two implementations of one curve drift.
+
+This message is also the only thing that refreshes **names**. The snapshot omits them, so a
+client that hydrated a seat before the welcome arrived would otherwise call that player `p1` for
+the rest of the round. Once a second, it heals itself.
+
+### `roundtime`
+
+```json
+{ "t": "roundtime", "endsAtTick": 5400, "minutes": 3 }
+```
+
+Sent when the host runs `/roundtime`. The HUD clock counts down to `endsAtTick`, so a client
+that ignored this would count toward the wrong number.
 
 ### `roundend`
 
@@ -207,7 +262,11 @@ client must tolerate an event for an entity it has never seen by ignoring it.
 
 ```json
 { "t": "reject", "why": "full" }   // "full" | "badname" | "version" | "banned"
+                                   // | "already-playing"  (that name is live elsewhere)
 ```
+
+`already-playing` may carry `forget: true`, which tells the client to clear its stored
+`playerId` — the identity it was holding is not one it can use.
 
 ---
 

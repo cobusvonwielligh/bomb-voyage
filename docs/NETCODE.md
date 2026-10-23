@@ -145,3 +145,88 @@ Do not discover netcode problems with 12 colleagues watching.
 2. **Determinism test**: same inputs through the sim twice → identical state hash.
 3. **`npm run bots -- 15`**: a full lobby before a full lobby exists.
 4. **Two machines over the real internet**, both devs, before the first session.
+
+---
+
+## 8. Two transports, raced
+
+The game dials **WebTransport over HTTP/3** and **WebSocket** at the same time and plays on
+whichever connects. Neither is a fallback in the usual sense — both are dialled on every
+connection, every time.
+
+### Why bother
+
+Head-of-line blocking. Over TCP a single lost packet stalls every byte queued behind it, so one
+drop delays the next three snapshots as well as the one it hit. Inputs and snapshots are
+continuously replaced — a lost one is superseded 33 ms later — so they want a channel that drops
+rather than waits. QUIC datagrams are exactly that.
+
+### Why it can never be the only way in
+
+UDP/443 is blocked by corporate firewalls far more often than TCP is, and this game exists to be
+played in an office. A firewall that drops UDP does not *fail*, it **hangs**, and a five-second
+hang on the join screen is indistinguishable from the game being broken. So both are dialled at
+once and the slow one is simply never used.
+
+### What goes down which channel
+
+`shared/wire.js` decides, and both ends use the same function:
+
+| Message | Channel | Why |
+|---|---|---|
+| `input` | datagram | superseded by the next tick's |
+| `snap` | datagram | superseded 66 ms later |
+| `ping` / `pong` | datagram | superseded 2 s later |
+| everything else | reliable stream | handshake, chat, round transitions — must arrive, in order |
+
+A datagram over `DATAGRAM_SAFE_BYTES` (1100) falls back to the stream, because an oversized
+datagram is dropped *silently* by the stack rather than rejected — that would turn a full server
+into an intermittently invisible one. A real sixteen-player snapshot measures 1749 bytes, so it
+takes the stream; that is asserted by a test rather than assumed.
+
+The stream is newline-delimited JSON. `JSON.stringify` never emits a raw newline — every control
+character inside a string is escaped — so a `0x0A` byte is unambiguously a record boundary and
+no escaping layer is needed.
+
+### The race, and the trap in it
+
+A WebSocket `open` fires as soon as TCP and TLS are up, which beats a cold QUIC handshake. A
+plain first-past-the-post race therefore hands the win to the WebSocket almost every time, and
+the QUIC path — once built — is never actually used by anybody.
+
+So the WebSocket **waits**. When it connects first it is held as a provisional winner for
+`PREFER_MS` (350 ms); if WebTransport lands inside that window it takes the connection instead.
+The moment WebTransport fails, the wait is cancelled and the WebSocket goes through immediately,
+so a UDP-blocked network does not pay the window on every reconnect. `RACE_MS` (1200 ms) is the
+outer backstop for when both are slow.
+
+Measured: a QUIC session to the live server is ready in about **50 ms** from an external
+network, so 350 ms is a wide margin.
+
+### Server side
+
+`server/webtransport.js` wraps every session in a `ws`-shaped adapter, so `server/net.js` never
+learns which transport a player arrived on. It implements only what net.js actually uses — send,
+close, readyState, ping, and the `message` / `close` / `error` / `pong` events — so a future use
+of some other `ws` API fails loudly here rather than behaving subtly differently for half the
+players.
+
+`startWebTransport` returns `null` rather than throwing on any failure: a missing native binary,
+a port already taken, a kernel that will not hand over UDP. The game has to survive all of those
+by simply being WebSocket-only, because that is the configuration most players behind a
+corporate firewall are in regardless.
+
+> **One ordering bug worth never reintroducing.** The socket must be handed to net.js *before*
+> the read loops start. They emit `message` the instant bytes arrive, and a client that sends
+> its `hello` in the same breath as opening the stream — which both our clients do — can have
+> that message delivered before net.js has attached a listener. EventEmitter drops an event with
+> no listener silently, so the symptom is a QUIC session that connects perfectly and then sits
+> there receiving nothing.
+
+### Checking it
+
+`/healthz` reports `transports: { websocket, webtransport }`. A **number** under `webtransport`
+means the HTTP/3 listener is up; **`null`** means it failed to start and everyone is on
+WebSocket. The browser console logs `transport: webtransport` on connect, and the connection dot
+in the HUD carries it in its tooltip — a silent fallback is invisible by design, so it needs
+somewhere to say so.
