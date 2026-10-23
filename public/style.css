@@ -334,14 +334,57 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   height: 7px; border-radius: 4px; background: #00000066;
   overflow: hidden; box-shadow: inset 0 1px 2px #0008;
 }
+#xpTrack { position: relative; }
 #xpFill {
   height: 100%; width: 0; border-radius: 4px;
-  background: linear-gradient(90deg, #c7b057, #ffd21f 60%, #ffe98a);
-  box-shadow: 0 0 10px #ffd21f66;
+  background: linear-gradient(90deg, #2f8f5b, #5ad18a 55%, #9bf0b8);
+  box-shadow: 0 0 10px #5ad18a66;
   transition: width .5s cubic-bezier(.2,.8,.3,1);
 }
 /* At the top of the ladder there is nothing left to fill toward. */
 #xp.maxed #xpFill { background: linear-gradient(90deg, #b490da, #7badd3, #78b39b); }
+
+/* ── levelling up ──
+ *
+ * The bar runs to full, flares, and drops back to the sliver the new level starts on. The reset
+ * has its transition suppressed for exactly one frame, because animating the fill backwards to
+ * near-zero looks like losing progress, which is the opposite of what just happened.
+ */
+#xp.levelup #xpFill {
+  animation: xpFlare .9s ease-out;
+  box-shadow: 0 0 18px #5ad18a, 0 0 36px #5ad18aaa;
+}
+#xp.levelup #xpTrack::after {
+  content: '';
+  position: absolute; inset: -4px;
+  border-radius: 7px;
+  box-shadow: 0 0 0 2px #9bf0b8;
+  animation: xpRing .9s ease-out forwards;
+  pointer-events: none;
+}
+#xp.levelup #xpLevel {
+  animation: xpPop .9s cubic-bezier(.2,1.5,.4,1);
+  color: #9bf0b8;
+}
+#xp.resetting #xpFill { transition: none; }
+
+@keyframes xpFlare {
+  0%   { filter: brightness(1); }
+  18%  { filter: brightness(2.2) saturate(1.4); }
+  100% { filter: brightness(1); }
+}
+@keyframes xpRing {
+  0%   { opacity: .9; transform: scale(1); }
+  100% { opacity: 0;  transform: scale(1.5); }
+}
+@keyframes xpPop {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.5); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #xp.levelup #xpFill, #xp.levelup #xpLevel, #xp.levelup #xpTrack::after { animation: none; }
+}
 
 .panelHead {
   margin: 0 0 7px; font-size: 9.5px; font-weight: normal; color: var(--dim);

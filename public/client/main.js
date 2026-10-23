@@ -395,13 +395,33 @@ let lastLevel = -1;
 function drawXp(p) {
   if (!p) return;
   const box = $('xp');
-  setValue($('xpLevel'), `lvl ${p.level}`, { calm: p.level === lastLevel });
-  if (p.level !== lastLevel && lastLevel >= 0) sfx.play('pickup', undefined, undefined, { perk: 4 });
-  lastLevel = p.level;
+  const fill = $('xpFill');
+  const levelled = lastLevel >= 0 && p.level > lastLevel;
+
+  $('xpLevel').textContent = `lvl ${p.level}`;
   $('xpNums').textContent = `${p.into.toLocaleString()} / ${p.need.toLocaleString()}`;
-  $('xpFill').style.width = `${(p.fraction * 100).toFixed(1)}%`;
   box.classList.toggle('maxed', p.tier === 'Veteran');
   box.title = `${p.xp.toLocaleString()} XP total \u00b7 next level at ${p.nextAt.toLocaleString()}`;
+
+  if (!levelled) { fill.style.width = `${(p.fraction * 100).toFixed(1)}%`; lastLevel = p.level; return; }
+
+  // Levelled. Run the bar to full first, then drop it to where the new level actually starts —
+  // animating straight down to a sliver reads as losing progress, which is the opposite of what
+  // just happened. The drop is made instant for one frame so only the climb is ever seen.
+  lastLevel = p.level;
+  fill.style.width = '100%';
+  box.classList.remove('levelup');
+  void box.offsetWidth;
+  box.classList.add('levelup');
+  sfx.play('fanfare');
+  killFeed(`level ${p.level} \u00b7 ${p.tier}`, { youKilled: true });
+
+  setTimeout(() => {
+    box.classList.add('resetting');
+    fill.style.width = `${(p.fraction * 100).toFixed(1)}%`;
+    requestAnimationFrame(() => requestAnimationFrame(() => box.classList.remove('resetting')));
+  }, 620);
+  setTimeout(() => box.classList.remove('levelup'), 950);
 }
 
 /**
