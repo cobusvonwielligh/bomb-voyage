@@ -349,6 +349,31 @@ function fuseTicks() {
   }
 }
 
+/**
+ * Lost yourself? Say where you are again.
+ *
+ * Fifteen seconds of no input, alive, and the arrival animation replays: the sprite blows up to
+ * full size and collapses with its shockwave. This is the same cue as spawning because it is the
+ * same question — on a thirty-nine tile board with sixteen pirates on it, "which one am I" is
+ * genuinely hard after you look away, and hunting for your own colour is worse than being told.
+ *
+ * Keyed off input rather than off movement: standing still behind a wall on purpose is being
+ * idle in exactly the sense that matters, and a player held in place by a bomb is not.
+ */
+const IDLE_MARK_MS = 15_000;
+let lastActivityAt = 0;
+
+function idlePing(now) {
+  const me = world.me();
+  if (!me || !me.alive) { lastActivityAt = now; return; }
+  if (input.mask !== 0) { lastActivityAt = now; return; }
+  if (!lastActivityAt) { lastActivityAt = now; return; }
+  if (now - lastActivityAt < IDLE_MARK_MS) return;
+  lastActivityAt = now;
+  world.markSpawn(world.you);
+  sfx.play('ownSpawn');
+}
+
 function loop(now) {
   // Bail before re-arming, so leaving genuinely stops the loop. Returning to the menu and
   // pressing play used to start a second one on top of the first: two simulation steps and two
@@ -384,6 +409,7 @@ function loop(now) {
   // Fell badly behind: drop it rather than catching up — and resync, for the same reason.
   if (acc > TICK_MS * 5) { acc = 0; net.resync(); }
 
+  idlePing(now);
   fuseTicks();
   world.updateFires();
   world.interpolate(net.serverTickNow(), dt);
