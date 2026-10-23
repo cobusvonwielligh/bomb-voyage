@@ -21,6 +21,8 @@ export function createState(mapDef, seed = mapDef.seed) {
     perks: [],
     nextBombId: 1,
     nextPerkId: 1,
+    // Decaying count of recent pickups; drives the drop rate. See maybeDrop in sim/perks.js.
+    perkTakeRate: 0,
     // Seeded, so drops and wall regrowth are reproducible. The sim never calls Math.random().
     next: rng(seed ^ 0x9e3779b9),
     events: [],

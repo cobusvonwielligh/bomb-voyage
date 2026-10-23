@@ -136,7 +136,27 @@ export const PERK_WEIGHTS = {
   [PERK.NUKE]: 0, [PERK.BLUE_FIRE]: 0, [PERK.HEART]: 0, [PERK.KEY]: 0,
 };
 
-export const PERK_DROP_CHANCE_SOFT = 0.35; // TUNE
+export const PERK_DROP_CHANCE_SOFT = 0.35; // TUNE — the baseline, before supply and demand
+
+/* How the drop rate responds to the board.
+ *
+ * A flat chance is wrong at both ends of a round. Early on sixteen players open walls at once,
+ * perks pile up faster than anyone can walk to them, and the floor turns into a buffet. Late on,
+ * with the soft walls gone and everyone fully kitted, nothing drops for minutes. Both ends are
+ * the same bug: the rate ignores how many perks are actually lying around and how fast they are
+ * being taken.
+ *
+ * Supply: count what is on the floor against a target that scales with the number of players
+ * alive, because that is who is competing for them.
+ * Demand: an exponential moving average of pickups, so a board being cleared quickly refills
+ * quickly. HALFLIFE is in ticks; DECAY is derived from it so the two cannot drift apart. */
+export const PERK_TARGET_PER_PLAYER = 0.9;
+export const PERK_TARGET_MIN = 3;
+export const PERK_SCARCE_BOOST = 2.2;      // empty floor: more than double the base rate
+export const PERK_GLUT_FLOOR = 0.25;       // at or past target: a quarter of it
+export const PERK_TAKE_HALFLIFE_TICKS = 8 * TICK_HZ;
+export const PERK_TAKE_DECAY = Math.pow(0.5, 1 / PERK_TAKE_HALFLIFE_TICKS);
+export const PERK_DEMAND_BOOST = 0.8;      // at most +80% when the board is being stripped
 export const GIFT_DISEASE_CHANCE = 0.3;    // a Gift is a gamble; see shared/sim/perks.js
 export const PERK_DROP_ALWAYS = [BLOCK.REINFORCED, BLOCK.MONOLITH];
 export const PERK_EXPIRE_TICKS = 45 * TICK_HZ;

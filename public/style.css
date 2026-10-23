@@ -682,8 +682,8 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   position: absolute;
   /* Pinned a third of the way down the card, so he sits beside the name field rather than over
    * the title, however tall the card gets. */
-  top: 33.3%; right: -96px;
-  width: 170px; height: 170px;
+  top: 26%; right: -150px;
+  width: 255px; height: 255px;
   z-index: 2;
   pointer-events: none;
   animation: bob 5.5s ease-in-out infinite;
@@ -751,7 +751,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 #menuSay.show { opacity: 1; transform: scale(1) translate(0, 0); }
 
 /* Below this the bubble would run off the right-hand edge, so it goes over the card instead. */
-@media (max-width: 1260px) {
+@media (max-width: 1400px) {
   #menuSay { left: auto; right: calc(100% - 44px); transform-origin: 100% 100%; }
   #menuSay::after { left: auto; right: 20px; }
 }

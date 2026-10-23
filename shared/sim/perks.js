@@ -4,6 +4,8 @@ import {
   PERK, PERK_WEIGHTS, PERK_DROP_CHANCE_SOFT, PERK_DROP_ALWAYS, PERK_EXPIRE_TICKS,
   MAX_BOMBS_CARRIED, MAX_RADIUS, MAX_SKATES, MAX_SHIELDS, SCORE, BLOCK, HITBOX_UNITS, STATUS,
   PERKS_DROPPED_ON_DEATH, START_BOMBS, START_RADIUS, GIFT_DISEASE_CHANCE,
+  PERK_TARGET_PER_PLAYER, PERK_TARGET_MIN, PERK_SCARCE_BOOST, PERK_GLUT_FLOOR,
+  PERK_TAKE_DECAY, PERK_DEMAND_BOOST,
 } from '../constants.js';
 import { tileAt, toTile } from './state.js';
 import { infect } from './statuses.js';
@@ -22,9 +24,37 @@ function roll(next, exclude = 0) {
   return PERK.BOMB;
 }
 
+/**
+ * How many perks the board wants lying on it right now.
+ *
+ * Scaled by players alive, not by map size: the competition is for the perk, and sixteen players
+ * sharing three drops is a different game to three players sharing three.
+ */
+export function perkTarget(state) {
+  let alive = 0;
+  for (const p of state.players) if (p && p.alive) alive++;
+  return Math.max(PERK_TARGET_MIN, alive * PERK_TARGET_PER_PLAYER);
+}
+
+/**
+ * The drop chance for this moment, from supply and demand.
+ *
+ * Supply pushes it between PERK_SCARCE_BOOST (bare floor) and PERK_GLUT_FLOOR (at or over
+ * target). Demand lifts it by up to PERK_DEMAND_BOOST when perks are being taken faster than one
+ * every few seconds. Both are multipliers on the base chance, so the tuning knob is still
+ * PERK_DROP_CHANCE_SOFT and this only decides how far either side of it we are.
+ */
+export function dropChance(state) {
+  const target = perkTarget(state);
+  const fill = Math.min(1, state.perks.length / target);
+  const supply = PERK_SCARCE_BOOST - (PERK_SCARCE_BOOST - PERK_GLUT_FLOOR) * fill;
+  const demand = 1 + PERK_DEMAND_BOOST * Math.min(1, state.perkTakeRate / target);
+  return Math.min(1, PERK_DROP_CHANCE_SOFT * supply * demand);
+}
+
 export function maybeDrop(state, tx, ty, blockType) {
   const always = PERK_DROP_ALWAYS.includes(blockType);
-  if (!always && state.next() > PERK_DROP_CHANCE_SOFT) return;
+  if (!always && state.next() > dropChance(state)) return;
   drop(state, tx, ty, roll(state.next));
 }
 
@@ -58,6 +88,9 @@ function apply(state, p, type) {
 }
 
 export function collect(state) {
+  // Decays every tick, including the ones where nothing is picked up and the early return below
+  // would otherwise skip it — a rate that only decays while perks exist never falls to zero.
+  state.perkTakeRate *= PERK_TAKE_DECAY;
   if (!state.perks.length) return;
   const half = HITBOX_UNITS >> 1;
 
@@ -73,6 +106,7 @@ export function collect(state) {
       const gained = apply(state, p, perk.type);
       p.score += gained ? SCORE.PERK : SCORE.PERK_CAPPED;
       state.perks.splice(k, 1);
+      state.perkTakeRate += 1;
       state.events.push({ e: 'perkget', tick: state.tick, id: perk.id, i: p.i });
     }
   }
@@ -85,28 +119,17 @@ export function collect(state) {
 }
 
 /**
- * Fire destroys anything lying on the ground.
+ * Perks are FIREPROOF, on purpose.
  *
- * Without this a perk in a blast is simply immune, which makes a tile with a Fire on it the
- * safest square on the map and turns every contested drop into a standoff nobody can break. It
- * also means blowing a wall open can take the very perk out again, which is a real decision:
- * open it from a distance and you might lose what is inside.
+ * They used to burn, on the reasoning that a tile with a perk on it should not become the safest
+ * square on the map. In practice it did the opposite of what it was for: the only way to open a
+ * wall is with a bomb, and the bomb that opens it is usually still burning when the perk appears,
+ * so the player who did the work watched their own blast eat the reward. Chain reactions made it
+ * worse — a four-bomb chain could clear half the drops on the board in one tick, and there is
+ * nothing to outplay there.
  *
- * Runs AFTER collect in the tick, deliberately. Reaching a perk on the tick it burns should
- * count — you got there first — and the alternative punishes the player who took the risk.
+ * Nothing replaces it: PERK_EXPIRE_TICKS already stops a contested drop sitting there forever.
  */
-export function burnPerks(state) {
-  if (!state.perks.length || !state.fires.length) return;
-  const burning = new Set();
-  for (const f of state.fires) if (f.until > state.tick) burning.add(f.ty * state.map.w + f.tx);
-  if (!burning.size) return;
-
-  state.perks = state.perks.filter(k => {
-    if (!burning.has(k.ty * state.map.w + k.tx)) return true;
-    state.events.push({ e: 'perkburn', tick: state.tick, id: k.id, x: k.tx, y: k.ty });
-    return false;
-  });
-}
 
 /** A good kill should be worth something: scatter a few of the dead player's upgrades. */
 export function scatterOnDeath(state, p) {

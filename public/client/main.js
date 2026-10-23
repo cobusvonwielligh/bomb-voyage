@@ -141,10 +141,6 @@ const net = createNet({
           break;
         }
 
-        case 'perkburn':
-          sfx.play('blockdie', e.x, e.y);
-          break;
-
         case 'perkget': {
           const p = world.players[e.i];
           if (p) sfx.playAtUnits('pickup', p.rx ?? p.x, p.ry ?? p.y, { perk: perkTypes.get(e.id) });

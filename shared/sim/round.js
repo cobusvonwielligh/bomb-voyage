@@ -11,7 +11,7 @@ import {
 import { expireStatuses, applyStatus, has, toTile } from './state.js';
 import { stepAll } from './movement.js';
 import { place, detonate, expireFires } from './bombs.js';
-import { collect, burnPerks, scatterOnDeath } from './perks.js';
+import { collect, scatterOnDeath } from './perks.js';
 import { regenerate } from './blocks.js';
 import { burns } from './fire.js';
 import { spread as spreadStatuses } from './statuses.js';
@@ -35,10 +35,8 @@ export function tick(state, inputs, { onRespawn } = {}) {
   // 6. fire damage: blocks were already hit inside detonate, players die here
   killInFire(state);
 
-  // 7. pickups, then anything still lying in the fire is destroyed by it. Collect first on
-  //    purpose: reaching a perk on the tick it burns should count as getting there first.
+  // 7. pickups. Perks are fireproof — see the note in perks.js.
   collect(state);
-  burnPerks(state);
 
   // 8. statuses spread on contact
   spreadStatuses(state);
