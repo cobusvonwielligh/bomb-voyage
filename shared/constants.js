@@ -179,15 +179,17 @@ export const PERK = {
   STAMINA: 15,
 };
 
-/* Only three perks are live.
+/* What actually drops.
  *
- * Bomb count, blast radius and the Gift gamble are all at weight zero: they stay implemented and
- * tested, they simply never roll. The reserved types below them were always zero. A perk at zero
- * weight costs nothing and can be switched back on with one number.
+ * Bombs and Fire are the backbone of the game — without them everybody is stuck on one bomb at
+ * radius one for ten minutes, and there is no way to build a turn around anything. The Gift
+ * gamble is the one that is off: it hands out diseases, which is a mechanic that is not finished.
+ * Everything below it is reserved and has always been zero. A perk at zero weight costs nothing
+ * and switches back on with one number.
  */
 export const PERK_WEIGHTS = {
-  [PERK.BOMB]: 0, [PERK.FIRE]: 0, [PERK.SKATE]: 34, [PERK.SHIELD]: 26, [PERK.GIFT]: 0,
-  [PERK.STAMINA]: 40,
+  [PERK.BOMB]: 26, [PERK.FIRE]: 24, [PERK.SKATE]: 18, [PERK.SHIELD]: 12, [PERK.GIFT]: 0,
+  [PERK.STAMINA]: 20,
   [PERK.KICK]: 0, [PERK.JELLY]: 0, [PERK.DETONATOR]: 0, [PERK.BAT]: 0, [PERK.JETPACK]: 0,
   [PERK.NUKE]: 0, [PERK.BLUE_FIRE]: 0, [PERK.HEART]: 0, [PERK.KEY]: 0,
 };

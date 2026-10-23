@@ -7,6 +7,7 @@
 import {
   TICK_MS, TICK_HZ, NAME_MAX_CHARS, UNITS_PER_TILE, IN_BOMB, playerColor,
   MAX_SKATES, MAX_SHIELDS, MAX_STAMINA_LEVELS, IDLE_DISCONNECT_MS, RESPAWN_DELAY_TICKS, TILE_PX,
+  MAX_BOMBS_CARRIED, MAX_RADIUS, START_BOMBS, START_RADIUS,
   STAMINA_SHOW_AT, staminaMaxFor,
 } from '/shared/constants.js';
 import { createNet } from './net.js';
@@ -507,14 +508,21 @@ function setValue(el, text, { worse = false, calm = false } = {}) {
   el.classList.add(cls);
 }
 
-const gearPip = (id, value, cap) => {
+/**
+ * One loadout pip.
+ *
+ * `base` is what you start the round with, so a pip lights only once you have picked something
+ * up: every player has one bomb from the first tick, and a bar that is lit from the start tells
+ * you nothing. Speed, shields and lungs all start at zero, so for those the default is right.
+ */
+const gearPip = (id, value, cap, base = 0) => {
   const el = $(id);
   setValue(el.querySelector('.n'), value);
   el.querySelector('.cap').textContent = `/${cap}`;
   el.classList.toggle('max', value >= cap);
-  // Lit means "you have at least one of these". The numbers say how many; the glow is what you
-  // actually read mid-round, because it is visible without focusing on it.
-  el.classList.toggle('on', value > 0);
+  // The glow is what reads mid-round, because it is visible without being focused on. The
+  // number is there for when you actually look.
+  el.classList.toggle('on', value > base);
 };
 
 let diedAtTick = -1;
@@ -614,9 +622,11 @@ function drawHud() {
   setValue($('vScore'), me.score);
   renderLive();
 
-  // The three live perks, each as a pip that lights when you are carrying any. Shields used to
-  // be a separate row of green dots off to the right of the bar; they are a perk like the other
-  // two and belong in the same row, counted the same way.
+  // Every live perk as a pip, lit when you are carrying more than you started with. Shields used
+  // to be a separate row of green dots off to the right of the bar; they are a perk like the
+  // rest and belong in the same row, counted the same way.
+  gearPip('pBombs', me.bombs, MAX_BOMBS_CARRIED, START_BOMBS);
+  gearPip('pFire', me.radius, MAX_RADIUS, START_RADIUS);
   gearPip('pSpeed', me.speed, MAX_SKATES);
   gearPip('pShield', me.shields, MAX_SHIELDS);
   gearPip('pLungs', me.staminaLevel ?? 0, MAX_STAMINA_LEVELS);
