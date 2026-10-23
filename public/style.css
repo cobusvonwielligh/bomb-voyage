@@ -171,14 +171,18 @@ button:disabled:hover { background: transparent; color: var(--gold); }
 input[type=range] { width: 64px; accent-color: var(--gold); }
 .vlabel { color: var(--dim); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
 
-.ghLink {
-  display: flex; align-items: center; gap: 5px;
-  color: var(--dim); text-decoration: none; font-size: 11px;
-  text-transform: uppercase; letter-spacing: .12em;
+/* Icon-only in the top bar — the GitHub mark needs no label, and the bar is crowded. Sized to a
+ * comfortable click target rather than to the glyph. */
+.iconBtn {
+  display: grid; place-items: center;
+  width: 26px; height: 26px; border-radius: 6px;
+  color: var(--dim); text-decoration: none;
+  border: 1px solid transparent;
+  transition: color .12s, border-color .12s, background .12s;
 }
-.ghLink:hover { color: var(--ink); }
-.ghLink.bug:hover { color: var(--bad); }
-.ghLink svg { width: 14px; height: 14px; }
+.iconBtn:hover { color: var(--ink); border-color: #ffffff2e; background: #ffffff12; }
+.iconBtn.bug:hover { color: var(--bad); border-color: #e8655a55; background: #e8655a18; }
+.iconBtn svg { width: 15px; height: 15px; display: block; }
 
 /* ─── chat ────────────────────────────────────────────────────────────────────── */
 
