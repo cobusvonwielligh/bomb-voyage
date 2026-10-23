@@ -6,9 +6,6 @@ Friday-afternoon games at eezi.
 **Live:** https://bombvoyage.online · **Health:** [/healthz](https://bombvoyage.online/healthz)
 · **Sprites:** [/art-preview.html](https://bombvoyage.online/art-preview.html)
 
-`www.bombvoyage.online`, `15.240.88.189.sslip.io` and the bare IP all answer and 301 to the apex,
-so old links keep working and only one URL ever shows in the address bar.
-
 ---
 
 ## Status
