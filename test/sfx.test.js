@@ -89,3 +89,23 @@ test('every perk that can drop has its own pickup interval', () => {
     assert.ok(PERK[name] !== undefined, `PERK.${name} does not exist`);
   }
 });
+
+test('hz() is only ever given a MIDI note number', () => {
+  // hz(midi) is 440 * 2^((midi-69)/12). Handing it a frequency compiles, stays finite in JS,
+  // and then overflows float32 inside the AudioParam: hz(5000) is 1e126, which the browser
+  // rejects as "non-finite" at the setValueAtTime call. MIDI stops at 127, so anything above
+  // that is a frequency somebody passed to the wrong function.
+  const bad = [...sfxSrc.matchAll(/\bhz\(\s*([\d.]+)/g)]
+    .map(m => Number(m[1]))
+    .filter(n => n > 127);
+  assert.deepEqual(bad, [], `hz() called with frequencies, not MIDI notes: ${bad}`);
+});
+
+test('no AudioParam ramp or set is given a value that cannot survive float32', () => {
+  // The same failure, caught at the other end: a literal too big for a 32-bit float becomes
+  // Infinity the moment it reaches the audio graph.
+  const calls = [...sfxSrc.matchAll(/(?:setValueAtTime|exponentialRampToValueAtTime|linearRampToValueAtTime)\(\s*([\d.e+]+)/g)]
+    .map(m => Number(m[1]))
+    .filter(n => Number.isFinite(n) && !Number.isFinite(Math.fround(n)));
+  assert.deepEqual(calls, [], `AudioParam values overflow float32: ${calls}`);
+});

@@ -323,8 +323,8 @@ export function createSfx({ listener }) {
       const bp = c.createBiquadFilter();
       bp.type = 'bandpass';
       bp.Q.value = 1.1;
-      bp.frequency.setValueAtTime(hz(5000), t);
-      bp.frequency.exponentialRampToValueAtTime(hz(400), t + 0.3);
+      bp.frequency.setValueAtTime(5000, t);
+      bp.frequency.exponentialRampToValueAtTime(400, t + 0.3);
       s.connect(bp); bp.connect(air);
       s.start(t); s.stop(t + 0.42);
 
@@ -333,8 +333,8 @@ export function createSfx({ listener }) {
       const body = voiceGain(c, out, hit, { a: 0.004, d: 0.26, peak: 0.42, send: 0.35 });
       const thump = c.createOscillator();
       thump.type = 'sine';
-      thump.frequency.setValueAtTime(hz(180), hit);
-      thump.frequency.exponentialRampToValueAtTime(hz(52), hit + 0.22);
+      thump.frequency.setValueAtTime(180, hit);
+      thump.frequency.exponentialRampToValueAtTime(52, hit + 0.22);
       thump.connect(body);
       thump.start(hit); thump.stop(hit + 0.3);
 
@@ -343,8 +343,8 @@ export function createSfx({ listener }) {
         const g = voiceGain(c, out, hit + 0.02, { a: 0.02, d: 0.34, peak, send: 0.2 });
         const o = c.createOscillator();
         o.type = 'triangle';
-        o.frequency.setValueAtTime(hz(220 * mul), hit + 0.02);
-        o.frequency.exponentialRampToValueAtTime(hz(660 * mul), hit + 0.32);
+        o.frequency.setValueAtTime(220 * mul, hit + 0.02);
+        o.frequency.exponentialRampToValueAtTime(660 * mul, hit + 0.32);
         o.connect(g);
         o.start(hit + 0.02); o.stop(hit + 0.45);
       }
