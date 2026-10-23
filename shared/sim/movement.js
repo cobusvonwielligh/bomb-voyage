@@ -20,15 +20,32 @@ export function speedOf(p) {
 
 const halfBox = p => (has(p, STATUS.REDUCTION) ? HITBOX_REDUCED_UNITS : HITBOX_UNITS) >> 1;
 
+/**
+ * A bomb is solid to everyone — except the player still standing on the tile they just put it
+ * on, who may walk off it. Inlined rather than imported from bombs.js: that module imports
+ * fire.js and blocks.js, and movement has no business pulling in the whole blast chain.
+ */
+function bombSolid(state, p, tx, ty) {
+  if (!state.bombs) return false;
+  for (const b of state.bombs) {
+    if (b.tx !== tx || b.ty !== ty) continue;
+    if (b.owner !== p.i) return true;
+    return !((p.x >> 8) === tx && (p.y >> 8) === ty);
+  }
+  return false;
+}
+
 /** Would the hitbox centred on (x, y) overlap anything solid? */
-export function blocked(map, p, x, y) {
+export function blocked(state, p, x, y) {
   const h = halfBox(p);
   const reduced = has(p, STATUS.REDUCTION);
   const x0 = (x - h) >> 8, x1 = (x + h - 1) >> 8;
   const y0 = (y - h) >> 8, y1 = (y + h - 1) >> 8;
   for (let ty = y0; ty <= y1; ty++)
-    for (let tx = x0; tx <= x1; tx++)
-      if (!walkable(map, tx, ty, reduced)) return true;
+    for (let tx = x0; tx <= x1; tx++) {
+      if (!walkable(state.map, tx, ty, reduced)) return true;
+      if (bombSolid(state, p, tx, ty)) return true;
+    }
   return false;
 }
 
@@ -36,9 +53,9 @@ export function blocked(map, p, x, y) {
 const offsetFromCentre = u => (u & (UNITS_PER_TILE - 1)) - HALF_TILE;
 
 /** Is the tile at (primary, lane) walkable, for whichever axis we are moving along? */
-const laneWalkable = (map, horizontal, primaryTile, laneTile, reduced) =>
-  horizontal ? walkable(map, primaryTile, laneTile, reduced)
-             : walkable(map, laneTile, primaryTile, reduced);
+const laneWalkable = (state, horizontal, primaryTile, laneTile, reduced) =>
+  horizontal ? walkable(state.map, primaryTile, laneTile, reduced)
+             : walkable(state.map, laneTile, primaryTile, reduced);
 
 /**
  * Move along one axis.
@@ -61,7 +78,7 @@ const laneWalkable = (map, horizontal, primaryTile, laneTile, reduced) =>
  * That last case is what makes the assist possible: never pull someone away from an opening
  * they might be aiming for.
  */
-function moveAxis(map, p, ax, ay, speed) {
+function moveAxis(state, p, ax, ay, speed) {
   const horizontal = ax !== 0;
   const dir = horizontal ? ax : ay;
   const half = halfBox(p);
@@ -75,7 +92,7 @@ function moveAxis(map, p, ax, ay, speed) {
 
   const nx = horizontal ? p.x + dir * speed : p.x;
   const ny = horizontal ? p.y : p.y + dir * speed;
-  const wayBlocked = blocked(map, p, nx, ny);
+  const wayBlocked = blocked(state, p, nx, ny);
 
   /** Slide toward the centre line of the lane we are already in, by at most one tick. */
   const straighten = () => {
@@ -83,7 +100,7 @@ function moveAxis(map, p, ax, ay, speed) {
     const pull = Math.sign(delta) * Math.min(Math.abs(delta), speed);
     const cx = horizontal ? p.x : p.x + pull;
     const cy = horizontal ? p.y + pull : p.y;
-    if (blocked(map, p, cx, cy)) return false;
+    if (blocked(state, p, cx, cy)) return false;
     p.x = cx; p.y = cy;
     return true;
   };
@@ -102,7 +119,7 @@ function moveAxis(map, p, ax, ay, speed) {
     // them around would fight every attempt to line up with a gap.
     if (off !== 0) {
       const adj = lane + Math.sign(off);
-      if (!laneWalkable(map, horizontal, leadTile, adj, reduced)) straighten();
+      if (!laneWalkable(state, horizontal, leadTile, adj, reduced)) straighten();
     }
     return true;
   }
@@ -115,7 +132,7 @@ function moveAxis(map, p, ax, ay, speed) {
   const ex = horizontal ? edge : p.x;
   const ey = horizontal ? p.y : edge;
   const forward = dir > 0 ? edge > (horizontal ? p.x : p.y) : edge < (horizontal ? p.x : p.y);
-  if (forward && !blocked(map, p, ex, ey)) { p.x = ex; p.y = ey; return true; }
+  if (forward && !blocked(state, p, ex, ey)) { p.x = ex; p.y = ey; return true; }
   return false;
 }
 
@@ -144,7 +161,7 @@ export function step(state, p, mask) {
   p.moving = true;
 
   const speed = speedOf(p);
-  moveAxis(state.map, p, dx, dy, speed);
+  moveAxis(state, p, dx, dy, speed);
 }
 
 /** Every alive player, in seat order. Order is part of determinism — never iterate a Map here. */

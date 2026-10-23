@@ -6,6 +6,7 @@ import {
 } from '../constants.js';
 import { buildMap, cellType, cellHp, packCell } from '../maps.js';
 import { BLOCK, BLOCK_WALKABLE } from '../constants.js';
+import { rng } from '../util/rng.js';
 
 export function createState(mapDef, seed = mapDef.seed) {
   const map = buildMap(mapDef);
@@ -16,9 +17,12 @@ export function createState(mapDef, seed = mapDef.seed) {
     // Fixed-length so a player's index is their seat for the whole round.
     players: new Array(MAX_PLAYERS).fill(null),
     bombs: [],
+    fires: [],
     perks: [],
     nextBombId: 1,
     nextPerkId: 1,
+    // Seeded, so drops and wall regrowth are reproducible. The sim never calls Math.random().
+    next: rng(seed ^ 0x9e3779b9),
     events: [],
   };
 }

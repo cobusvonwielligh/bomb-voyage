@@ -1,0 +1,258 @@
+// Blast shape, chains, destruction and death. `spread` is pure, which is what lets the client
+// draw the identical explosion on the identical tick — docs/NETCODE.md §1a.
+
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createState, createPlayer, setTile, tileAt, hpAt, tileCentre, hashState } from '../shared/sim/state.js';
+import { spread } from '../shared/sim/fire.js';
+import { place } from '../shared/sim/bombs.js';
+import { tick } from '../shared/sim/round.js';
+import { drop, maybeDrop } from '../shared/sim/perks.js';
+import {
+  BLOCK, BLOCK_HP, IN_BOMB, IN_RIGHT, FUSE_TICKS, STATUS, PERK, MAX_RADIUS, SCORE,
+} from '../shared/constants.js';
+
+function room(w = 15, h = 15) {
+  const st = createState({ id: 't', name: 't', w, h, seed: 7, density: 0, reinforced: 0, shrubs: 0 });
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    setTile(st.map, x, y, (x === 0 || y === 0 || x === w - 1 || y === h - 1) ? BLOCK.IRON : BLOCK.FLOOR);
+  }
+  return st;
+}
+
+function spawn(st, seat, tx, ty) {
+  const p = createPlayer(seat, `p${seat}`);
+  p.alive = true;
+  p.x = tileCentre(tx); p.y = tileCentre(ty);
+  st.players[seat] = p;
+  return p;
+}
+
+const run = (st, n, inputs = []) => { for (let i = 0; i < n; i++) tick(st, inputs); };
+
+/** Tests about blocks and drops should not also be tests about blowing yourself up. */
+function immortal(p) { p.status = STATUS.INVULN; p.statusUntil[STATUS.INVULN] = 1e9; return p; }
+const at = (cells, tx, ty) => cells.some(c => c.tx === tx && c.ty === ty);
+
+test('fire spread', async t => {
+  await t.test('reaches exactly radius tiles in four directions', () => {
+    const st = room();
+    const { cells } = spread(st.map, { tx: 7, ty: 7, radius: 3 });
+    assert.equal(cells.length, 1 + 4 * 3);
+    assert.ok(at(cells, 10, 7) && at(cells, 4, 7) && at(cells, 7, 10) && at(cells, 7, 4));
+    assert.ok(!at(cells, 11, 7), 'does not overreach');
+  });
+
+  await t.test('stops before iron, without burning it', () => {
+    const st = room();
+    setTile(st.map, 9, 7, BLOCK.IRON);
+    const { cells, hits } = spread(st.map, { tx: 7, ty: 7, radius: 4 });
+    assert.ok(at(cells, 8, 7));
+    assert.ok(!at(cells, 9, 7), 'iron is not set on fire');
+    assert.ok(!at(cells, 10, 7), 'and nothing past it');
+    assert.equal(hits.length, 0);
+  });
+
+  await t.test('burns a soft wall and stops there', () => {
+    const st = room();
+    setTile(st.map, 9, 7, BLOCK.SOFT, 1);
+    const { cells, hits } = spread(st.map, { tx: 7, ty: 7, radius: 4 });
+    assert.ok(at(cells, 9, 7), 'the wall tile itself burns');
+    assert.ok(!at(cells, 10, 7), 'the arm stops');
+    assert.deepEqual(hits, [{ tx: 9, ty: 7 }]);
+  });
+
+  await t.test('passes through a column without losing reach', () => {
+    const st = room();
+    setTile(st.map, 8, 7, BLOCK.COLUMN);
+    const { cells } = spread(st.map, { tx: 7, ty: 7, radius: 3 });
+    assert.ok(at(cells, 8, 7) && at(cells, 10, 7), 'fire ignores columns');
+  });
+
+  await t.test('shrubs let fire through but weaken it', () => {
+    const st = room();
+    setTile(st.map, 8, 7, BLOCK.SHRUB_WALK);
+    const { cells } = spread(st.map, { tx: 7, ty: 7, radius: 3 });
+    assert.ok(at(cells, 9, 7), 'got past the shrub');
+    assert.ok(!at(cells, 10, 7), 'but one tile short of full reach');
+  });
+
+  await t.test('is pure — same inputs, same answer', () => {
+    const st = room();
+    setTile(st.map, 9, 7, BLOCK.SOFT, 1);
+    const a = JSON.stringify(spread(st.map, { tx: 7, ty: 7, radius: 4 }));
+    const b = JSON.stringify(spread(st.map, { tx: 7, ty: 7, radius: 4 }));
+    assert.equal(a, b);
+  });
+});
+
+test('bombs in the round loop', async t => {
+  await t.test('placing respects the bomb cap and one-per-tile', () => {
+    const st = room();
+    const p = spawn(st, 0, 3, 3);
+    place(st, p, IN_BOMB);
+    place(st, p, IN_BOMB);
+    assert.equal(st.bombs.length, 1, 'cap of one, and only one per tile');
+    p.bombs = 2;
+    p.x = tileCentre(5);
+    place(st, p, IN_BOMB);
+    assert.equal(st.bombs.length, 2);
+  });
+
+  await t.test('pacifism stops you bombing', () => {
+    const st = room();
+    const p = spawn(st, 0, 3, 3);
+    p.status = STATUS.PACIFISM;
+    p.statusUntil[STATUS.PACIFISM] = 999;
+    place(st, p, IN_BOMB);
+    assert.equal(st.bombs.length, 0);
+  });
+
+  await t.test('explodes on its fuse tick, not before', () => {
+    const st = room();
+    spawn(st, 0, 3, 3);
+    run(st, 1, [IN_BOMB]);
+    assert.equal(st.bombs.length, 1);
+    run(st, FUSE_TICKS - 1);
+    assert.equal(st.bombs.length, 1, 'still ticking');
+    run(st, 1);
+    assert.equal(st.bombs.length, 0, 'gone');
+    assert.ok(st.fires.length > 0, 'and left fire behind');
+  });
+
+  await t.test('a reinforced block takes six separate blasts', () => {
+    const st = room();
+    const p = immortal(spawn(st, 0, 3, 3));
+    p.bombs = 1;
+    setTile(st.map, 4, 3, BLOCK.REINFORCED, BLOCK_HP[BLOCK.REINFORCED]);
+    for (let n = 0; n < 5; n++) { run(st, 1, [IN_BOMB]); run(st, FUSE_TICKS + 2); }
+    assert.equal(tileAt(st.map, 4, 3), BLOCK.REINFORCED, 'still standing after five');
+    assert.equal(hpAt(st.map, 4, 3), 1);
+    run(st, 1, [IN_BOMB]); run(st, FUSE_TICKS + 2);
+    assert.equal(tileAt(st.map, 4, 3), BLOCK.FLOOR, 'six does it');
+  });
+
+  await t.test('a line of bombs chains in a single tick', () => {
+    const st = room(21, 9);
+    const p = spawn(st, 0, 2, 4);
+    p.bombs = 10; p.radius = 2;
+    for (let i = 0; i < 8; i++) {
+      p.x = tileCentre(2 + i * 2);
+      place(st, p, IN_BOMB);
+      st.bombs.at(-1).at = st.tick + FUSE_TICKS + i * 10;   // wildly different fuses
+    }
+    assert.equal(st.bombs.length, 8);
+    run(st, FUSE_TICKS + 1);
+    assert.equal(st.bombs.length, 0, 'the first one set off all of them at once');
+  });
+
+  await t.test('fire kills, and credits the right player', () => {
+    const st = room();
+    const killer = spawn(st, 0, 3, 3);
+    const victim = spawn(st, 1, 4, 3);
+    victim.status = 0; victim.statusUntil = {};
+    place(st, killer, IN_BOMB);
+    run(st, FUSE_TICKS + 1);
+    assert.equal(victim.alive, false);
+    assert.equal(killer.kills, 1);
+    assert.equal(victim.deaths, 1);
+  });
+
+  await t.test('invulnerability and shields both save you', () => {
+    const st = room();
+    const p = spawn(st, 0, 3, 3);
+    p.status = STATUS.INVULN; p.statusUntil[STATUS.INVULN] = 9999;
+    place(st, p, IN_BOMB);
+    run(st, FUSE_TICKS + 1);
+    assert.equal(p.alive, true, 'invulnerable');
+
+    const st2 = room();
+    const q = spawn(st2, 0, 3, 3);
+    q.shields = 1;
+    place(st2, q, IN_BOMB);
+    run(st2, FUSE_TICKS + 1);
+    assert.equal(q.alive, true, 'shield absorbed it');
+    assert.equal(q.shields, 0, 'and was spent');
+  });
+
+  await t.test('you can walk off your own bomb but not back onto it', () => {
+    const st = room();
+    const p = spawn(st, 0, 3, 3);
+    place(st, p, IN_BOMB);
+    run(st, 20, [IN_RIGHT]);
+    assert.ok(p.x > tileCentre(3), 'walked off it');
+    const escaped = p.x;
+    run(st, 30, [4]);                        // IN_LEFT: try to come back
+    assert.ok(p.x < escaped, 'moved back toward it');
+    assert.ok(p.x > tileCentre(3), 'but could not re-enter the tile');
+  });
+
+  await t.test('walking over a perk picks it up and applies it', () => {
+    const st = room();
+    const p = immortal(spawn(st, 0, 3, 3));
+    drop(st, 5, 3, PERK.FIRE);
+    const radius = p.radius;
+
+    run(st, 40, [IN_RIGHT]);
+    assert.equal(st.perks.length, 0, 'taken');
+    assert.equal(p.radius, radius + 1, 'and it did something');
+    assert.ok(p.score > 0, 'and scored');
+  });
+
+  await t.test('a perk at its cap still pays out rather than being nothing', () => {
+    const st = room();
+    const p = immortal(spawn(st, 0, 3, 3));
+    p.radius = MAX_RADIUS;
+    drop(st, 5, 3, PERK.FIRE);
+    run(st, 40, [IN_RIGHT]);
+    assert.equal(p.radius, MAX_RADIUS, 'capped');
+    assert.equal(p.score, SCORE.PERK_CAPPED, 'consolation points');
+  });
+
+  await t.test('drop weights are honoured over many rolls', () => {
+    const st = room();
+    const counts = {};
+    for (let i = 0; i < 4000; i++) {
+      st.perks.length = 0;
+      maybeDrop(st, 1 + (i % 12), 1, BLOCK.REINFORCED);   // always drops
+      const k = st.perks[0];
+      if (k) counts[k.type] = (counts[k.type] || 0) + 1;
+    }
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    assert.ok(total > 3900, 'reinforced blocks always drop');
+    // Bomb and Fire are weight 30 of 100 each; allow a wide band, this is a sanity check.
+    for (const type of [PERK.BOMB, PERK.FIRE]) {
+      const share = counts[type] / total;
+      assert.ok(share > 0.2 && share < 0.4, `${type} share was ${share.toFixed(3)}`);
+    }
+    assert.equal(counts[PERK.KICK], undefined, 'reserved perks stay at weight zero');
+  });
+
+  await t.test('broken blocks sometimes drop perks', () => {
+    const st = room();
+    const p = immortal(spawn(st, 0, 3, 3));
+    p.bombs = 20;
+    for (let x = 5; x < 13; x++) setTile(st.map, x, 3, BLOCK.SOFT, 1);
+    for (let n = 0; n < 8; n++) {
+      p.x = tileCentre(4 + n);
+      if (tileAt(st.map, 4 + n, 3) !== BLOCK.FLOOR) continue;
+      place(st, p, IN_BOMB);
+      run(st, FUSE_TICKS + 2);
+    }
+    assert.ok(p.radius > 1 || p.bombs > 1 || p.speed > 0 || st.perks.length > 0,
+      'eight walls produced at least one perk, dropped or already collected');
+  });
+
+  await t.test('the whole round loop stays deterministic', () => {
+    const script = [IN_RIGHT, IN_RIGHT | IN_BOMB, 0, 8, IN_BOMB, 4, 0, 2];
+    const go = () => {
+      const st = room(17, 17);
+      const a = spawn(st, 0, 3, 3), b = spawn(st, 1, 9, 9);
+      a.bombs = 3; b.bombs = 3;
+      for (let x = 5; x < 12; x++) setTile(st.map, x, 5, BLOCK.SOFT, 1);
+      for (let i = 0; i < 400; i++) tick(st, [script[i % script.length], script[(i + 3) % script.length]]);
+      return hashState(st);
+    };
+    assert.equal(go(), go());
+  });
+});

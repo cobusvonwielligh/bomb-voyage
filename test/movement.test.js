@@ -55,7 +55,7 @@ test('movement', async t => {
     const st = room(); const p = spawn(st, 2, 2);
     setTile(st.map, 3, 2, BLOCK.SOFT);
     for (let i = 0; i < 40; i++) step(st, p, IN_RIGHT);
-    assert.ok(!blocked(st.map, p, p.x, p.y), 'never ends up inside a wall');
+    assert.ok(!blocked(st, p, p.x, p.y), 'never ends up inside a wall');
     assert.ok(p.x < tileCentre(3), 'did not pass into the wall tile');
     // And it slid flush rather than stopping a visible gap short.
     assert.ok(tileCentre(3) - p.x < UNITS_PER_TILE, 'ends up adjacent to the wall');

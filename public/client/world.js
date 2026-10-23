@@ -3,10 +3,12 @@
 // Your own player is predicted from your keys and corrected by replaying unacknowledged inputs.
 // Everyone else is drawn from snapshots, a little in the past. docs/NETCODE.md §2.
 
-import { INTERP_DELAY_TICKS, TRACER_SAMPLES, TRACER_EVERY_TICKS } from '/shared/constants.js';
+import { INTERP_DELAY_TICKS, TRACER_SAMPLES, TRACER_EVERY_TICKS, FIRE_TICKS } from '/shared/constants.js';
 import { createPlayer } from '/shared/sim/state.js';
-import { decodeCells } from '/shared/maps.js';
+import { decodeCells, packCell, cellType } from '/shared/maps.js';
+import { BLOCK, BLOCK_HP } from '/shared/constants.js';
 import { step } from '/shared/sim/movement.js';
+import { spread } from '/shared/sim/fire.js';
 
 export function createWorld() {
   const w = {
@@ -16,8 +18,10 @@ export function createWorld() {
     map: null,
     players: [],          // index = seat
     bombs: [],
+    perks: [],
+    fires: [],            // derived locally, never sent — see docs/NETCODE.md §1a
+    burst: new Set(),     // bomb ids already turned into fire here
     pending: [],          // inputs sent but not yet acknowledged
-    dirtyTiles: [],       // cells changed since the renderer last looked
     lastCorrection: 0,
   };
 
@@ -26,7 +30,6 @@ export function createWorld() {
   w.applyWelcome = m => {
     if (m.map) {
       w.map = { id: m.map.id, w: m.map.w, h: m.map.h, cells: decodeCells(m.map.cells), spawns: m.map.spawns };
-      w.dirtyTiles.push('all');
     }
     if (m.mapOnly) return;
     w.you = m.you;
@@ -34,6 +37,10 @@ export function createWorld() {
     w.players = [];
     for (const p of m.players) w.players[p.i] = hydrate(p);
     w.bombs = m.bombs || [];
+    w.perks = m.perks || [];
+    // Derived state belongs to the old map; a new round must not inherit its fires.
+    w.fires.length = 0;
+    w.burst.clear();
     w.pending.length = 0;
     w.ready = true;
   };
@@ -57,13 +64,53 @@ export function createWorld() {
     if (!me) return;
     w.pending.push({ tick, mask });
     if (w.pending.length > 200) w.pending.shift();   // connection is gone; stop growing
-    step({ map: w.map }, me, mask);
-    me.rx = me.x; me.ry = me.y;                      // our own player is never interpolated
+    step(w, me, mask);
+    // Deliberately does NOT touch rx/ry. The rendered position eases toward the simulated one in
+    // interpolate(), which is what absorbs reconciliation corrections instead of showing them.
+  };
+
+  /**
+   * Turn a bomb into fire, locally, using the same spread function the server runs.
+   *
+   * This is the whole latency story: the explosion tick is fixed when the bomb is placed, so a
+   * client computes the identical blast at the identical tick without being told. Nobody ever
+   * dies to a blast that had not appeared on their screen. docs/NETCODE.md §1a.
+   */
+  w.burstBomb = bomb => {
+    if (!bomb || w.burst.has(bomb.id) || !w.map) return;
+    w.burst.add(bomb.id);
+    const { cells } = spread(w.map, { tx: bomb.tx, ty: bomb.ty, radius: bomb.r ?? bomb.radius });
+    const until = w.tick + FIRE_TICKS;
+    for (const c of cells) w.fires.push({ ...c, until, owner: bomb.o ?? bomb.owner });
+    w.bombs = w.bombs.filter(b => b.id !== bomb.id);
+    w.onBoom?.(bomb);
+  };
+
+  /** Called every frame: fuses that have run out, and fire that has burned out. */
+  w.updateFires = () => {
+    for (const b of w.bombs.slice()) if (w.tick >= b.at) w.burstBomb(b);
+    if (w.fires.length) w.fires = w.fires.filter(f => f.until > w.tick);
+    if (w.burst.size > 256) w.burst.clear();      // ids only ever grow; this is cheap bookkeeping
+  };
+
+  /** Keep the local map in step with the server so predicted blasts stop at the right walls. */
+  w.applyBlockEvent = e => {
+    if (!w.map) return;
+    const i = e.y * w.map.w + e.x;
+    if (e.e === 'blockhit') w.map.cells[i] = packCell(cellType(w.map.cells[i]), e.hp);
+    else if (e.e === 'blockdie') w.map.cells[i] = packCell(BLOCK.FLOOR, 0);
+    else if (e.e === 'blocknew') w.map.cells[i] = packCell(e.b, BLOCK_HP[e.b] || 0);
   };
 
   w.applySnap = snap => {
     w.tick = snap.tick;
-    w.bombs = snap.bombs || [];
+    w.perks = snap.perks || [];
+
+    // Keep any bomb we already know about: the server drops it from the snapshot the moment it
+    // explodes, and we may not have reached its fuse tick yet.
+    const incoming = new Map((snap.bombs || []).map(b => [b.id, b]));
+    for (const b of w.bombs) if (!incoming.has(b.id) && !w.burst.has(b.id)) incoming.set(b.id, b);
+    w.bombs = [...incoming.values()].filter(b => !w.burst.has(b.id));
 
     for (const wire of snap.players) {
       const existing = w.players[wire.i];
@@ -98,23 +145,32 @@ export function createWorld() {
     me.bombs = wire.b; me.radius = wire.f; me.speed = wire.sp; me.shields = wire.sh;
     me.score = wire.s; me.kills = wire.k; me.deaths = wire.dd; me.status = wire.stat;
 
-    for (const inp of w.pending) step({ map: w.map }, me, inp.mask);
+    for (const inp of w.pending) step(w, me, inp.mask);
 
     if (Math.abs(me.x - before.x) > 8 || Math.abs(me.y - before.y) > 8) w.lastCorrection = performance.now();
-    me.rx = me.x; me.ry = me.y;
   }
 
   /** Called every frame: advance rendered positions and sample tracers. */
-  w.interpolate = serverTickNow => {
+  w.interpolate = (serverTickNow, dtMs = 16) => {
     const renderTick = serverTickNow - INTERP_DELAY_TICKS;
     for (const p of w.players) {
       if (!p) continue;
-      if (p.i !== w.you && p.buf.length >= 2) {
+
+      if (p.i === w.you) {
+        // Ease the drawn position toward the simulated one. Reconciliation runs 15 times a
+        // second and is usually a no-op, but when it is not, a hard assignment shows up as a
+        // stutter. An ~80 ms time constant hides a correction without feeling floaty.
+        const k = 1 - Math.exp(-dtMs / 80);
+        const dx = p.x - p.rx, dy = p.y - p.ry;
+        // A whole tile out means a respawn or a teleport, not a correction — just go.
+        if (Math.abs(dx) > 256 || Math.abs(dy) > 256) { p.rx = p.x; p.ry = p.y; }
+        else { p.rx += dx * k; p.ry += dy * k; }
+      } else if (p.buf.length >= 2) {
         const [a, b] = p.buf.slice(-2);
         const span = b.tick - a.tick || 1;
-        let f = (renderTick - a.tick) / span;
-        f = Math.max(0, Math.min(1.5, f));          // a little extrapolation, then hold
-        if (f > 1) f = 1;
+        const f = Math.max(0, Math.min(1, (renderTick - a.tick) / span));
+        // Hold at the last known position rather than extrapolating. A ghost standing still
+        // reads as a hiccup; a ghost sliding through a wall reads as a bug.
         p.rx = a.x + (b.x - a.x) * f;
         p.ry = a.y + (b.y - a.y) * f;
       }

@@ -56,6 +56,24 @@
   #chatInput:focus { outline: none; opacity: 1; border-color: var(--gold); }
   .right { margin-left: auto; display: flex; gap: 8px; align-items: center; pointer-events: auto; }
   input[type=range] { width: 90px; accent-color: var(--gold); }
+  .gear { display: block; margin-top: 6px; color: var(--gold); font-size: 13px;
+          text-shadow: 0 1px 2px #000; letter-spacing: .08em; }
+
+  /* death + scores */
+  #dead { position: fixed; inset: 0; display: none; place-items: center; z-index: 8;
+          background: #0d111788; }
+  .card.small { width: 280px; text-align: center; }
+  .card.small h1 { color: #e8655a; }
+  #respawn { width: 100%; margin-top: 10px; padding: 10px; letter-spacing: .14em;
+             text-transform: uppercase; }
+  #scores { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 9;
+            display: none; background: #1a2029f2; border: 2px solid #ffd21f66; border-radius: 4px;
+            padding: 18px 22px; min-width: 340px; }
+  #scores table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  #scores th { color: var(--dim); font-weight: normal; text-align: left; padding-bottom: 6px;
+               border-bottom: 1px solid #ffd21f33; }
+  #scores td { padding: 3px 10px 3px 0; }
+  #scores .sub { margin: 12px 0 0; text-align: center; }
 </style>
 
 <canvas id="game"></canvas>
@@ -68,12 +86,30 @@
     <span class="right">
       <button id="musicBtn">♪ off</button>
       <input id="vol" type="range" min="0" max="100" value="25" title="music volume">
+      <button id="leave" title="esc">leave</button>
     </span>
   </div>
   <div id="chat">
     <ul id="chatList"></ul>
     <input id="chatInput" placeholder="enter to chat" maxlength="140">
+    <span id="gear" class="gear"></span>
   </div>
+</div>
+
+<div id="dead">
+  <div class="card small">
+    <h1>you died</h1>
+    <p class="sub">space to respawn &middot; esc to leave</p>
+    <button id="respawn">respawn</button>
+  </div>
+</div>
+
+<div id="scores">
+  <table>
+    <thead><tr><th>#</th><th>name</th><th>k</th><th>d</th><th>score</th></tr></thead>
+    <tbody id="scoreRows"></tbody>
+  </table>
+  <p class="sub">tab to close</p>
 </div>
 
 <div id="toast"></div>

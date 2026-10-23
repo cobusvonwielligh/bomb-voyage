@@ -50,7 +50,29 @@ const net = createNet({
   onSnap: snap => {
     world.applySnap(snap);
     for (const e of snap.ev || []) {
-      if (e.e === 'blockhit' || e.e === 'blockdie' || e.e === 'blocknew') renderer?.invalidateTile(e.x, e.y);
+      switch (e.e) {
+        case 'blockhit': case 'blockdie': case 'blocknew':
+          world.applyBlockEvent(e);
+          renderer?.invalidateTile(e.x, e.y);
+          break;
+        case 'boom':
+          // Authoritative detonation. Usually we already burst it locally off its own fuse; this
+          // is what covers chain reactions, which go off early and without warning.
+          world.burstBomb({ id: e.id, tx: e.x, ty: e.y, o: e.o, r: e.r });
+          break;
+        case 'died': {
+          const who = world.players[e.i];
+          const by = world.players[e.by];
+          killFeed(e.i === e.by
+            ? `${who?.name ?? '?'} blew themselves up`
+            : `${by?.name ?? '?'} bombed ${who?.name ?? '?'}`);
+          if (e.i === world.you) showDead(true);
+          break;
+        }
+        case 'spawn':
+          if (e.i === world.you) showDead(false);
+          break;
+      }
     }
   },
   onChat: m => {
@@ -75,7 +97,7 @@ const input = createInput({
 
 // ─── loop ─────────────────────────────────────────────────────────────────────
 
-let acc = 0, last = performance.now();
+let acc = 0, last = performance.now(), hudAt = 0;
 
 function loop(now) {
   requestAnimationFrame(loop);
@@ -83,7 +105,9 @@ function loop(now) {
   last = now;
   acc += dt;
 
-  while (acc >= TICK_MS) {
+  // Exactly one simulation step per TICK_MS of real time, never more than a handful at once.
+  let steps = 0;
+  while (acc >= TICK_MS && steps++ < 5) {
     acc -= TICK_MS;
     const tick = net.advanceTick();
     const mask = input.mask;
@@ -91,16 +115,70 @@ function loop(now) {
     const me = world.me();
     net.send({ t: 'input', tick, m: mask, x: me?.x | 0, y: me?.y | 0 });
   }
+  if (acc > TICK_MS * 5) acc = 0;           // fell badly behind: drop it rather than catching up
 
-  world.interpolate(net.serverTickNow());
-  renderer.frame();
+  world.updateFires();
+  world.interpolate(net.serverTickNow(), dt);
+  renderer.frame(dt);
 
-  if ((now | 0) % 8 === 0) {
+  if (now - hudAt > 200) {
+    hudAt = now;
     const me = world.me();
     $('stat').textContent =
-      `${net.rtt}ms  ·  ${world.players.filter(Boolean).length} online  ·  ${world.map?.id ?? ''}`;
-    if (me) $('you').textContent = `${me.name}  ${me.kills}/${me.deaths}`;
+      `${net.rtt}ms · ${world.players.filter(Boolean).length} online · ${world.map?.id ?? ''}`;
+    if (me) {
+      $('you').textContent = `${me.name}  ${me.kills}/${me.deaths}`;
+      $('gear').textContent = `◼${me.bombs}  ✸${me.radius}  »${me.speed}${me.shields ? '  ◊' : ''}`;
+    }
+    if (scoresOpen) renderScores();
   }
+}
+
+// ─── death, scoreboard, leaving ───────────────────────────────────────────────
+
+function showDead(dead) {
+  $('dead').style.display = dead ? 'grid' : 'none';
+}
+
+function killFeed(text) {
+  const li = document.createElement('li');
+  li.style.color = '#8b97a8';
+  li.textContent = text;
+  const list = $('chatList');
+  list.append(li);
+  while (list.children.length > 50) list.firstChild.remove();
+  list.scrollTop = list.scrollHeight;
+}
+
+let scoresOpen = false;
+function renderScores() {
+  const rows = world.players.filter(Boolean).sort((a, b) => b.score - a.score || b.kills - a.kills);
+  const body = $('scoreRows');
+  body.textContent = '';
+  for (const [n, p] of rows.entries()) {
+    const tr = document.createElement('tr');
+    for (const [v, colour] of [[n + 1], [p.name, playerColor(p.i)], [p.kills], [p.deaths], [p.score]]) {
+      const td = document.createElement('td');
+      td.textContent = v;
+      if (colour) td.style.color = colour;
+      tr.append(td);
+    }
+    if (p.i === world.you) tr.style.fontWeight = 'bold';
+    body.append(tr);
+  }
+}
+
+function leave() {
+  net.close();
+  world.ready = false;
+  running = false;
+  $('menu').style.display = 'grid';
+  $('hud').style.display = 'none';
+  $('dead').style.display = 'none';
+  $('scores').style.display = 'none';
+  scoresOpen = false;
+  input.clear();
+  $('name').focus();
 }
 
 // ─── menu ─────────────────────────────────────────────────────────────────────
@@ -128,11 +206,25 @@ addEventListener('keydown', e => {
     e.preventDefault();
     $('chatInput').focus();
     music.duck(true);
-  } else if (e.key === 'Escape' && chatHasFocus()) {
-    $('chatInput').blur();
-    music.duck(false);
+    return;
+  }
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    if (chatHasFocus()) { $('chatInput').blur(); music.duck(false); }
+    else if (scoresOpen) { scoresOpen = false; $('scores').style.display = 'none'; }
+    else if (running) leave();                 // there has to be a way out of the game
+    return;
+  }
+  if (e.code === 'Tab' && running) {
+    e.preventDefault();
+    scoresOpen = !scoresOpen;
+    $('scores').style.display = scoresOpen ? 'block' : 'none';
+    if (scoresOpen) renderScores();
   }
 });
+
+$('leave').onclick = leave;
+$('respawn').onclick = () => net.send({ t: 'input', tick: net.clientTick + 1, m: 16 });
 
 $('chatInput').onkeydown = e => {
   if (e.key !== 'Enter') return;

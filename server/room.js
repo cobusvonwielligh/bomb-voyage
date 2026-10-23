@@ -9,7 +9,7 @@ import {
 } from '../shared/constants.js';
 import { MAPS, encodeCells } from '../shared/maps.js';
 import { createState, createPlayer, expireStatuses, applyStatus, tileCentre } from '../shared/sim/state.js';
-import { stepAll } from '../shared/sim/movement.js';
+import { tick as simTick } from '../shared/sim/round.js';
 
 // How long a seat is held for someone who vanished. A closed laptop lid, a wifi roam or a tunnel
 // all look identical to a crash, and losing your stats to a two-second blip is maddening.
@@ -125,10 +125,7 @@ export function createRoom({ onBroadcast, maxPlayers = MAX_PLAYERS }) {
       if (!s.connected && state.tick - s.goneSince > RECONNECT_GRACE_TICKS) release(i);
     }
 
-    for (const p of state.players) if (p) expireStatuses(state, p);
-    stepAll(state, inputs);
-
-    state.tick++;
+    simTick(state, inputs, { onRespawn: respawn });
 
     const ms = performance.now() - t0;
     tickTimes.push(ms);
@@ -178,6 +175,7 @@ export function createRoom({ onBroadcast, maxPlayers = MAX_PLAYERS }) {
       ack: seats[seat]?.lastAckTick ?? 0,
       players,
       bombs: state.bombs,
+      perks: state.perks,
       ev,
     }));
   }

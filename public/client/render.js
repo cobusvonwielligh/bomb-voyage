@@ -4,10 +4,12 @@
 // redrawn when a cell inside it changes. Per frame we blit a dozen chunks and draw a handful of
 // sprites. Same approach Game of Bombs uses. docs/ARCHITECTURE.md §6.
 
-import { TILE_PX, CHUNK_TILES, UNITS_PER_TILE, TRACER_SAMPLES } from '/shared/constants.js';
+import {
+  TILE_PX, CHUNK_TILES, UNITS_PER_TILE, TRACER_SAMPLES, FUSE_TICKS, FIRE_TICKS, STATUS,
+} from '/shared/constants.js';
 import { cellType, cellHp } from '/shared/maps.js';
-import { BLOCK, BLOCK_HP } from '/shared/constants.js';
-import { drawTile, drawPlayer, drawBomb, playerShades, PALETTE, bake } from '/assets/art.js';
+import { BLOCK_HP } from '/shared/constants.js';
+import { drawTile, drawFire, drawPerk, playerShades, PALETTE, bake } from '/assets/art.js';
 
 const CHUNK_PX = TILE_PX * CHUNK_TILES;
 
@@ -78,7 +80,7 @@ export function createRenderer(canvas, world) {
 
   // ─── frame ──────────────────────────────────────────────────────────────────
 
-  function frame() {
+  function frame(dtMs = 16) {
     if (!world.ready || !world.map) return;
     ensureBaked();
 
@@ -90,8 +92,11 @@ export function createRenderer(canvas, world) {
     if (me) {
       const tx = (me.rx / UNITS_PER_TILE) * TILE_PX - vw / 2;
       const ty = (me.ry / UNITS_PER_TILE) * TILE_PX - vh / 2;
-      cam.x += (tx - cam.x) * 0.25;       // a touch of lag reads as weight, not sloppiness
-      cam.y += (ty - cam.y) * 0.25;
+      // Time-based, not per-frame: a fixed 0.25 factor makes the camera twice as laggy at
+      // 120 Hz as at 60 Hz, which is exactly the kind of thing that reads as "it feels off".
+      const k = 1 - Math.exp(-dtMs / 60);
+      if (Math.abs(tx - cam.x) > vw || Math.abs(ty - cam.y) > vh) { cam.x = tx; cam.y = ty; }
+      else { cam.x += (tx - cam.x) * k; cam.y += (ty - cam.y) * k; }
     }
     cam.x = Math.max(0, Math.min(Math.max(0, worldW - vw), cam.x));
     cam.y = Math.max(0, Math.min(Math.max(0, worldH - vh), cam.y));
@@ -106,10 +111,27 @@ export function createRenderer(canvas, world) {
       for (let cx = cx0; cx <= cx1; cx++)
         ctx.drawImage(chunkAt(cx, cy), ox + cx * CHUNK_PX, oy + cy * CHUNK_PX);
 
+    for (const k of world.perks) {
+      const bob = Math.sin((world.tick + k.id * 7) / 6) * 2;
+      ctx.save();
+      ctx.translate(ox + k.tx * TILE_PX, oy + k.ty * TILE_PX);
+      drawPerk(ctx, { type: k.type, bob });
+      ctx.restore();
+    }
+
     for (const b of world.bombs) {
-      const phase = Math.max(0, Math.min(1, 1 - (b.at - world.tick) / 72));
-      ctx.drawImage(baked.bombs[b.o % 16][Math.min(7, (phase * 8) | 0)],
+      const phase = Math.max(0, Math.min(1, 1 - (b.at - world.tick) / FUSE_TICKS));
+      ctx.drawImage(baked.bombs[(b.o ?? b.owner) % 16][Math.min(7, (phase * 8) | 0)],
         ox + b.tx * TILE_PX, oy + b.ty * TILE_PX);
+    }
+
+    // Fire over the bombs that made it, under the people it is about to kill.
+    for (const f of world.fires) {
+      const age = 1 - Math.max(0, (f.until - world.tick) / FIRE_TICKS);
+      ctx.save();
+      ctx.translate(ox + f.tx * TILE_PX, oy + f.ty * TILE_PX);
+      drawFire(ctx, { kind: f.kind, rot: f.rot, age });
+      ctx.restore();
     }
 
     // Y-sorted so someone below overlaps someone above.
@@ -140,7 +162,14 @@ export function createRenderer(canvas, world) {
     const px = ox + (p.rx / UNITS_PER_TILE) * TILE_PX - TILE_PX / 2;
     const py = oy + (p.ry / UNITS_PER_TILE) * TILE_PX - TILE_PX / 2;
     const frame = p.moving ? ((world.tick >> 2) & 1) : 0;
+
+    // Invulnerable players flash, so "I am safe" and "I am about to not be" are readable at a
+    // glance in a crowd. Four hertz: fast enough to notice, slow enough not to hurt.
+    const invuln = (p.status & STATUS.INVULN) !== 0;
+    if (invuln) c.globalAlpha = (world.tick >> 2) % 2 ? 0.45 : 1;
+
     c.drawImage(baked.players[p.i % 16][p.dir * 2 + frame], Math.round(px), Math.round(py));
+    c.globalAlpha = 1;
 
     c.font = '10px ui-monospace, monospace';
     c.textAlign = 'center';
