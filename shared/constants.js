@@ -129,6 +129,10 @@ export const STATUS_TICKS = {
 };
 
 export const INVULN_TICKS_SHIELD = 60; // 2 s after a shield breaks
+
+// Shortest possible stay on the death screen. Zero meant that anyone holding the bomb key — which
+// is everyone, all the time — respawned on the same tick they died and never saw it happen.
+export const RESPAWN_DELAY_TICKS = 30; // 1 s
 export const CONTAGIOUS = STATUS.PACIFISM | STATUS.SLOWDOWN | STATUS.INVISIBLE |
                           STATUS.CHANGELING | STATUS.REDUCTION | STATUS.FAST_DET;
 export const CONTAGION_COOLDOWN_TICKS = TICK_HZ; // 1 s per pair

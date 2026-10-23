@@ -6,7 +6,7 @@
 
 import {
   IN_BOMB, SCORE, STATUS, STATUS_TICKS, INVULN_TICKS_SHIELD, HITBOX_UNITS,
-  HITBOX_REDUCED_UNITS, START_BOMBS, START_RADIUS,
+  HITBOX_REDUCED_UNITS, START_BOMBS, START_RADIUS, RESPAWN_DELAY_TICKS,
 } from '../constants.js';
 import { expireStatuses, applyStatus, has, toTile } from './state.js';
 import { stepAll } from './movement.js';
@@ -62,13 +62,14 @@ export function tick(state, inputs, { onRespawn } = {}) {
  */
 function killInFire(state) {
   if (!state.fires.length) return;
+  const fresh = state.fires.filter(f => f.until > state.tick);
+  if (!fresh.length) return;
 
   for (const p of state.players) {
     if (!p || !p.alive) continue;
     if (has(p, STATUS.INVULN)) continue;
 
     const half = (has(p, STATUS.REDUCTION) ? HITBOX_REDUCED_UNITS : HITBOX_UNITS) >> 1;
-    const fresh = state.fires.filter(f => f.until > state.tick);
     if (!burns(fresh, p.x, p.y, half)) continue;
 
     if (p.shields > 0) {
@@ -92,7 +93,7 @@ function killInFire(state) {
     p.shields = 0;
     p.status = 0;
     p.statusUntil = {};
-    p.respawnAt = state.tick;          // SPACE respawns immediately; no forced wait at 12 players
+    p.respawnAt = state.tick + RESPAWN_DELAY_TICKS;
 
     if (killer === p.i) {
       p.score = Math.max(0, p.score + SCORE.SUICIDE);

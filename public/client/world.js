@@ -137,7 +137,9 @@ export function createWorld() {
    * and nothing visibly moves. Deliberately no tolerance band and no blending — add a 100 ms
    * lerp here only if snapping turns out to be visible in practice.
    */
-  function reconcile(me, wire, ack) {
+  // `ack = -1` on purpose: a snapshot without one must drop nothing, rather than compare every
+  // pending tick against undefined and then replay the entire queue.
+  function reconcile(me, wire, ack = -1) {
     while (w.pending.length && w.pending[0].tick <= ack) w.pending.shift();
 
     const before = { x: me.x, y: me.y };
@@ -149,6 +151,15 @@ export function createWorld() {
     for (const inp of w.pending) step(w, me, inp.mask);
 
     if (Math.abs(me.x - before.x) > 8 || Math.abs(me.y - before.y) > 8) w.lastCorrection = performance.now();
+  }
+
+  /**
+   * Hard cut, not a slide. The tracer is sampled from the *rendered* position, so without
+   * clearing it a respawn leaves a stripe of coloured dots across the map from where you died.
+   */
+  function teleport(p) {
+    p.rx = p.x; p.ry = p.y;
+    p.trail.length = 0;
   }
 
   /** Called every frame: advance rendered positions and sample tracers. */
@@ -164,7 +175,7 @@ export function createWorld() {
         const k = 1 - Math.exp(-dtMs / 80);
         const dx = p.x - p.rx, dy = p.y - p.ry;
         // A whole tile out means a respawn or a teleport, not a correction — just go.
-        if (Math.abs(dx) > 256 || Math.abs(dy) > 256) { p.rx = p.x; p.ry = p.y; }
+        if (Math.abs(dx) > 256 || Math.abs(dy) > 256) teleport(p);
         else {
           const nx = p.rx + dx * k, ny = p.ry + dy * k;
           // The eased path is a straight line and the simulated one was not, so easing across a
@@ -175,16 +186,29 @@ export function createWorld() {
         }
       } else if (p.buf.length >= 2) {
         const [a, b] = p.buf.slice(-2);
-        const span = b.tick - a.tick || 1;
-        const f = Math.max(0, Math.min(1, (renderTick - a.tick) / span));
-        // Movement is axis-locked: step() only ever moves on one axis per tick. So interpolate
-        // along an L, x first, rather than along the diagonal. A straight lerp between two
-        // snapshots that turned a corner cuts straight through the corner block, which is
-        // exactly the "players walk through walls" everyone sees first.
         const dx = b.x - a.x, dy = b.y - a.y;
-        const travel = (Math.abs(dx) + Math.abs(dy)) * f;
-        p.rx = a.x + Math.sign(dx) * Math.min(Math.abs(dx), travel);
-        p.ry = a.y + Math.sign(dy) * Math.max(0, Math.min(Math.abs(dy), travel - Math.abs(dx)));
+
+        // Further than anyone can walk in one snapshot means a respawn, not a walk. Interpolating
+        // it would drag the sprite across the whole map, straight through everything in between.
+        if (Math.abs(dx) > 512 || Math.abs(dy) > 512) {
+          teleport(p);                    // p.x is already b.x — hydrate ran before this
+        } else {
+          const span = b.tick - a.tick || 1;
+          const f = Math.max(0, Math.min(1, (renderTick - a.tick) / span));
+          // Movement is axis-locked: step() only ever moves on one axis per tick. So interpolate
+          // along an L rather than along the diagonal — a straight lerp between two snapshots
+          // that turned a corner cuts through the corner block, which is the "players walk
+          // through walls" everyone sees first. Which arm of the L comes first is unknowable
+          // from two samples, so try x-first and fall back to y-first when the x-first elbow is
+          // solid. One of the two is always the path actually taken.
+          const t = (Math.abs(dx) + Math.abs(dy)) * f;
+          const xFirst = !blocked(w, p, b.x, a.y);
+          const [u, v] = xFirst ? [dx, dy] : [dy, dx];
+          const pu = a[xFirst ? 'x' : 'y'] + Math.sign(u) * Math.min(Math.abs(u), t);
+          const pv = a[xFirst ? 'y' : 'x'] + Math.sign(v) * Math.max(0, Math.min(Math.abs(v), t - Math.abs(u)));
+          p.rx = xFirst ? pu : pv;
+          p.ry = xFirst ? pv : pu;
+        }
       }
       if (p.trailAt === undefined) p.trailAt = 0;
       if (w.tick - p.trailAt >= TRACER_EVERY_TICKS) {

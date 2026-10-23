@@ -6,7 +6,7 @@
 
 import { TICK_MS, NAME_MAX_CHARS, playerColor } from '/shared/constants.js';
 import { createNet } from './net.js';
-import { createInput } from './input.js';
+import { createInput, typingSomewhere } from './input.js';
 import { createWorld } from './world.js';
 import { createRenderer } from './render.js';
 import { createMusic } from './audio/music.js';
@@ -61,7 +61,13 @@ const net = createNet({
     if (!m.mapOnly) {
       $('menu').style.display = 'none';
       $('hud').style.display = 'flex';
-      if (!running) { running = true; requestAnimationFrame(loop); }
+      if (!running) {
+        running = true;
+        last = performance.now();
+        acc = 0;                      // a stale accumulator would replay however long the menu was up
+        requestAnimationFrame(loop);
+      }
+      renderer?.resize();             // the canvas was behind the menu; make sure it measured right
     }
   },
   onSnap: snap => {
@@ -77,18 +83,17 @@ const net = createNet({
           // is what covers chain reactions, which go off early and without warning.
           world.burstBomb({ id: e.id, tx: e.x, ty: e.y, o: e.o, r: e.r });
           break;
+        // The death screen is driven by whether you are alive (see the HUD block below), not by
+        // this event. An event can arrive on the same snapshot as the respawn that follows it, and
+        // a missed one used to leave you playing behind an overlay or staring at nothing.
         case 'died': {
           const who = world.players[e.i];
           const by = world.players[e.by];
           killFeed(e.i === e.by
             ? `${who?.name ?? '?'} blew themselves up`
             : `${by?.name ?? '?'} bombed ${who?.name ?? '?'}`);
-          if (e.i === world.you) showDead(true);
           break;
         }
-        case 'spawn':
-          if (e.i === world.you) showDead(false);
-          break;
       }
     }
   },
@@ -99,10 +104,13 @@ const net = createNet({
     $('deadText').textContent = `${list}\n\nnext: ${m.nextMap}`;
     $('dead').style.display = 'grid';
     $('respawn').style.display = 'none';
+    roundOverUntil = performance.now() + m.startsInMs;
     setTimeout(() => {
+      roundOverUntil = 0;
       $('dead').style.display = 'none';
       $('respawn').style.display = '';
       $('deadTitle').textContent = 'you died';
+      $('deadText').textContent = 'space to respawn · esc to leave';
     }, m.startsInMs);
   },
   onChat: m => {
@@ -116,7 +124,16 @@ const net = createNet({
     while (list.children.length > 50) list.firstChild.remove();
     list.scrollTop = list.scrollHeight;
   },
-  onStatus: s => { $('conn').textContent = s; $('conn').dataset.state = s; },
+  // The connection readout lives in the HUD, which is hidden until you are in a game. Before
+  // that, a full server or an unreachable one has to say so somewhere you can actually see it.
+  onStatus: s => {
+    $('conn').textContent = s;
+    $('conn').dataset.state = s;
+    if (running) return;
+    toast(s);
+    $('play').disabled = s === 'connecting' || s === 'open';
+    if (s.startsWith('rejected')) $('play').disabled = false;
+  },
 });
 
 const chatHasFocus = () => document.activeElement === $('chatInput');
@@ -128,9 +145,13 @@ const input = createInput({
 
 // ─── loop ─────────────────────────────────────────────────────────────────────
 
-let acc = 0, last = performance.now(), hudAt = 0;
+let acc = 0, last = performance.now(), hudAt = 0, roundOverUntil = 0;
 
 function loop(now) {
+  // Bail before re-arming, so leaving genuinely stops the loop. Returning to the menu and
+  // pressing play used to start a second one on top of the first: two simulation steps and two
+  // input packets per tick, which is indistinguishable from the server lagging.
+  if (!running) return;
   requestAnimationFrame(loop);
   const dt = Math.min(250, now - last);     // a backgrounded tab must not replay two minutes
   last = now;
@@ -163,6 +184,7 @@ function loop(now) {
     if (me) {
       $('you').textContent = `${me.name}  ${me.kills}/${me.deaths}`;
       $('gear').textContent = `◼${me.bombs}  ✸${me.radius}  »${me.speed}${me.shields ? '  ◊' : ''}`;
+      if (!roundOverUntil) showDead(!me.alive);
     }
     if (scoresOpen) renderScores();
   }
@@ -211,7 +233,9 @@ function leave() {
   $('dead').style.display = 'none';
   $('scores').style.display = 'none';
   scoresOpen = false;
+  roundOverUntil = 0;
   input.clear();
+  $('play').disabled = false;
   $('name').focus();
 }
 
@@ -224,6 +248,8 @@ nameInput.value = localStorage.getItem('bv.name') || '';
 function play() {
   const name = nameInput.value.trim();
   if (!name) { nameInput.focus(); return; }
+  if ($('play').disabled) return;          // double-click would otherwise open a second socket
+  $('play').disabled = true;
   localStorage.setItem('bv.name', name);
   renderer = createRenderer($('game'), world);
   music.start().then(syncMusic);        // the click that got us here is the gesture
@@ -249,7 +275,7 @@ addEventListener('keydown', e => {
     else if (running) leave();                 // there has to be a way out of the game
     return;
   }
-  if (e.code === 'Tab' && running) {
+  if (e.code === 'Tab' && running && !typingSomewhere()) {
     e.preventDefault();
     scoresOpen = !scoresOpen;
     $('scores').style.display = scoresOpen ? 'block' : 'none';
@@ -259,6 +285,11 @@ addEventListener('keydown', e => {
 
 $('leave').onclick = leave;
 $('respawn').onclick = () => net.send({ t: 'respawn' });
+
+// Ducking hangs off focus, not off the keys that usually cause it — clicking into the chat box
+// with the mouse is the same thing to the person doing it.
+$('chatInput').onfocus = () => music.duck(true);
+$('chatInput').onblur = () => { music.duck(false); input.clear(); };
 
 $('chatInput').onkeydown = e => {
   if (e.key !== 'Enter') return;

@@ -63,8 +63,12 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd }) {
           // localStorage is shared across tabs, so two tabs both claimed the same seat, each
           // hello evicted the other, and the pair flapped forever. It survives a reload, which
           // is the case resume actually exists for.
-          sessionStorage.setItem('bv.playerId', m.playerId);
-          hello = { ...hello, playerId: m.playerId };
+          // Guarded: a welcome with no id (a round restart used to send one) must not overwrite
+          // a good token with the string "undefined", which the server then accepts as a real id.
+          if (m.playerId) {
+            sessionStorage.setItem('bv.playerId', m.playerId);
+            hello = { ...hello, playerId: m.playerId };
+          }
           connectedAt = performance.now();
           observeServerTick(m.tick);
           clientTick = targetTick();

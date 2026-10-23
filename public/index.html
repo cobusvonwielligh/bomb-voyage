@@ -31,6 +31,8 @@
   button { font: inherit; color: var(--gold); background: transparent;
            border: 1px solid #ffd21f88; border-radius: 3px; padding: 7px 16px; cursor: pointer; }
   button:hover { background: var(--gold); color: var(--panel); }
+  button:disabled { opacity: .45; cursor: default; }
+  button:disabled:hover { background: transparent; color: var(--gold); }
   #play { width: 100%; margin-top: 16px; padding: 11px; font-size: 15px; letter-spacing: .18em;
           text-transform: uppercase; }
   .keys { margin: 22px 0 0; padding: 0; list-style: none; color: var(--dim); font-size: 11px;
@@ -44,9 +46,11 @@
   .bar b { color: var(--ink); font-weight: normal; }
   #conn[data-state=open] { color: #5ad1a0; }
   #conn[data-state=reconnecting], #conn[data-state=connecting] { color: var(--gold); }
-  #toast { position: fixed; top: 44px; left: 50%; transform: translateX(-50%);
+  /* z-index above the menu: the first thing it ever has to say is "server full". */
+  #toast { position: fixed; top: 44px; left: 50%; transform: translateX(-50%); z-index: 20;
            background: #1a2029dd; border: 1px solid #ffd21f66; border-radius: 3px;
-           padding: 6px 14px; color: var(--gold); opacity: 0; transition: opacity .25s; }
+           padding: 6px 14px; color: var(--gold); opacity: 0; transition: opacity .25s;
+           pointer-events: none; }
 
   /* chat */
   #chat { pointer-events: auto; width: 340px; }
@@ -63,8 +67,11 @@
           text-shadow: 0 1px 2px #000; letter-spacing: .08em; }
 
   /* death + scores */
+  /* Click-through except for the card, so the chat box underneath stays usable while dead —
+     and for the twenty seconds of the round-over standings. */
   #dead { position: fixed; inset: 0; display: none; place-items: center; z-index: 8;
-          background: #0d111788; }
+          background: #0d111788; pointer-events: none; }
+  #dead .card { pointer-events: auto; }
   .card.small { width: 320px; text-align: center; }
   #deadText { white-space: pre-line; }
   .card.small h1 { color: #e8655a; }

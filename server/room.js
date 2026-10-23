@@ -154,8 +154,20 @@ export function createRoom({ onBroadcast, maxPlayers = MAX_PLAYERS, leaderboard 
     if (tickTimes.length > 300) tickTimes.shift();
     if (ms > 20) console.warn(`slow tick: ${ms.toFixed(1)}ms at ${state.tick}`);
 
-    if (state.tick % SNAP_EVERY_TICKS === 0) emitSnapshot();
-    state.events.length = 0;
+    // Events accumulate until a snapshot actually carries them.
+    //
+    // This used to clear them every tick while snapshots go out every *second* tick, which threw
+    // half of every event away. It cost: deaths that never showed a death screen or a kill-feed
+    // line, so bombs looked like they did no damage; blocks that broke on the server and stayed
+    // drawn here; and — worst — every single `blocknew`, because wall regrowth lands on tick
+    // 600, 1200, 1800, always even. Clients never heard about a regenerated wall, so prediction
+    // happily walked straight through it. That is the "I clip through walls" bug.
+    if (state.tick % SNAP_EVERY_TICKS === 0) {
+      emitSnapshot();
+      state.events.length = 0;
+    } else if (state.events.length > 1024) {
+      state.events.length = 0;      // nobody listening; do not grow without bound
+    }
 
     if (state.tick >= ROUND_TICKS) endRound();
   }
@@ -213,8 +225,6 @@ export function createRoom({ onBroadcast, maxPlayers = MAX_PLAYERS, leaderboard 
     s: p.score, k: p.kills, dd: p.deaths, stat: p.status,
   });
 
-  const wirePlayers = () => state.players.filter(Boolean).map(playerWire);
-
   function emitSnapshot() {
     const players = [];
     for (const p of state.players) if (p) players.push(playerWire(p));
@@ -244,6 +254,11 @@ export function createRoom({ onBroadcast, maxPlayers = MAX_PLAYERS, leaderboard 
     return {
       t: 'welcome',
       you: seat,
+      // Every welcome carries the resume token, not just the one sent on `hello`. A round restart
+      // broadcasts welcomes too, and without this the client stored `undefined` over its real id
+      // and came back after the next drop claiming a seat under the literal string "undefined" —
+      // which two clients would then fight over.
+      playerId: seats[seat]?.playerId ?? null,
       tick: state.tick,
       roundEndsAtTick: ROUND_TICKS,
       color: playerColor(seat),
@@ -304,7 +319,10 @@ export function createRoom({ onBroadcast, maxPlayers = MAX_PLAYERS, leaderboard 
       if (seat < 0) break;
       seats[seat] = null;
       state.players[seat] = null;
-      onBroadcast({ t: 'snap', tick: state.tick, players: wirePlayers(), bombs: state.bombs, perks: state.perks, ev: [{ e: 'leave', i: seat }] });
+      // No hand-rolled snapshot here. One without an `ack` made every client replay its whole
+      // unacknowledged input queue on top of the server position, which rubber-banded everyone
+      // forward. The next real snapshot drops the seat anyway — applySnap removes whoever is
+      // missing from it.
     }
     while (botCount() < n) {
       const seat = seats.findIndex(s => s === null);
