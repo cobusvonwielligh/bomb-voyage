@@ -520,7 +520,9 @@ function drawHud() {
     lastShields = me.shields;
   }
 
-  if (!roundOverUntil) { showDead(!me.alive); drawRespawn(me); }
+  // drawRespawn first: it is what stamps diedAtTick, and showDead reads it to hold the dialog
+  // back. The other order shows the dialog a frame early on the tick you die.
+  if (!roundOverUntil) { drawRespawn(me); showDead(!me.alive); }
   if (scoresOpen) renderScores();
 }
 
@@ -600,8 +602,19 @@ function showDeadBanner(by) {
   el.classList.add('show');
 }
 
+/**
+ * The death dialog, held back for a beat.
+ *
+ * Dying is a thing that happens to your player on the board, and covering the board with a panel
+ * the same instant takes the moment away — you never see what killed you. The banner and the
+ * flash land immediately; the dialog waits until the explosion has finished and the eye has had
+ * somewhere to look.
+ */
+const DEAD_DIALOG_DELAY_TICKS = 2 * TICK_HZ;
+
 function showDead(dead) {
-  $('dead').style.display = dead ? 'grid' : 'none';
+  const held = dead && diedAtTick >= 0 && world.tick - diedAtTick < DEAD_DIALOG_DELAY_TICKS;
+  $('dead').style.display = dead && !held ? 'grid' : 'none';
 }
 
 /** One place that appends to the log, so trimming and scrolling cannot drift apart. */

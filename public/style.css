@@ -579,9 +579,18 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * the twenty seconds of round-over standings.
  */
 
+/* Over the BOARD, not the window. The side panel is 340px of chrome and the banner another 52,
+   so a viewport-centred dialog sits visibly off to one side of the thing you are looking at —
+   and it dimmed the chat and the standings, which are exactly what you read while dead. The
+   insets match canvas#game exactly. */
 #dead {
-  position: fixed; inset: 0; display: none; place-items: center; z-index: 8;
+  position: fixed; display: none; place-items: center; z-index: 8;
+  top: calc(var(--bar) + var(--gap) * 2);
+  left: var(--gap);
+  width: calc(100vw - var(--side) - var(--gap) * 3);
+  height: calc(100vh - var(--bar) - var(--gap) * 3);
   background: #0d111788; pointer-events: none;
+  border-radius: 8px;
 }
 #dead .card { pointer-events: auto; }
 
