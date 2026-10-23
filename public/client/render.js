@@ -7,6 +7,7 @@
 import {
   TILE_PX, CHUNK_TILES, UNITS_PER_TILE, TRACER_SAMPLES, FUSE_TICKS, FIRE_TICKS, STATUS,
   BLOCK, BLOCK_HP, SEA_MARGIN_TILES, SPAWN_POP_TICKS, SPAWN_POP_SCALE, MIN_ZOOM, MAX_ZOOM,
+  PERK_FADE_TICKS,
 } from '/shared/constants.js';
 import { cellType, cellHp } from '/shared/maps.js';
 import {
@@ -439,8 +440,24 @@ export function createRenderer(canvas, world) {
 
     for (const k of world.perks) {
       const bob = Math.sin((world.tick + k.id * 7) / 6) * 2;
+      // Dying drops fade and shrink. `until` rides along in the snapshot, so this needs no event
+      // and survives a reconnect — a perk half-faded when you dropped out is still half-faded
+      // when you come back, instead of resetting to full and then vanishing.
+      const left = (k.until ?? Infinity) - world.tick;
+      const fade = left >= PERK_FADE_TICKS ? 1 : Math.max(0, left / PERK_FADE_TICKS);
       ctx.save();
       ctx.translate(ox + k.tx * TILE_PX, oy + k.ty * TILE_PX);
+      if (fade < 1) {
+        // A slow flicker on top of the ramp. The ramp alone is easy to miss in peripheral
+        // vision; something blinking in the corner of your eye is not.
+        const blink = 0.78 + 0.22 * Math.sin(world.tick / 2.2);
+        ctx.globalAlpha = fade * (fade < 0.45 ? blink : 1);
+        // Shrink about the tile's centre, so it sinks into the floor rather than drifting.
+        const scale = 0.72 + 0.28 * fade;
+        ctx.translate(TILE_PX / 2, TILE_PX / 2);
+        ctx.scale(scale, scale);
+        ctx.translate(-TILE_PX / 2, -TILE_PX / 2);
+      }
       drawPerk(ctx, { type: k.type, bob });
       ctx.restore();
     }

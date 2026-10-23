@@ -160,6 +160,13 @@ export const PERK_DEMAND_BOOST = 0.8;      // at most +80% when the board is bei
 export const GIFT_DISEASE_CHANCE = 0.3;    // a Gift is a gamble; see shared/sim/perks.js
 export const PERK_DROP_ALWAYS = [BLOCK.REINFORCED, BLOCK.MONOLITH];
 export const PERK_EXPIRE_TICKS = 45 * TICK_HZ;
+/* How long a perk spends visibly dying before it is removed.
+ *
+ * A drop that vanishes between two frames reads as a bug, or as somebody else having taken it
+ * from across the map. Fading it out turns the same event into information you can act on: a
+ * perk you can see going translucent is one you have a few seconds left to reach. Purely a
+ * render concern — the sim still removes it on the exact tick. */
+export const PERK_FADE_TICKS = 5 * TICK_HZ;
 export const PERKS_DROPPED_ON_DEATH = 3;
 export const MAX_SHIELDS = 1;
 

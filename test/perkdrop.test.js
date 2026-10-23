@@ -11,7 +11,7 @@ import { dropChance, perkTarget, collect, drop } from '../shared/sim/perks.js';
 import * as perks from '../shared/sim/perks.js';
 import {
   PERK, PERK_DROP_CHANCE_SOFT, PERK_GLUT_FLOOR, PERK_SCARCE_BOOST, PERK_TARGET_MIN,
-  HITBOX_UNITS, TICK_HZ,
+  HITBOX_UNITS, TICK_HZ, PERK_EXPIRE_TICKS, PERK_FADE_TICKS,
 } from '../shared/constants.js';
 import { MAPS } from '../shared/maps.js';
 
@@ -89,4 +89,16 @@ test('the rate decays even while the floor is bare', () => {
   s.perkTakeRate = 10;
   for (let n = 0; n < 8 * TICK_HZ; n++) collect(s);
   assert.ok(s.perkTakeRate < 5.1, `rate stuck at ${s.perkTakeRate} with an empty floor`);
+});
+
+test('the wire carries `until`, which is what the fade is drawn from', () => {
+  // render.js fades a perk over its last PERK_FADE_TICKS. That is only possible because the
+  // whole perk object goes out in the snapshot; trimming it to {id,tx,ty,type} to save bytes
+  // would silently turn the fade off rather than break anything loudly.
+  const s = fresh();
+  drop(s, 4, 4, PERK.FIRE);
+  const [k] = s.perks;
+  assert.ok(Number.isFinite(k.until), 'a dropped perk has no expiry');
+  assert.equal(k.until, s.tick + PERK_EXPIRE_TICKS);
+  assert.ok(PERK_FADE_TICKS < PERK_EXPIRE_TICKS, 'a perk would be fading from the moment it lands');
 });
