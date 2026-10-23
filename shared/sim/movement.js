@@ -18,15 +18,17 @@ const HALF_TILE = UNITS_PER_TILE >> 1;
 // drift is assistance, not travel, so it is allowed to outrun the legs.
 const ALIGN_RATE = 2;
 
-// Being shoved out of a solid tile eases rather than running at a constant rate: an eighth of
-// whatever is left each tick, capped at HALF walking pace and floored so it still terminates.
+// Being shoved out of a solid tile eases rather than running at a constant rate: a fraction of
+// whatever is left each tick, capped well below walking pace and floored so it still terminates.
 //
-// Deliberately slower than the legs. Walking pace felt like being shoved because it was the same
-// speed as a deliberate move, so the eye read it as the player suddenly sprinting sideways of
-// their own accord. At half pace it reads as drifting out of the way, which is what it is.
-const UNSTICK_MIN_UNITS = 2;
-const UNSTICK_EASE_SHIFT = 4;      // move 1/16 of the remaining gap each tick
-const UNSTICK_PACE_NUM = 1, UNSTICK_PACE_DEN = 4;
+// Deliberately much slower than the legs. Walking pace felt like being shoved, because it was
+// the same speed as a deliberate move and the eye read it as the player suddenly sprinting
+// sideways of their own accord. A twelfth of pace reads as the bomb easing you aside, which is
+// what it is — and the commonest case by far is stepping off your own bomb, where any visible
+// snap feels like the game taking the controls off you.
+const UNSTICK_MIN_UNITS = 1;
+const UNSTICK_EASE_SHIFT = 5;      // move 1/32 of the remaining gap each tick
+const UNSTICK_PACE_NUM = 1, UNSTICK_PACE_DEN = 12;
 
 export function speedOf(p) {
   let s = SPEED_UNITS_PER_TICK[Math.min(p.speed, SPEED_UNITS_PER_TICK.length - 1)];
