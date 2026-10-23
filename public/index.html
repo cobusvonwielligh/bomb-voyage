@@ -99,21 +99,6 @@
     </span>
 
     <span class="right">
-      <!-- Icon and level in one control: the icon is the mute toggle, the slider unrolls out of
-           it on hover or focus, and the level stays readable as a bar under the glyph while it is
-           collapsed. Four separate widgets used to take 200px of a bar that has a clock in it. -->
-      <span class="vol" id="musicCtl">
-        <button class="volBtn" id="musicBtn" title="music (click to toggle)" aria-label="music">
-          <svg><use href="#i-note"/></svg>
-        </button>
-        <input id="vol" type="range" min="0" max="100" value="10" aria-label="music volume">
-      </span>
-      <span class="vol" id="sfxCtl">
-        <button class="volBtn" id="sfxBtn" title="sound effects (click to mute)" aria-label="sound effects">
-          <svg><use href="#i-spk"/></svg>
-        </button>
-        <input id="sfxVol" type="range" min="0" max="100" value="75" aria-label="sound effect volume">
-      </span>
       <a class="iconBtn" href="https://github.com/cobusvonwielligh/bomb-voyage"
          target="_blank" rel="noopener noreferrer"
          title="Bomb Voyage on GitHub" aria-label="Bomb Voyage on GitHub">
@@ -206,6 +191,29 @@
     </table>
   </div>
   <p class="sub">tab to close</p>
+</div>
+
+<!-- Audio, outside the HUD on purpose.
+     The music starts on the menu, so the control for it has to be on the menu. The lazy version
+     is a second pair of widgets there, kept in step with these ones — which is two sources of
+     truth and a sync bug waiting to happen. This is the same pair of elements on both screens:
+     it just moves. Nothing in main.js knows the difference.
+
+     Icon and level in one control: the icon is the mute toggle, the slider unrolls out of it on
+     hover or focus, and the level stays readable as a bar under the glyph while collapsed. -->
+<div id="dock">
+  <span class="vol" id="musicCtl">
+    <button class="volBtn" id="musicBtn" title="music (click to toggle)" aria-label="music">
+      <svg><use href="#i-note"/></svg>
+    </button>
+    <input id="vol" type="range" min="0" max="100" value="10" aria-label="music volume">
+  </span>
+  <span class="vol" id="sfxCtl">
+    <button class="volBtn" id="sfxBtn" title="sound effects (click to mute)" aria-label="sound effects">
+      <svg><use href="#i-spk"/></svg>
+    </button>
+    <input id="sfxVol" type="range" min="0" max="100" value="75" aria-label="sound effect volume">
+  </span>
 </div>
 
 <div id="toast"></div>
