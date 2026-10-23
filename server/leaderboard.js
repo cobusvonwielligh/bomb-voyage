@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import { RANK_NAMES, RANK_THRESHOLDS, rankForScore } from '../shared/constants.js';
+import { progressFor } from '../shared/constants.js';
 // Names arrive from the same place the hub gets them, so they are capped and stripped identically.
 import { sanitizeName } from './net.js';
 
@@ -50,19 +50,16 @@ export function createLeaderboard({ dataDir }) {
   // is what makes top()'s tie-breaking reproducible.
   const players = load();
 
-  const view = (playerId, e) => {
-    const rank = rankForScore(e.score);
-    return {
-      playerId,
-      name: e.name,
-      score: e.score,
-      kills: e.kills,
-      deaths: e.deaths,
-      rank,
-      rankName: RANK_NAMES[rank],
-      nextRankAt: RANK_THRESHOLDS[rank + 1] ?? null,
-    };
-  };
+  const view = (playerId, e) => ({
+    playerId,
+    name: e.name,
+    score: e.score,
+    kills: e.kills,
+    deaths: e.deaths,
+    // Lifetime score IS the XP, so the level comes straight off it rather than being stored.
+    // One derivation, in shared/, used by the server and the client alike.
+    ...progressFor(e.score),
+  });
 
   function record(playerId, { name, score, kills, deaths } = {}) {
     if (typeof playerId !== 'string' || !playerId) return;

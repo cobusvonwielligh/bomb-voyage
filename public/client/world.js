@@ -212,7 +212,11 @@ export function createWorld() {
         // Ease the drawn position toward the simulated one. Reconciliation runs 15 times a
         // second and is usually a no-op, but when it is not, a hard assignment shows up as a
         // stutter. An ~80 ms time constant hides a correction without feeling floaty.
-        const k = 1 - Math.exp(-dtMs / 80);
+        // A longer time constant while being pushed out of something solid: the simulation is
+        // already moving slowly and deliberately there, and a fast follow would reintroduce
+        // exactly the flick the slow push exists to avoid.
+        const pushed = blocked(w, p, p.x, p.y);
+        const k = 1 - Math.exp(-dtMs / (pushed ? 180 : 80));
         const dx = p.x - p.rx, dy = p.y - p.ry;
         // A whole tile out means a respawn or a teleport, not a correction — just go.
         if (Math.abs(dx) > 256 || Math.abs(dy) > 256) teleport(p);

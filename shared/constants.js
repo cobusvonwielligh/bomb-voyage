@@ -183,21 +183,71 @@ export const SCORE = {
   SURVIVE_ROUND: 50,
 };
 
-export const RANK_NAMES = [
-  'Rookie', 'Private', 'Private First Class', 'Corporal', 'Sergeant',
-  'Second Lieutenant', 'First Lieutenant', 'Captain', 'Major', 'Lieutenant Colonel',
-  'Colonel', 'Brigadier General', 'Major General', 'Lieutenant General', 'General', 'Marshal',
+// ─── Levels ───────────────────────────────────────────────────────────────────
+//
+// XP is lifetime score. The curve is calibrated against the real scoring table rather than
+// guessed: a decent player in a ten-minute round takes roughly 20 kills (2000), 150 blocks (300),
+// 40 perks (200) and the survival bonus, minus about ten suicides, for ~2300 a round and
+// ~13 800 an hour. Round that down to 12 000 to be honest about the average session.
+//
+// From there the only free parameters are where level 1 lands and where Veteran does. Level 1 at
+// 200 XP is about a minute, which is the right feel for a first level; Veteran at 20 is pinned to
+// 100 hours by the brief, and the exponent is DERIVED from those two rather than tuned by hand —
+// so changing the hours or the scoring table moves the whole curve correctly instead of silently
+// making the target wrong.
+export const XP_PER_HOUR = 12_000;
+export const HOURS_TO_VETERAN = 100;
+export const VETERAN_LEVEL = 20;
+export const XP_LEVEL_BASE = 200;
+export const XP_LEVEL_EXP =
+  Math.log((XP_PER_HOUR * HOURS_TO_VETERAN) / XP_LEVEL_BASE) / Math.log(VETERAN_LEVEL);
+
+/** Total XP needed to have reached a level. Level 0 is where everybody starts. */
+export const xpForLevel = n =>
+  (n <= 0 ? 0 : Math.round(XP_LEVEL_BASE * Math.pow(n, XP_LEVEL_EXP)));
+
+export const levelForXp = xp => {
+  if (!(xp > 0)) return 0;
+  // Invert the curve directly rather than looping: levels are unbounded above Veteran, and a
+  // loop would be the one place a very long-lived leaderboard could stall.
+  const n = Math.floor(Math.pow(xp / XP_LEVEL_BASE, 1 / XP_LEVEL_EXP));
+  return xp >= xpForLevel(n + 1) ? n + 1 : n;
+};
+
+// The ladder. Four names, because a name you reach in an afternoon is not a rank.
+export const TIERS = [
+  { from: 0, name: 'Rookie' },
+  { from: 11, name: 'Been around the block' },
+  { from: 16, name: 'Pro' },
+  { from: VETERAN_LEVEL, name: 'Veteran' },
 ];
 
-// Generated, never hand-maintained. Rank 1 = 1024, matching Game of Bombs' profile screen.
-export const RANK_THRESHOLDS = RANK_NAMES.map((_, n) =>
-  n === 0 ? 0 : Math.round(1024 * Math.pow(n, 1.6) / 64) * 64);
-
-export const rankForScore = score => {
-  let r = 0;
-  while (r + 1 < RANK_THRESHOLDS.length && score >= RANK_THRESHOLDS[r + 1]) r++;
-  return r;
+export const tierForLevel = level => {
+  let name = TIERS[0].name;
+  for (const t of TIERS) if (level >= t.from) name = t.name;
+  return name;
 };
+
+/**
+ * Everything the UI needs to draw a progress bar, in one place so the server and the client can
+ * never disagree about how far along somebody is.
+ */
+export function progressFor(xp) {
+  const total = Math.max(0, xp | 0);
+  const level = levelForXp(total);
+  const floor = xpForLevel(level);
+  const next = xpForLevel(level + 1);
+  const span = Math.max(1, next - floor);
+  return {
+    xp: total,
+    level,
+    tier: tierForLevel(level),
+    into: total - floor,          // XP earned since this level started
+    need: span,                   // XP this level is worth
+    nextAt: next,
+    fraction: Math.min(1, (total - floor) / span),
+  };
+}
 
 // ─── Net ──────────────────────────────────────────────────────────────────────
 

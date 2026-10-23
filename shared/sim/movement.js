@@ -16,11 +16,15 @@ const HALF_TILE = UNITS_PER_TILE >> 1;
 // drift is assistance, not travel, so it is allowed to outrun the legs.
 const ALIGN_RATE = 2;
 
-// Being shoved out of a solid tile eases rather than running at a constant rate: a quarter of
-// whatever is left each tick, never faster than the player's own legs and never slower than this
-// floor, which is what guarantees it terminates. Decelerating into the gap is the difference
-// between being walked out and being flicked out.
-const UNSTICK_MIN_UNITS = 6;
+// Being shoved out of a solid tile eases rather than running at a constant rate: an eighth of
+// whatever is left each tick, capped at HALF walking pace and floored so it still terminates.
+//
+// Deliberately slower than the legs. Walking pace felt like being shoved because it was the same
+// speed as a deliberate move, so the eye read it as the player suddenly sprinting sideways of
+// their own accord. At half pace it reads as drifting out of the way, which is what it is.
+const UNSTICK_MIN_UNITS = 3;
+const UNSTICK_EASE_SHIFT = 3;      // move 1/8 of the remaining gap each tick
+const UNSTICK_PACE_NUM = 1, UNSTICK_PACE_DEN = 2;
 
 export function speedOf(p) {
   let s = SPEED_UNITS_PER_TICK[Math.min(p.speed, SPEED_UNITS_PER_TICK.length - 1)];
@@ -198,7 +202,8 @@ export function unstick(state, p) {
     const horizontal = Math.abs(gx) >= Math.abs(gy);
     const gap = horizontal ? gx : gy;
     const left = Math.abs(gap);
-    const rate = Math.min(Math.max(left >> 2, UNSTICK_MIN_UNITS), speedOf(p));
+    const pace = Math.max(1, ((speedOf(p) * UNSTICK_PACE_NUM) / UNSTICK_PACE_DEN) | 0);
+    const rate = Math.min(Math.max(left >> UNSTICK_EASE_SHIFT, UNSTICK_MIN_UNITS), pace);
     const move = Math.sign(gap) * Math.min(left, rate);
     if (horizontal) p.x += move; else p.y += move;
     return true;

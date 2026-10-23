@@ -6,7 +6,7 @@
 import {
   TICK_MS, TICK_HZ, SNAP_EVERY_TICKS, MAX_PLAYERS, ROUND_TICKS, STATUS, STATUS_TICKS,
   TILE_PX, UNITS_PER_TILE, FUSE_TICKS, FIRE_TICKS, playerColor, SCORE, ROUND_INTERMISSION_MS,
-  RANK_NAMES, RANK_THRESHOLDS, rankForScore,
+  progressFor,
   STREAK_WINDOW_TICKS, STREAK_NAMES, STREAK_ACE, GAMESPEED_MIN, GAMESPEED_MAX,
   SPAWN_CANDIDATES, IDLE_KICK_TICKS,
 } from '../shared/constants.js';
@@ -476,12 +476,7 @@ export function createRoom({ onKick, onBroadcast, maxPlayers = MAX_PLAYERS, lead
       if (!s || !p) continue;
       const banked = leaderboard.get(s.playerId);
       const lifetime = (banked?.score ?? 0) + Math.max(0, p.score);
-      const rank = rankForScore(lifetime);
-      ranks.push({
-        i, lifetime, rank, rankName: RANK_NAMES[rank],
-        nextAt: RANK_THRESHOLDS[rank + 1] ?? null,
-        bot: !!s.isBot,
-      });
+      ranks.push({ i, bot: !!s.isBot, ...progressFor(lifetime) });
     }
     onBroadcast({ t: 'scores', ranks, top: leaderboard.top(5) });
   }

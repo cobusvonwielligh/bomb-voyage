@@ -97,7 +97,7 @@ canvas#game {
        moving past rather than as a spinning wheel. */
     conic-gradient(from var(--spin) at 100% 100%,
       #c7b057, #ce8c6e, #c4837e, #b490da, #7badd3, #78b39b, #c7b057) border-box;
-  animation: spin 7s linear infinite;
+  animation: spin 28s linear infinite;
 }
 
 /* Browsers without @property animate nothing and simply show a static gradient, which is a fine
@@ -287,10 +287,12 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * overlaps; the menu is higher still, so it does not float over the landing page.
  */
 #avatar {
-  position: fixed; top: 2px; right: 6px;
-  width: 92px; height: 92px;
+  /* Below the top bar rather than across it: at the very top he covered the leave button and the
+     volume sliders, and a decoration that eats controls is not a decoration. */
+  position: fixed; top: 58px; right: 18px;
+  width: 86px; height: 86px;
   object-fit: contain;
-  z-index: 9;
+  z-index: 4;
   pointer-events: none;
   filter: drop-shadow(0 6px 14px #000c) drop-shadow(0 0 18px #ffd21f44);
   animation: bob 6s ease-in-out infinite;
@@ -313,6 +315,33 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   color: var(--dim); font-size: 9px; text-transform: uppercase;
   letter-spacing: .14em; font-family: var(--text); margin-right: 4px;
 }
+
+/* Experience.
+ *
+ * The bar answers "how far to the next one" without anybody doing arithmetic, which is the only
+ * thing a level means moment to moment. The numbers under it are into/need rather than
+ * total/target: 3 093 of 26 957 is a distance you can feel, and 60 000 of 83 864 is not.
+ */
+#xp { margin-top: 11px; }
+.xpHead {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 5px; font-size: 10px;
+  text-transform: uppercase; letter-spacing: .14em;
+}
+#xpLevel { color: var(--gold); font-weight: 700; }
+#xpNums { color: var(--dim); font-family: var(--nums); font-variant-numeric: tabular-nums; }
+#xpTrack {
+  height: 7px; border-radius: 4px; background: #00000066;
+  overflow: hidden; box-shadow: inset 0 1px 2px #0008;
+}
+#xpFill {
+  height: 100%; width: 0; border-radius: 4px;
+  background: linear-gradient(90deg, #c7b057, #ffd21f 60%, #ffe98a);
+  box-shadow: 0 0 10px #ffd21f66;
+  transition: width .5s cubic-bezier(.2,.8,.3,1);
+}
+/* At the top of the ladder there is nothing left to fill toward. */
+#xp.maxed #xpFill { background: linear-gradient(90deg, #b490da, #7badd3, #78b39b); }
 
 .panelHead {
   margin: 0 0 7px; font-size: 9.5px; font-weight: normal; color: var(--dim);
@@ -521,7 +550,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   -webkit-mask-position: center; mask-position: center;
   transform: scale(1.045);
   filter: blur(1.5px) saturate(1.3);
-  animation: spin 6s linear infinite;
+  animation: spin 24s linear infinite;
   z-index: 0;
 }
 
@@ -553,7 +582,7 @@ h1 {
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; color: transparent;
   text-shadow: none;
-  animation: spin 6s linear infinite;
+  animation: spin 24s linear infinite;
   filter: drop-shadow(0 3px 0 #0009) drop-shadow(0 0 26px #ffd21f44);
 }
 
@@ -611,7 +640,7 @@ label { margin-bottom: 9px; }
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; color: transparent;
   text-shadow: none;
-  animation: spin 4s linear infinite;
+  animation: spin 16s linear infinite;
 }
 
 

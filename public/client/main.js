@@ -383,6 +383,26 @@ const gearPip = (id, value, cap) => {
 
 let lastShields = 0;
 let diedAtTick = -1;
+let lastLevel = -1;
+
+/**
+ * The experience bar.
+ *
+ * `into / need` rather than `total / target`, because 3 093 of 26 957 is a distance you can feel
+ * and 60 000 of 83 864 is arithmetic. The level number flashes when it changes, which is the one
+ * moment here worth interrupting anybody for.
+ */
+function drawXp(p) {
+  if (!p) return;
+  const box = $('xp');
+  setValue($('xpLevel'), `lvl ${p.level}`, { calm: p.level === lastLevel });
+  if (p.level !== lastLevel && lastLevel >= 0) sfx.play('pickup', undefined, undefined, { perk: 4 });
+  lastLevel = p.level;
+  $('xpNums').textContent = `${p.into.toLocaleString()} / ${p.need.toLocaleString()}`;
+  $('xpFill').style.width = `${(p.fraction * 100).toFixed(1)}%`;
+  box.classList.toggle('maxed', p.tier === 'Veteran');
+  box.title = `${p.xp.toLocaleString()} XP total \u00b7 next level at ${p.nextAt.toLocaleString()}`;
+}
 
 /**
  * The respawn countdown, live, on the button itself.
@@ -431,7 +451,8 @@ function drawHud() {
 
   const mine = ranks.get(world.you);
   $('who').textContent = me.name;
-  setValue($('rank'), mine ? mine.rankName : '');
+  setValue($('rank'), mine ? mine.tier : '');
+  drawXp(mine);
   setValue($('vKills'), me.kills);
   setValue($('vDeaths'), me.deaths, { worse: true });
   setValue($('vScore'), me.score);
@@ -613,11 +634,11 @@ function renderScores() {
     cell(tr, p.name, playerColor(p.i));
     // The rank ladder is the thing returning Game of Bombs players recognise first, so it gets a
     // column of its own rather than a tooltip.
-    cell(tr, r?.rankName ?? '\u2014', null, true);
+    cell(tr, r ? `${r.level} \u00b7 ${r.tier}` : '\u2014', null, true);
     num(cell(tr, p.kills));
     num(cell(tr, p.deaths));
     num(cell(tr, p.score));
-    num(cell(tr, r ? r.lifetime : '\u2014', null, true));
+    num(cell(tr, r ? r.xp.toLocaleString() : '\u2014', null, true));
     if (p.i === world.you) tr.style.fontWeight = 'bold';
     body.append(tr);
   }
@@ -628,7 +649,7 @@ function renderScores() {
     const tr = document.createElement('tr');
     cell(tr, n + 1, null, true);
     cell(tr, e.name);
-    cell(tr, e.rankName, null, true);
+    cell(tr, `${e.level} \u00b7 ${e.tier}`, null, true);
     num(cell(tr, e.score));
     best.append(tr);
   }

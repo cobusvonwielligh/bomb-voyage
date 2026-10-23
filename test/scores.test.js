@@ -11,7 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRoom } from '../server/room.js';
 import { createLeaderboard } from '../server/leaderboard.js';
-import { SCORE, rankForScore, RANK_NAMES } from '../shared/constants.js';
+import { SCORE, levelForXp, tierForLevel } from '../shared/constants.js';
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
@@ -50,18 +50,24 @@ test('lifetime rank is banked plus the round in progress', async () => {
 
     const seat0 = last.ranks.find(r => r.i === 0);
     assert.ok(seat0, 'seated bot missing from the ranks');
-    assert.ok(seat0.lifetime >= 5300,
-      `lifetime ${seat0.lifetime} ignores the round in progress (banked 5000 + 300 earned)`);
-    assert.equal(seat0.rank, rankForScore(seat0.lifetime));
-    assert.equal(seat0.rankName, RANK_NAMES[seat0.rank]);
+    assert.ok(seat0.xp >= 5300,
+      `xp ${seat0.xp} ignores the round in progress (banked 5000 + 300 earned)`);
+    assert.equal(seat0.level, levelForXp(seat0.xp));
+    assert.equal(seat0.tier, tierForLevel(seat0.level));
+    // Everything the bar needs has to be in the broadcast, or the client does arithmetic the
+    // server already did and the two drift.
+    for (const k of ['into', 'need', 'nextAt', 'fraction']) {
+      assert.ok(Number.isFinite(seat0[k]), `scores broadcast is missing ${k}`);
+    }
     assert.equal(seat0.bot, true);
 
     const seat1 = last.ranks.find(r => r.i === 1);
-    assert.equal(seat1.rankName, 'Rookie', 'a fresh seat starts at the bottom of the ladder');
+    assert.equal(seat1.tier, 'Rookie', 'a fresh seat starts at the bottom of the ladder');
+    assert.equal(seat1.level, 0);
 
     // The all-time five rides along, so the scoreboard needs no second request.
     assert.equal(last.top[0].name, 'veteran');
-    assert.equal(last.top[0].rankName, RANK_NAMES[rankForScore(5000)]);
+    assert.equal(last.top[0].tier, tierForLevel(levelForXp(5000)));
   });
 });
 
@@ -87,6 +93,6 @@ test('a negative round score cannot drag a career rank below what is banked', as
     room.start();
     await wait(1200);
     const seat0 = scores.at(-1).ranks.find(r => r.i === 0);
-    assert.equal(seat0.lifetime, 2000, 'a negative round score must count as zero, never subtract');
+    assert.equal(seat0.xp, 2000, 'a negative round score must count as zero, never subtract');
   });
 });

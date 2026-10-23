@@ -267,21 +267,26 @@ export function createRenderer(canvas, world) {
     ctx.restore();
   }
 
-  const MAX_SPLASHES = 30;
+  // Fewer, bigger, slower. Small frequent splashes read as static along the whole coast; a
+  // handful of large slow swells read as a sea. Roughly one every two seconds, each living about
+  // three times as long as the old ones and spreading to several tiles across.
+  const MAX_SPLASHES = 10;
+  const SPLASH_EVERY_MS = 2000;
+
   function spawnSplash() {
     const edges = shoreline();
     if (!edges.length || splashes.length >= MAX_SPLASHES) return;
     const s = edges[(Math.random() * edges.length) | 0];
-    // Push the splash out onto the water side, so it breaks against the rock rather than on it.
+    // Push the swell out onto the water side, so it breaks against the rock rather than on it.
     const dx = (s.e & 1 ? 1 : 0) - (s.e & 4 ? 1 : 0);
     const dy = (s.e & 8 ? 1 : 0) - (s.e & 2 ? 1 : 0);
     if (!dx && !dy) return;
     splashes.push({
-      x: (s.tx + 0.5 + dx * 0.55) * TILE_PX,
-      y: (s.ty + 0.5 + dy * 0.55) * TILE_PX,
+      x: (s.tx + 0.5 + dx * 0.7) * TILE_PX,
+      y: (s.ty + 0.5 + dy * 0.7) * TILE_PX,
       life: 1,
-      r: 3 + Math.random() * 4,
-      rate: 0.6 + Math.random() * 0.8,
+      r: 9 + Math.random() * 9,
+      rate: 0.22 + Math.random() * 0.18,       // about four seconds to fade
     });
   }
 
@@ -318,18 +323,24 @@ export function createRenderer(canvas, world) {
   }
 
   function drawSplashes(ox, oy, dtMs) {
-    if (Math.random() < dtMs / 450) spawnSplash();
+    if (Math.random() < dtMs / SPLASH_EVERY_MS) spawnSplash();
     if (!splashes.length) return;
     ctx.save();
     ctx.translate(ox, oy);
+    ctx.lineWidth = 2;
     for (let i = splashes.length - 1; i >= 0; i--) {
       const s = splashes[i];
       s.life -= (dtMs / 1000) * s.rate;
       if (s.life <= 0) { splashes.splice(i, 1); continue; }
-      // Grows as it fades, like foam spreading out.
-      ctx.globalAlpha = s.life * 0.7;
+      // A spreading ring rather than a filled blob. Foam is an edge, and an outline stays
+      // readable at three times the size where a disc would just be a pale smear on the sea.
+      const spread = s.r * (1 + (1 - s.life) * 2.2);
+      ctx.globalAlpha = s.life * s.life * 0.3;      // squared, so it fades out early and gently
+      ctx.strokeStyle = PALETTE.foam;
       ctx.beginPath();
-      ctx.arc(s.x, s.y, s.r * (2 - s.life), 0, 7);
+      ctx.arc(s.x, s.y, spread, 0, 7);
+      ctx.stroke();
+      ctx.globalAlpha = s.life * s.life * 0.12;
       ctx.fillStyle = PALETTE.foam;
       ctx.fill();
     }
