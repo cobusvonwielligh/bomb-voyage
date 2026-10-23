@@ -87,6 +87,22 @@ if [ "\$(cat .deps-hash 2>/dev/null)" != "$LOCK" ] || [ ! -d node_modules ]; the
   npm ci --omit=dev --silent
   echo "$LOCK" > .deps-hash
 fi
+
+# Put the locally-built QUIC addon back.
+#
+# @fails-components/webtransport-transport-http3-quiche ships a prebuilt binary that needs
+# glibc 2.38; this box has 2.34, so the addon is compiled here (clang 19 + libstdc++ 14, about
+# an hour) and the result stashed outside the app directory. npm ci blows node_modules away,
+# which would silently drop the server back to WebSocket-only on the next deploy that touches
+# the lockfile — silently, because the transport is additive and nothing would look broken.
+STASH=/var/lib/bomb-voyage/webtransport.node
+DEST=$APP/node_modules/@fails-components/webtransport-transport-http3-quiche/build_linux_x64/Release
+if [ -f "\$STASH" ]; then
+  if [ ! -f "\$DEST/webtransport.node" ] || ! cmp -s "\$STASH" "\$DEST/webtransport.node"; then
+    mkdir -p "\$DEST" && cp -f "\$STASH" "\$DEST/webtransport.node"
+    echo "       restored the QUIC addon"
+  fi
+fi
 sudo -n /usr/bin/cp $APP/infra/bomb-voyage.service /etc/systemd/system/bomb-voyage.service
 sudo -n /usr/bin/systemctl daemon-reload
 sudo -n /usr/bin/systemctl restart bomb-voyage
