@@ -34,13 +34,25 @@
       <path fill="currentColor" d="M2 12h12l1-7-3.5 2.5L8 3 4.5 7.5 1 5z"/>
       <rect x="2" y="13" width="12" height="2" fill="currentColor"/>
     </symbol>
-    <symbol id="i-note" viewBox="0 0 16 16">
-      <path fill="currentColor" d="M13 2v8.2a2.6 2.6 0 10-1.6 2.4V5.6L7 6.8v5.6a2.6 2.6 0 11-1.6-2.4V4.4z"/>
-    </symbol>
     <symbol id="i-spk" viewBox="0 0 16 16">
       <path fill="currentColor" d="M7 2L3.6 5H1.4v6h2.2L7 14z"/>
       <path d="M9.6 5.4a3.6 3.6 0 010 5.2M11.8 3.4a6.6 6.6 0 010 9.2" stroke="currentColor"
             stroke-width="1.4" fill="none" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-play" viewBox="0 0 16 16">
+      <path fill="currentColor" d="M4 2.5l9 5.5-9 5.5z"/>
+    </symbol>
+    <symbol id="i-pause" viewBox="0 0 16 16">
+      <rect x="4" y="2.5" width="3" height="11" rx="1" fill="currentColor"/>
+      <rect x="9" y="2.5" width="3" height="11" rx="1" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-prev" viewBox="0 0 16 16">
+      <path fill="currentColor" d="M13 3v10l-7-5z"/>
+      <rect x="3" y="3" width="2" height="10" rx="1" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-next" viewBox="0 0 16 16">
+      <path fill="currentColor" d="M3 3v10l7-5z"/>
+      <rect x="11" y="3" width="2" height="10" rx="1" fill="currentColor"/>
     </symbol>
     <symbol id="i-mute" viewBox="0 0 16 16">
       <path fill="currentColor" d="M7 2L3.6 5H1.4v6h2.2L7 14z"/>
@@ -202,20 +214,30 @@
      Icon and level in one control: the icon is the mute toggle, the slider unrolls out of it on
      hover or focus, and the level stays readable as a bar under the glyph while collapsed. -->
 <div id="dock">
+  <button class="volBtn skip" id="prevTrack" title="previous track" aria-label="previous track">
+    <svg><use href="#i-prev"/></svg>
+  </button>
+  <!-- Play/pause and the level in one control: the glyph is the transport, and the fader slides
+       up out of it on hover or focus. The level stays readable as a bar under the glyph while
+       the fader is closed, so the collapsed state still answers "how loud is this". -->
   <span class="vol" id="musicCtl">
-    <button class="volBtn" id="musicBtn" title="music (click to toggle)" aria-label="music">
-      <svg><use href="#i-note"/></svg>
+    <button class="volBtn" id="musicBtn" title="play/pause" aria-label="play or pause the music">
+      <svg><use href="#i-play"/></svg>
     </button>
-    <input id="vol" type="range" min="0" max="100" value="10" aria-label="music volume">
+    <span class="slot"><input id="vol" type="range" min="0" max="100" value="10" aria-label="music volume"></span>
   </span>
+  <button class="volBtn skip" id="nextTrack" title="next track" aria-label="next track">
+    <svg><use href="#i-next"/></svg>
+  </button>
   <span class="vol" id="sfxCtl">
     <button class="volBtn" id="sfxBtn" title="sound effects (click to mute)" aria-label="sound effects">
       <svg><use href="#i-spk"/></svg>
     </button>
-    <input id="sfxVol" type="range" min="0" max="100" value="75" aria-label="sound effect volume">
+    <span class="slot"><input id="sfxVol" type="range" min="0" max="100" value="75" aria-label="sound effect volume"></span>
   </span>
-  <!-- What is playing. Four tracks that are deliberately hard to tell apart from each other
-       while you are being chased, which is the whole reason it is worth labelling. -->
+  <!-- The filename, not a pretty title. Four tracks that are deliberately hard to tell apart
+       from each other while you are being chased, and the file is the thing you would go and
+       look for afterwards. -->
   <span id="nowPlaying" aria-live="off"><i class="eq"><b></b><b></b><b></b></i><span class="t"></span></span>
 </div>
 

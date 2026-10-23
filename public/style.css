@@ -423,6 +423,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * focus-within as well as hover, so it is reachable by keyboard: tabbing to the slider opens the
  * control, and it cannot close while the thing you are dragging is inside it. */
 .vol {
+  position: relative;                   /* the fader above it is absolutely placed */
   display: flex; align-items: center;
   border-radius: 9px;
   border: 1px solid transparent;
@@ -439,6 +440,14 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   transition: color .12s;
 }
 .volBtn svg { width: 18px; height: 18px; display: block; }
+
+/* Skip back and skip forward. Narrower than the play button and without a level bar under them,
+   because they are not a level — the asymmetry is what makes the middle one read as the one you
+   press most. */
+.volBtn.skip { width: 24px; height: 30px; color: #6f7b8c; }
+.volBtn.skip svg { width: 14px; height: 14px; }
+.volBtn.skip:hover, .volBtn.skip:focus-visible { color: var(--ink); background: #ffffff10; }
+.volBtn.skip::after { content: none; }     /* the level bar belongs to the fader buttons only */
 .vol:hover .volBtn, .volBtn:focus-visible { color: var(--ink); }
 .vol.on .volBtn { color: var(--gold); }
 
@@ -454,17 +463,41 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 }
 .vol.muted .volBtn::after { background: #ffffff1f; }
 
-/* Width, not display: an element that is display:none cannot animate, and a slider that pops
-   into existence makes the whole bar jump sideways. */
-.vol input[type=range] {
-  width: 0; opacity: 0; margin: 0;
-  transition: width .16s ease, opacity .16s ease, margin .16s ease;
+/* The fader slides UP out of the button, not sideways out of it.
+ *
+ * Horizontally it had to push everything to its right along, so opening the music fader moved
+ * the sfx button and the track name under the pointer — and the dock is in a corner, where
+ * growing sideways is the one direction that costs layout. Upward it grows into empty screen
+ * and nothing else in the pill moves at all.
+ *
+ * Height, not display: an element that is display:none cannot animate. */
+.slot {
+  position: absolute; left: 0; right: 0; bottom: 100%;
+  height: 0; opacity: 0; overflow: hidden;
+  display: grid; place-items: center;
+  border-radius: 9px 9px 0 0;
+  background: #0d1117e6;
+  pointer-events: none;
+  transition: height .16s ease, opacity .16s ease;
 }
-.vol:hover input[type=range], .vol:focus-within input[type=range] {
-  width: 72px; opacity: 1; margin: 0 9px 0 2px;
+/* `bottom: 100%` with no gap on purpose: a few pixels of space between the button and the
+   fader is a dead zone the pointer crosses on the way up, and crossing it closes the thing you
+   were reaching for. Flush, it reads as one fader strip. */
+.vol:hover .slot, .vol:focus-within .slot {
+  height: 86px; opacity: 1; pointer-events: auto;
 }
+
+/* Laid out horizontally and then turned, which is the one approach that behaves the same in
+   every engine: `appearance: slider-vertical` is deprecated in Chrome and the
+   `writing-mode`/`direction` replacement is not in Safari yet. Rotating about its own centre
+   inside a grid-centred box means the 76px track becomes 76px of height in the same place. */
+.slot input[type=range] {
+  width: 76px; margin: 0;
+  transform: rotate(-90deg);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .vol input[type=range] { transition: none; }
+  .slot { transition: none; }
 }
 
 /* Icon-only in the top bar — the GitHub mark needs no label, and the bar is crowded. Sized to a

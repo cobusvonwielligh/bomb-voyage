@@ -191,6 +191,30 @@ Serving them needs an `audio/mpeg` content type **and byte ranges** — Safari w
 Strip ID3 cover art before committing a track. It is about 25% of the file and nobody sees it;
 `test/sources.test.js` fails on a tag.
 
+### The dock
+
+Bottom left, one pill: `prev`, play/pause, `next`, the sfx control, and what is playing.
+
+The faders open **upward** out of their buttons, not sideways. Sideways they pushed everything
+to their right along, so opening the music fader moved the sfx button and the track name under
+the pointer — and in a corner, growing sideways is the one direction that costs layout. The
+slider is laid out horizontally and rotated `-90deg` inside a grid-centred box, which is the one
+approach that behaves identically everywhere: `appearance: slider-vertical` is deprecated in
+Chrome and the `writing-mode`/`direction` replacement is not in Safari yet. The fader sits flush
+against its button with no gap, because a few pixels of space is a dead zone the pointer crosses
+on the way up, and crossing it closes the thing you were reaching for.
+
+The readout is the **filename**, `drift.mp3`, not a title. A title needs a lookup table that
+goes stale the next time a track is swapped, and the file is the thing you would go and find
+afterwards — the only real reason to put a track name on screen. It reads `name (synth)` when
+the file failed to load and the fallback is playing, because that state is otherwise completely
+silent: the music still plays, it is just not the music.
+
+`next()` and `prev()` both honour `excluded`, so neither can land you on the theme mid-round —
+the one thing a skip button must not be able to do. Both set `current = sounding` first: a skip
+is relative to what the person pressing it can hear, not to whatever the scheduler has queued
+minutes out.
+
 **The theme plays on the dashboard, always, and nowhere else.** Its file track has `loop: true`,
 which gives it `repeats: Infinity` — so the sequencer can never reach a handover and it owns the
 rotation until something calls `jumpTo`. Starting a round is exactly that: `exclude('theme')`

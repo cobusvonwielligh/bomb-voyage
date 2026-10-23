@@ -443,6 +443,8 @@ async function createFileTrack({ bus, name, loop = false }) {
 
   return {
     name,
+    /** So the now-playing readout can say `name.mp3` only when it really is one. */
+    file: true,
     steps: 1,
     /* A looping track NEVER hands over.
      *
@@ -650,6 +652,15 @@ export function createMusic() {
     return current;
   }
 
+  /** The same walk, backwards, for the skip-back button. */
+  function prevTrack() {
+    for (let i = 1; i <= tracks.length; i++) {
+      const n = (current - i + tracks.length * i) % tracks.length;
+      if (!excluded.has(tracks[n].name)) return n;
+    }
+    return current;
+  }
+
   function scheduler() {
     // The handover we queued earlier has now arrived in real time, so what you hear has changed.
     if (pendingAt && ctx.currentTime >= pendingAt) { sounding = pendingIndex; pendingAt = 0; }
@@ -696,6 +707,28 @@ export function createMusic() {
       nextTime = ctx.currentTime + 0.08;
       timer = setInterval(scheduler, TIMER_MS);
       return true;
+    },
+
+    /** True when what you are hearing is the produced file rather than the synth fallback. */
+    get trackIsFile() { return !!tracks?.[sounding]?.file; },
+
+    /**
+     * Skip, in either direction. Both honour `excluded`, so neither can land you on the theme
+     * in the middle of a round — which is the one thing a skip button must not be able to do.
+     *
+     * `current = sounding` first: the scheduler may have queued a handover minutes out, and a
+     * skip is relative to what the person pressing it can HEAR, not to what is queued.
+     */
+    next() {
+      if (!playing || !tracks) return;
+      current = sounding;
+      jumpTo(nextTrack());
+    },
+
+    prev() {
+      if (!playing || !tracks) return;
+      current = sounding;
+      jumpTo(prevTrack());
     },
 
     /**

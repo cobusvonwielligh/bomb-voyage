@@ -105,40 +105,36 @@ $('play').addEventListener('focus', showMenuQuip);
 $('play').addEventListener('pointerleave', hideMenuQuip);
 $('play').addEventListener('blur', hideMenuQuip);
 
-/* What each track is called out loud.
- *
- * The slot names are for the code — `drift` tells you where a file goes, not what it sounds
- * like. These are for the person reading the corner of their screen, and they are the mix
- * titles, because the point of showing a track name is being able to go and find it.
- */
 /* The three in-game beds, in rotation order. The theme is not one of them: it belongs to the
  * landing page and is excluded for the whole of a round. */
 const BEDS = ['drift', 'suspend', 'undertow'];
 
-const TRACK_TITLES = {
-  theme: 'High Seas',
-  drift: 'Glowing Pirate Atmosphere',
-  suspend: 'Bioluminescent Seas',
-  undertow: 'Drum & Bass Variation',
-};
-
 /**
  * The now-playing readout, bottom left.
  *
+ * The FILENAME, not a pretty title. A title needs a lookup table that goes stale the next time
+ * a track is swapped, and `drift.mp3` is the thing you would actually go and find in
+ * `assets/audio` afterwards — which is the only reason to put a track name on screen at all.
+ *
+ * `(synth)` when the file could not be loaded and the synthesised fallback is playing. That
+ * state is otherwise completely silent: the music still plays, it is just not the music, and
+ * nobody would ever find out.
+ *
  * Polled rather than pushed. The alternative is a callback out of the sequencer on every
  * crossfade, which is a second code path through the one piece of this that has already been
- * subtly wrong twice — and the thing being displayed changes about once every three minutes.
- * A string compare in a function that already runs once a frame is not worth an event for.
+ * subtly wrong twice — and the thing displayed changes about once every three minutes. A string
+ * compare in a function that already runs five times a second is not worth an event for.
  */
 let shownTrack = null;
 function syncNowPlaying() {
   const name = music.playing ? music.track : null;
+  const label = !name ? 'paused' : music.trackIsFile ? `${name}.mp3` : `${name} (synth)`;
   $('dock').classList.toggle('playing', !!name && music.volume > 0);
-  if (name === shownTrack) return;
-  shownTrack = name;
+  if (label === shownTrack) return;
+  shownTrack = label;
   const el = $('nowPlaying');
-  el.querySelector('.t').textContent = name ? (TRACK_TITLES[name] ?? name) : 'music off';
-  el.title = name ? `now playing: ${TRACK_TITLES[name] ?? name}` : 'music is off';
+  el.querySelector('.t').textContent = label;
+  el.title = name ? `now playing: ${label}` : 'the music is paused';
 }
 
 /**
@@ -155,6 +151,10 @@ const syncAudio = () => {
   f.style.setProperty('--lvl', sfx.volume);
   m.classList.toggle('on', music.playing && music.volume > 0);
   m.classList.toggle('muted', !music.playing || music.volume === 0);
+  // The glyph IS the state: a play triangle means "press this to hear something", two bars mean
+  // "this is running". A note icon that merely dims is a thing you have to learn.
+  $('musicBtn').firstElementChild.firstElementChild
+    .setAttribute('href', music.playing ? '#i-pause' : '#i-play');
   f.classList.toggle('on', sfx.volume > 0);
   f.classList.toggle('muted', sfx.volume === 0);
   // The speaker glyph becomes a crossed-out one at zero, because a grey bar alone is easy to
@@ -165,6 +165,19 @@ const syncAudio = () => {
 };
 $('musicBtn').onclick = async () => { await music.toggle(); syncAudio(); };
 $('vol').oninput = e => { music.setVolume(e.target.value / 100); syncAudio(); };
+
+/* Skip, in both directions.
+ *
+ * Debounced with the same one-shot guard as every other button: a double click on `next` would
+ * otherwise fire a crossfade per click, and each one cancels the last mid-ramp — audible as a
+ * stutter, and it can leave two tracks half up.
+ *
+ * No-ops while the music is paused rather than disabled, because a transport whose buttons grey
+ * out is a transport you have to look at to use.
+ */
+const tapSkip = createTap(320);
+$('nextTrack').onclick = tapSkip(() => { music.next(); syncAudio(); });
+$('prevTrack').onclick = tapSkip(() => { music.prev(); syncAudio(); });
 
 // Mute toggles to zero and back to whatever it was, so it is a real toggle rather than a one-way
 // trip that makes you re-find your level by ear.

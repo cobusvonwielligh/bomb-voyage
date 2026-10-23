@@ -105,6 +105,22 @@ test('every track in the rotation has an audio file named after it', () => {
   }
 });
 
+/**
+ * Every `<use href="#i-...">` in the page or in main.js points at a symbol that exists.
+ *
+ * A missing one draws nothing at all — no error, no console line, no broken-image box. The
+ * button is simply blank, which looks like a CSS problem and is not one.
+ */
+test('every icon referenced has a symbol defined', () => {
+  const html = read('public/index.html');
+  const defined = new Set([...html.matchAll(/<symbol id="(i-[\w-]+)"/g)].map(m => m[1]));
+  const used = new Set([...html.matchAll(/href="#(i-[\w-]+)"/g)].map(m => m[1]));
+  for (const m of read('public/client/main.js').matchAll(/'#(i-[\w-]+)'/g)) used.add(m[1]);
+
+  assert.deepEqual([...used].filter(n => !defined.has(n)), [],
+    'an icon is referenced but never defined, so it draws nothing and looks like a CSS bug');
+});
+
 // The audio files are the only reason server/index.js serves byte ranges at all, and the only
 // reason the CSP mentions media. Those have to stay true together or Safari plays nothing.
 test('the server can actually serve the audio', () => {
