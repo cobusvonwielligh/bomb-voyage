@@ -314,8 +314,11 @@ const net = createNet({
   // The connection readout lives in the HUD, which is hidden until you are in a game. Before
   // that, a full server or an unreachable one has to say so somewhere you can actually see it.
   onStatus: s => {
-    $('conn').textContent = s;
+    // A dot, not a word. "open" is the state nine hundred and ninety-nine seconds out of a
+    // thousand, and a label that almost never changes is a label nobody reads. The state still
+    // goes on the title, so hovering says exactly what it is.
     $('conn').dataset.state = s;
+    $('conn').title = s;
     if (running) return;
     toast(s);
     $('play').disabled = s === 'connecting' || s === 'open';

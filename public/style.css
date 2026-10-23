@@ -218,12 +218,20 @@ canvas#game {
 #clock.low .v { color: var(--bad); animation: tick 1s steps(2) infinite; }
 @keyframes tick { 50% { opacity: .55; } }
 
+/* Connectivity, as a dot. Red by default, because every state that is not "open" is one you
+   want to notice, including ones added later that this stylesheet has never heard of. */
 #conn {
-  display: inline-block; min-width: 4.5em; text-align: right;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  width: 9px; height: 9px; border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--bad);
+  box-shadow: 0 0 0 2px #0006, 0 0 8px currentColor;
+  color: var(--bad);
 }
-#conn[data-state=open] { color: var(--good); }
-#conn[data-state=reconnecting], #conn[data-state=connecting] { color: var(--gold); }
+#conn[data-state=open] { background: var(--good); color: var(--good); }
+#conn[data-state=reconnecting], #conn[data-state=connecting] {
+  background: var(--gold); color: var(--gold);
+  animation: tick 1s steps(2) infinite;      /* in-flight, not settled */
+}
 
 /* loadout */
 #gear { display: flex; gap: 14px; align-items: center; }
