@@ -146,11 +146,8 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
   }
 
   function release(seat) {
-    const s = seats[seat], p = state.players[seat];
     // Bank what they earned before the seat is recycled, or a disconnect loses the round.
-    if (s && p && !s.isBot) {
-      leaderboard?.record(s.playerId, { name: p.name, score: p.score, kills: p.kills, deaths: p.deaths });
-    }
+    bankScores();
     clearSeat(seat);
   }
 
@@ -393,12 +390,11 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       .map(p => ({ i: p.i, name: p.name, s: p.score, k: p.kills, d: p.deaths }))
       .sort((a, b) => b.s - a.s || b.k - a.k);
 
-    for (const p of state.players) {
-      if (!p) continue;
-      const seat = seats[p.i];
-      if (seat) leaderboard?.record(seat.playerId, { name: p.name, score: p.score, kills: p.kills, deaths: p.deaths });
-      if (p.alive) p.score += SCORE.SURVIVE_ROUND;
-    }
+    // Survivors are paid BEFORE the banking, not after. The bonus used to be added on the line
+    // below the write, so it was computed, displayed for twenty seconds, and then thrown away
+    // when the round reset — fifty points that never once reached anybody's total.
+    for (const p of state.players) if (p?.alive) p.score += SCORE.SURVIVE_ROUND;
+    bankScores();
     leaderboard?.flush();
 
     onBroadcast({
@@ -437,8 +433,11 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
   function resetRound(index) {
     cancelIntermission();
     mapIndex = index;
+    // `banked` is cleared with the rest: scores restart at zero, so the high-water mark has to
+    // as well or the next bank would compute a negative delta and the board would ignore it.
     const carried = seats.map(s =>
-      (s ? { ...s, inputs: new Map(), mask: 0, goneSince: 0, lastAckTick: 0, lastInputAt: 0 } : null));
+      (s ? { ...s, inputs: new Map(), mask: 0, goneSince: 0, lastAckTick: 0, lastInputAt: 0,
+             banked: null } : null));
     state = createState(MAPS[mapIndex]);
     for (let i = 0; i < maxPlayers; i++) {
       seats[i] = carried[i];
@@ -503,7 +502,10 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       const s = seats[i], p = state.players[i];
       if (!s || !p) continue;
       const banked = leaderboard.get(s.playerId);
-      const lifetime = (banked?.score ?? 0) + Math.max(0, p.score);
+      // Only the part of this round that has NOT been written yet, or a mid-round bank would
+      // count the same points twice and the bar would jump.
+      const unbanked = Math.max(0, p.score) - (s.banked?.score ?? 0);
+      const lifetime = (banked?.score ?? 0) + Math.max(0, unbanked);
       // The name rides along because nothing else refreshes it. The snapshot leaves names out
       // on purpose — fifteen a second of a string that changes once per join is most of the
       // bandwidth — so a client that misses the welcome, or hydrates a seat from a snapshot
@@ -673,6 +675,36 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
   }
 
   /**
+   * Write what everybody has earned SINCE THE LAST TIME this ran, and remember where we got to.
+   *
+   * Deltas, not totals, because this has to be safe to call repeatedly. The leaderboard adds
+   * what it is given, so banking a running total twice would double somebody's afternoon.
+   *
+   * It exists because the only two places that used to write were "round over" and "player
+   * disconnected", and a server restart is neither. Deploys happen several times an hour on a
+   * build day, rounds last ten minutes, and everybody still connected lost everything since the
+   * last round boundary every single time. The file was never the problem — nothing was asking
+   * it to save.
+   */
+  function bankScores() {
+    if (!leaderboard) return;
+    for (let i = 0; i < maxPlayers; i++) {
+      const s = seats[i], p = state.players[i];
+      if (!s || !p) continue;
+      const was = s.banked ?? { score: 0, kills: 0, deaths: 0 };
+      const now = { score: Math.max(0, p.score), kills: p.kills, deaths: p.deaths };
+      if (now.score === was.score && now.kills === was.kills && now.deaths === was.deaths) continue;
+      leaderboard.record(s.playerId, {
+        name: p.name,
+        score: now.score - was.score,
+        kills: now.kills - was.kills,
+        deaths: now.deaths - was.deaths,
+      });
+      s.banked = now;
+    }
+  }
+
+  /**
    * Round length, in minutes, to a tenth.
    *
    * Changing it takes effect immediately rather than at the next round: the host asking for a
@@ -724,6 +756,8 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     start, stop, join, disconnect, input, requestRespawn, welcomeFor, roundInfo, stats,
     setBots, botCount, restartRound, toggleGod, logout, hostSeat,
     kickSeat, seatOfName, setMap, setGameSpeed, setRoundTime,
+    // Called on the way down, so a deploy does not throw away the round in progress.
+    bankScores,
     // Exposed for tests: respawn placement is a rule worth asserting on directly.
     respawn,
     roundMinutes: () => Math.round((roundTicks / TICK_HZ / 60) * 10) / 10,

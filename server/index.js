@@ -228,13 +228,33 @@ if (usingTls && config.redirectPort) {
   }).listen(config.redirectPort);
 }
 
+/* Shutting down has to finish writing before it exits.
+ *
+ * Two bugs lived here. The scores of everyone still playing were only ever written at a round
+ * boundary, so a deploy in the middle of a ten-minute round discarded it — and on a build day
+ * that is most deploys. And `leaderboard.stop()` returns a promise that nothing awaited, while
+ * `server.close` could call `process.exit` first, so even the writes that were queued could be
+ * cut off halfway.
+ *
+ * Now: bank the round, await the save, then exit. The three-second backstop stays, because a
+ * shutdown that hangs is worse than one that loses a few points.
+ */
+let shuttingDown = false;
 for (const sig of ['SIGTERM', 'SIGINT']) {
-  process.on(sig, () => {
+  process.on(sig, async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     console.log(`${sig} — shutting down`);
+    setTimeout(() => process.exit(0), 3000).unref();
+    try {
+      hub.bankScores();
+      await leaderboard.stop();
+      console.log('leaderboard saved');
+    } catch (err) {
+      console.warn(`leaderboard: save on shutdown failed (${err.message})`);
+    }
     hub.shutdown();
     wt?.stop();
-    leaderboard.stop();
     server.close(() => process.exit(0));
-    setTimeout(() => process.exit(0), 3000).unref();
   });
 }
