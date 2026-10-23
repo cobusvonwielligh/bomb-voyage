@@ -48,13 +48,21 @@ html, body {
 
 :root { --bar: 44px; --side: 340px; --gap: 10px; }
 
+/* Explicit width and height, not `auto` with four insets.
+ *
+ * A canvas is a REPLACED element, and for an absolutely positioned replaced box `width: auto`
+ * resolves to the INTRINSIC width — the canvas default of 300x150 — rather than to the gap
+ * between `left` and `right`. The box is then over-constrained and the browser drops `right` and
+ * `bottom` entirely, so the game was laid out 300x150 in the corner and painted as an empty
+ * replaced element: a white rectangle with a broken-content icon. calc() removes the ambiguity. */
 canvas#game {
   position: fixed;
   top: calc(var(--bar) + var(--gap) * 2);
   left: var(--gap);
-  right: calc(var(--side) + var(--gap) * 2);
-  bottom: var(--gap);
-  width: auto; height: auto; display: block;
+  width: calc(100vw - var(--side) - var(--gap) * 3);
+  height: calc(100vh - var(--bar) - var(--gap) * 3);
+  display: block;
+  background: #0a1a2e;        /* the sea, so a frame that has not painted yet is not a flash */
   image-rendering: pixelated;
   border-radius: 8px;
 }
@@ -63,7 +71,7 @@ canvas#game {
 @media (max-width: 1080px) {
   :root { --side: 0px; }
   #side { display: none; }
-  canvas#game { right: var(--gap); }
+  canvas#game { width: calc(100vw - var(--gap) * 2); }
 }
 
 /* ─── the moving gradient ─────────────────────────────────────────────────────

@@ -52,6 +52,10 @@ export function createRenderer(canvas, world) {
     const dpr = Math.min(2, devicePixelRatio || 1);
     const { clientWidth: w, clientHeight: h } = canvas;
     if (!w || !h) return;                   // laid out but not measured yet
+    // Bail when nothing actually changed. Writing canvas.width resets the drawing surface and
+    // can itself be observed as a resize, so an unguarded ResizeObserver callback that always
+    // writes is a loop that clears the canvas every frame.
+    if (w === view.w && h === view.h && dpr === view.dpr) return;
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
     view.dpr = dpr;
@@ -78,15 +82,26 @@ export function createRenderer(canvas, world) {
     const q = Math.max(0.3, Math.round(fit * 20) / 20);
     // Pixel art upscaled by a non-integer factor gets rows of visibly different widths, so snap
     // to halves going up and smooth on the way down, where the same artefact reads as aliasing.
-    view.zoom = q >= 1 ? Math.floor(q * 2) / 2 : q;
+    const z = q >= 1 ? Math.floor(q * 2) / 2 : q;
+    if (!Number.isFinite(z) || z <= 0) return;      // never let a bad measurement blank the board
+    if (z === view.zoom) return;
+    view.zoom = z;
     view.smooth = q < 1;
     invalidateAll();
   }
 
   addEventListener('resize', resize);
   // The panels change the box without the window changing at all — a narrow viewport dropping
-  // the side panel, or the HUD appearing when a round starts.
-  if (typeof ResizeObserver === 'function') new ResizeObserver(resize).observe(canvas);
+  // the side panel, or the HUD appearing when a round starts. Deferred to the next frame so the
+  // canvas.width write inside resize() can never re-enter the observer that triggered it.
+  if (typeof ResizeObserver === 'function') {
+    let queued = false;
+    new ResizeObserver(() => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; resize(); });
+    }).observe(canvas);
+  }
 
   const invalidateAll = () => {
     chunks = new Map(); shore = null; splashes.length = 0; dropsFor = null;
