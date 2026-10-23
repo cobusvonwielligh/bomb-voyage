@@ -131,7 +131,10 @@ function bombSolid(state, p, tx, ty) {
 }
 
 /** Would the hitbox centred on (x, y) overlap anything solid? */
-export function blocked(state, p, x, y) {
+/**
+ * @param bombsCount false to ask about terrain only — see `unstick`.
+ */
+export function blocked(state, p, x, y, bombsCount = true) {
   const h = halfBox(p);
   const reduced = has(p, STATUS.REDUCTION);
   const x0 = (x - h) >> 8, x1 = (x + h - 1) >> 8;
@@ -139,7 +142,7 @@ export function blocked(state, p, x, y) {
   for (let ty = y0; ty <= y1; ty++)
     for (let tx = x0; tx <= x1; tx++) {
       if (!walkable(state.map, tx, ty, reduced)) return true;
-      if (bombSolid(state, p, tx, ty)) return true;
+      if (bombsCount && bombSolid(state, p, tx, ty)) return true;
     }
   return false;
 }
@@ -263,14 +266,28 @@ function moveAxis(state, p, ax, ay, speed) {
  * @returns true if it had to intervene
  */
 export function unstick(state, p) {
-  if (!blocked(state, p, p.x, p.y)) return false;
+  /* Terrain only. A bomb never pushes anybody, ever.
+   *
+   * This is the seatbelt for positions that are illegal and cannot be walked out of: a wall
+   * grown on top of you, Reduction expiring while you stand in a column, a map change, a spawn
+   * that is no longer clear. Every one of those is genuinely inescapable without help.
+   *
+   * A bomb is not. `bombSolid` already treats one you are touching as passable, so you can
+   * always simply walk off it — and a shove on top of that is the game moving you when you were
+   * perfectly capable of moving yourself. Passing `false` here makes that structural rather
+   * than a property of the current tuning: even if bomb solidity changes again, the unstick
+   * cannot start pushing people off bombs as a side effect.
+   */
+  if (!blocked(state, p, p.x, p.y, false)) return false;
 
   const tx = p.x >> 8, ty = p.y >> 8;
   // Nearest first, and in a fixed order so two machines always pick the same way out.
   const ring = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
   for (const [dx, dy] of ring) {
     const nx = tileCentre(tx + dx), ny = tileCentre(ty + dy);
-    if (blocked(state, p, nx, ny)) continue;
+    // The destination ignores bombs too: a bomb is somewhere you can stand your way out of,
+    // and refusing a tile because of one can leave a genuinely entombed player with nowhere.
+    if (blocked(state, p, nx, ny, false)) continue;
 
     // Slide out, do not teleport out.
     //

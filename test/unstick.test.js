@@ -190,3 +190,21 @@ test('a bomb is still solid once you are clear of it', () => {
   assert.ok(p.x < away, 'did not walk back at all');
   assert.ok((p.x >> 8) > tx, 'walked onto a bomb it should have been stopped by');
 });
+
+test('a bomb never makes the unstick fire, however it is placed', () => {
+  // The unstick exists for positions you cannot walk out of. A bomb is not one of those — you
+  // can always step off it — so it must never be the reason you get pushed.
+  const { s, tx, ty } = world();
+  const p = seat(s, 0, tx, ty);
+  place(s, p, IN_BOMB);
+  assert.equal(unstick(s, p), false, 'pushed by a bomb under its own owner');
+
+  // And somebody else's bomb dropped on the tile you are standing on.
+  const q = seat(s, 1, tx, ty);
+  q.x = tileCentre(tx); q.y = tileCentre(ty);
+  assert.equal(unstick(s, q), false, 'pushed by somebody else dropping a bomb on you');
+
+  // A wall, though, still gets the seatbelt.
+  setTile(s.map, tx, ty, BLOCK.SOFT, BLOCK_HP[BLOCK.SOFT]);
+  assert.equal(unstick(s, p), true, 'a wall grown on top of you must still move you');
+});
