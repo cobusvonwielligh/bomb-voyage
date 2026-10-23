@@ -1,7 +1,8 @@
 # Bomb Voyage — Art & Audio
 
-Slice: **ART**. Everything here is code, not files. There are no PNGs, no WAVs, nothing to
-version, nothing to download, no CORS, no cache busting.
+Slice: **ART**. Everything the game draws is code, not files — nothing to version, no CORS, no
+cache busting. The exceptions are all decoration or music: four landing-page PNGs, one font, and
+four mp3s. Nothing inside the board is an image, and every sound effect is still synthesised.
 
 ---
 
@@ -164,17 +165,31 @@ timer, connection dot), **TAB scoreboard**, **Q map overview**, **round-end scor
 
 ## 6. Audio
 
-Synthesised with WebAudio, with **one** exception: the theme is a file,
-`/assets/audio/theme.mp3`. Every sound effect and all three ambient beds are still generated.
+**Sound effects are synthesised with WebAudio. Music is four files.**
 
-The file is wrapped to look exactly like a synthesised track to the sequencer — one step whose
-duration is the length of the mix, minus the crossfade so the next track overlaps the outro
-rather than following a gap. Nothing above `createFileTheme` in `music.js` knows the difference,
-which is why crossfading, `exclude`, `playFrom`, muting and ducking all work on it unchanged.
-The synthesised theme is the fallback when the file cannot be loaded.
+`/assets/audio/{theme,drift,suspend,undertow}.mp3`, around three minutes each, cycling. The
+theme is excluded for the duration of a round.
 
-Serving it needs an `audio/mpeg` content type **and byte ranges** — Safari will not play an
+Each file is named after the **slot** it fills, not after the mix it came from. That is what
+makes the fallback automatic: `createFileTrack` asks for `/assets/audio/<its own name>.mp3` and
+uses the synthesised version of itself if the file is missing or will not decode. There is no
+table mapping names to files; replacing a track is dropping in an mp3.
+
+A file is wrapped to look exactly like a synthesised track to the sequencer — one step whose
+duration is the length of the mix, **minus the crossfade** so the next track overlaps the outro
+rather than following a gap of silence. Nothing above `createFileTrack` in `music.js` knows the
+difference, which is why crossfading, `exclude`, `playFrom`, muting and ducking all work on it
+unchanged. `leave()` pauses the element once it has faded out, or it decodes forever into a
+silent gain node.
+
+`preload` is `metadata`, not `auto`: four tracks at ~3 MB would otherwise pull twelve megabytes
+the moment somebody unmutes, for three they will not hear for five minutes.
+
+Serving them needs an `audio/mpeg` content type **and byte ranges** — Safari will not play an
 `<audio>` source from a server that answers `Range` with a 200. `server/index.js` does both.
+
+Strip ID3 cover art before committing a track. It is about 25% of the file and nobody sees it;
+`test/sources.test.js` fails on a tag.
 
 **Defaults: music `0.10`, SFX `0.75`.** Persist both to `localStorage` (`bv.music`, `bv.sfx`).
 **One** `AudioContext` for the whole page, created lazily and unlocked on the PLAY click — see

@@ -73,21 +73,50 @@ test('every asset referenced in the source exists on disk', () => {
   assert.deepEqual(missing, [], `broken asset references:\n  ${missing.join('\n  ')}`);
 });
 
-// The theme is the one binary the game actually plays, and it is the only reason server/index.js
-// serves byte ranges at all. Both halves of that have to stay true together.
-test('the theme file is there, and the server can serve it', () => {
-  const mp3 = path.join(ROOT, 'public', 'assets', 'audio', 'theme.mp3');
-  assert.ok(fs.existsSync(mp3), 'public/assets/audio/theme.mp3 is missing');
-  assert.ok(fs.statSync(mp3).size > 100_000, 'theme.mp3 is suspiciously small');
+const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
-  const index = fs.readFileSync(path.join(ROOT, 'server', 'index.js'), 'utf8');
+/**
+ * Every track in the rotation has a file named after it.
+ *
+ * The whole fallback scheme rests on that one convention: `createFileTrack` asks for
+ * `/assets/audio/<name>.mp3` and uses the synthesised version of itself when it is not there.
+ * Which means a missing or misnamed file does not fail — it silently downgrades to the synth,
+ * and the only symptom is that the music is not the music. Nothing else here would notice.
+ */
+test('every track in the rotation has an audio file named after it', () => {
+  const src = read('public/client/audio/music.js') + read('public/client/audio/ambient.js');
+  const names = [...src.matchAll(/name: '(\w+)'/g)].map(m => m[1]);
+  assert.deepEqual(names.sort(), ['drift', 'suspend', 'theme', 'undertow'],
+    'the set of tracks changed; the files have to change with it');
+
+  for (const name of names) {
+    const mp3 = path.join(ROOT, 'public', 'assets', 'audio', `${name}.mp3`);
+    assert.ok(fs.existsSync(mp3), `no file for track "${name}" — it would silently play the synth`);
+    assert.ok(fs.statSync(mp3).size > 100_000, `${name}.mp3 is suspiciously small`);
+
+    // ID3 cover art is about a megabyte a file and nobody will ever see it. An MPEG frame sync
+    // as the very first bytes is what proves the tag was stripped.
+    const head = Buffer.alloc(2);
+    const fd = fs.openSync(mp3, 'r');
+    fs.readSync(fd, head, 0, 2, 0);
+    fs.closeSync(fd);
+    assert.ok(head[0] === 0xff && (head[1] & 0xe0) === 0xe0,
+      `${name}.mp3 still has an ID3 tag on the front — strip it, it is ~25% of the download`);
+  }
+});
+
+// The audio files are the only reason server/index.js serves byte ranges at all, and the only
+// reason the CSP mentions media. Those have to stay true together or Safari plays nothing.
+test('the server can actually serve the audio', () => {
+  const index = read('server/index.js');
   assert.match(index, /'\.mp3':\s*'audio\/mpeg'/, 'server/index.js has no mp3 content type');
   assert.match(index, /Accept-Ranges/, 'server/index.js does not advertise byte ranges');
   assert.match(index, /206,/, 'server/index.js never answers a Range request with a 206');
   assert.match(index, /media-src 'self'/, "the CSP does not allow the page to play its own media");
 
-  const music = fs.readFileSync(path.join(ROOT, 'public', 'client', 'audio', 'music.js'), 'utf8');
-  assert.match(music, /\/assets\/audio\/theme\.mp3/, 'music.js does not point at the theme file');
+  const music = read('public/client/audio/music.js');
   assert.match(music, /createTheme\(\{ bus: musicGain \}\)/,
     'the synthesised theme is no longer wired as the fallback');
+  assert.match(music, /createAmbient\(\{ bus: musicGain \}\)/,
+    'the synthesised beds are no longer wired as the fallback');
 });

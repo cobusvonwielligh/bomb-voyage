@@ -5,15 +5,17 @@
 // still only ever says start / stop / toggle / setVolume / duck and never learns that there is
 // more than one track.
 //
-// THE THEME IS A FILE NOW — `/assets/audio/theme.mp3`. It is the one exception to "everything is
-// generated in code", and it is an exception on purpose: the theme is the twenty seconds somebody
-// hears before they have decided whether to play, and a produced mix beats a synthesised one at
-// that job by a distance no amount of oscillator work closes.
+// EVERY TRACK IS A FILE NOW — `/assets/audio/{theme,drift,suspend,undertow}.mp3`. This is the
+// one place the project departs from "everything is generated in code", and it departs on
+// purpose: a produced mix beats a synthesised one at being listened to, by a distance no amount
+// of oscillator work closes.
 //
-// The synthesised theme below is NOT dead code. It is the fallback: if the file 404s, fails to
-// decode, or the browser refuses the format, `createTheme` takes over and the menu still has
+// Each file is named after the SLOT it fills, not after the mix it came from, which is what
+// makes the fallback automatic — a track asks for its own name and gets either the file or
+// itself. So the synthesised theme below is NOT dead code. It is the fallback: if the file 404s,
+// fails to decode, or the browser refuses the format, `createTheme` takes over and there is
 // music instead of silence. It is also still the reference for what the file should sound like,
-// and the tests below still hold it to that. Everything from here to createMusic() describes it.
+// and the tests still hold it to that. Everything from here to createMusic() describes it.
 //
 // The theme is eight bars at 116 BPM in two halves that do not sound alike.
 //
@@ -377,15 +379,21 @@ function createTheme({ bus }) {
   return { name: 'theme', steps: TOTAL_STEPS, stepDur: STEP_DUR, repeats: 4, gain, schedule };
 }
 
-// ─── the theme, as a file ─────────────────────────────────────────────────────
+// ─── produced tracks ──────────────────────────────────────────────────────────
 
-const THEME_SRC = '/assets/audio/theme.mp3';
-// How long to wait for the file's metadata before giving up and using the synth. Metadata is a
-// few kilobytes off the front of the file, not the four megabytes of audio, so this is generous.
-const THEME_METADATA_TIMEOUT_MS = 4000;
+/* Every track in the rotation now has a file, and every file is named after the slot it fills.
+ *
+ * Naming them `theme.mp3`, `drift.mp3` and so on rather than after the mixes they came from is
+ * what makes the fallback automatic: a track asks for `/assets/audio/<its own name>.mp3`, and
+ * if that is not there it is the synthesised version of itself. Nothing maps names to files. */
+const AUDIO_DIR = '/assets/audio/';
+
+// How long to wait for a file's metadata before giving up and using the synth. Metadata is a few
+// kilobytes off the front of the file, not the three megabytes of audio, so this is generous.
+const METADATA_TIMEOUT_MS = 4000;
 
 /**
- * The produced theme, wearing the same clothes as a synthesised track.
+ * A produced mix, wearing the same clothes as a synthesised track.
  *
  * The sequencer in createMusic() knows about `steps`, `stepDur`, `repeats`, `gain` and
  * `schedule(step, time)`, and nothing else. A whole mix is just a track with ONE step whose
@@ -394,11 +402,15 @@ const THEME_METADATA_TIMEOUT_MS = 4000;
  *
  * Resolves to null if the file cannot be used, so the caller can fall back to the synth.
  */
-async function createFileTheme({ bus, src = THEME_SRC }) {
+async function createFileTrack({ bus, name }) {
   const ctx = audioContext();
+  const src = `${AUDIO_DIR}${name}.mp3`;
   const el = new Audio();
   el.src = src;
-  el.preload = 'auto';
+  // Metadata, NOT 'auto'. There are four of these and they are three megabytes each: preloading
+  // the lot would pull twelve megabytes the moment somebody unmutes, for three tracks they will
+  // not hear for the next five minutes. The one that is playing streams, the rest stay idle.
+  el.preload = 'metadata';
   el.loop = false;
   // The element's own volume stays at 1. The fader is the gain node below, because that is what
   // crossfade() automates and it has to be on the AudioContext clock, not the DOM one.
@@ -407,13 +419,13 @@ async function createFileTheme({ bus, src = THEME_SRC }) {
   // Is it there, does it decode, does this browser want the format? Known once metadata lands.
   const ok = await new Promise(resolve => {
     const done = v => { clearTimeout(timer); resolve(v); };
-    const timer = setTimeout(() => done(false), THEME_METADATA_TIMEOUT_MS);
+    const timer = setTimeout(() => done(false), METADATA_TIMEOUT_MS);
     el.addEventListener('loadedmetadata', () => done(Number.isFinite(el.duration) && el.duration > 1), { once: true });
     el.addEventListener('error', () => done(false), { once: true });
     el.load();
   });
   if (!ok) {
-    console.warn(`music: ${src} unavailable, falling back to the synthesised theme`);
+    console.warn(`music: ${src} unavailable, falling back to the synthesised "${name}"`);
     return null;
   }
 
@@ -428,7 +440,7 @@ async function createFileTheme({ bus, src = THEME_SRC }) {
   let pauseTimer = null;
 
   return {
-    name: 'theme',
+    name,
     steps: 1,
     repeats: 1,
 
@@ -483,12 +495,22 @@ export function createMusic() {
     // the music off cannot take the sound effects down with it.
     ctx = audioContext();
     musicGain = createMusicBus(volume);
-    // The produced mix if it is reachable, the synthesised one if it is not. Either way it is
-    // called 'theme' and nothing downstream can tell which it got.
-    const theme = await createFileTheme({ bus: musicGain }) ?? createTheme({ bus: musicGain });
-    // The theme is first because start() always comes back to the top, and the track somebody
-    // turned off is the one they expect back when they turn it on again.
-    tracks = [theme, ...createAmbient({ bus: musicGain })];
+
+    /* Four slots, each a produced mix if its file is reachable and the synthesised version of
+     * itself if it is not.
+     *
+     * The synthesised tracks are built either way, and that is on purpose rather than wasteful:
+     * they are what defines the slot — its name, and what it should sound like — and an unused
+     * one costs a single gain node at zero that is never scheduled. No oscillator exists until
+     * something calls its `schedule`.
+     *
+     * The theme is first because start() always comes back to the top, and the track somebody
+     * turned off is the one they expect back when they turn it on again. */
+    const synth = [createTheme({ bus: musicGain }), ...createAmbient({ bus: musicGain })];
+    // In parallel: four metadata probes in sequence would be four round trips in front of the
+    // first note, on a path that a user gesture is waiting on.
+    tracks = await Promise.all(synth.map(async fallback =>
+      await createFileTrack({ bus: musicGain, name: fallback.name }) ?? fallback));
   }
 
   /**

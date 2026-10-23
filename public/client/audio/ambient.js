@@ -1,6 +1,9 @@
-// Three ambient beds for in-game. Synthesised — these three still are, note. The THEME is a
-// produced file now (see music.js); the beds are not, because a bed has to survive being heard
-// sixty times in a round and the thing that makes that bearable is the generated overlap below.
+// Three ambient beds for in-game, synthesised.
+//
+// All three now have a produced file in /assets/audio named after them, and that file is what
+// actually plays — see createFileTrack in music.js. What is below is the FALLBACK, and it is
+// also the specification: it defines each slot, its name, and what it is supposed to sound
+// like, which is why the tests still hold it to that and why it is worth reading.
 //
 // The main theme has a kit, a lead and an opinion. These are the opposite, on purpose: a round
 // lasts sixteen minutes and the thing playing underneath it has to survive being heard sixty

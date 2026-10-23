@@ -40,9 +40,9 @@ is ready in about **50 ms**. The netcode is designed to survive 180 ms, so there
   WebTransport/QUIC pair. No framework.
 - Art is generated in code — nothing inside the game is an image. Four decorative PNGs on the
   landing page and a font are the only binary art.
-- Audio is generated in code too, with one exception: **the theme is a file**
-  (`assets/audio/theme.mp3`). The three in-game ambient beds are still synthesised, and the
-  synthesised theme is kept as the fallback if the file cannot be loaded.
+- Audio is **four produced files** — `assets/audio/{theme,drift,suspend,undertow}.mp3`, about
+  three minutes each, cycling. Each is named after the slot it fills, so the synthesised
+  version of that slot is its automatic fallback. Every sound effect is still generated.
 
 What it is **not**: see [docs/DESIGN.md](docs/DESIGN.md) → Non-goals. Short version: no accounts,
 no payments, no persistent world, no mobile, no matchmaking, no anti-cheat.

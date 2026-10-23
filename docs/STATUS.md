@@ -20,7 +20,7 @@ accurate; the parts that describe *what is not built yet* are not.
 | Deployed, TLS, auto-restart, rollback | ✅ |
 | Bots | ✅ 15 of them, pathfinding and fleeing |
 | Maps | ✅ 5 |
-| Art and audio | ✅ generated in code, bar four landing-page PNGs and the theme (see §2e) |
+| Art and audio | ✅ art in code; music is four produced files (see §2e) |
 | Transport | ✅ **WebTransport over QUIC, with WebSocket as the fallback** |
 | Persistence | ✅ leaderboard, levels, XP — banked on disconnect, round end **and shutdown** |
 | Observer mode | ✅ built — Spectate on the menu, and from the death card |
@@ -78,25 +78,35 @@ it and nobody else.
   six a round, at least one guaranteed. They chain into each other and into bombs, because a keg
   *is* a bomb as far as the blast code is concerned. See [RULES.md](RULES.md) §10.
 
-### (e) Art is no longer purely code, and neither is the theme
+### (e) Art is still code. The music is not.
 
 Four PNGs live in `public/assets/img/`: the mascot, its cropped face, a stack of kegs and an icon.
 They are landing-page and HUD decoration only. **Everything inside the game — terrain, players,
 bombs, fire, perks, the sea, the moored ship, the boulders — is still drawn from shapes in
 code**, and that rule has not moved.
 
-The **theme is now a produced file**, `assets/audio/theme.mp3`. It is the twenty seconds somebody
-hears before they have decided whether to play, and a mix beats an oscillator at that job by a
-distance no amount of synthesis work closes. The three in-game ambient beds are still generated,
-deliberately: a bed has to survive being heard sixty times in a round, and what makes that
-bearable is the generated overlap — every note landing on the tail of the last one, so there is
-never a line to follow and never a seam to notice.
+**The music is four produced files**, in `assets/audio/`: `theme`, `drift`, `suspend`,
+`undertow`. Around three minutes each, cycling, with the theme excluded for the duration of a
+round so it never starts playing a tune with a backbeat over a firefight. Every sound effect is
+still synthesised.
 
-The synthesised theme is still in `music.js` and still tested. It is the **fallback**: if the
-file 404s, fails to decode, or the browser refuses the format, the menu has music rather than
-silence. Serving the file needed two things the server did not have — an `audio/mpeg` type and
-byte-range support, the latter because Safari refuses to play an `<audio>` source at all from a
-server that answers a `Range` request with a 200.
+Each file is named after the **slot** it fills rather than after the mix it came from, and that
+is the whole trick: `createFileTrack` asks for `/assets/audio/<its own name>.mp3` and uses the
+synthesised version of itself when the file is not there. There is no table mapping names to
+files, and adding or replacing a track is dropping in an mp3.
+
+So the synthesised theme and the three synthesised beds in `ambient.js` are not dead code. They
+are the fallback, and they are also the specification — what each slot is called and what it is
+supposed to sound like. The tests still hold them to it.
+
+A produced mix is wrapped as a track with ONE step whose duration is the length of the file,
+minus the crossfade so the next track overlaps the outro instead of following a gap. Nothing
+above `createFileTrack` knows the difference, which is why crossfading, `exclude`, `playFrom`,
+muting and ducking all work on it unchanged.
+
+Serving them needed two things the server did not have — an `audio/mpeg` type and byte-range
+support, the latter because Safari refuses to play an `<audio>` source at all from a server that
+answers a `Range` request with a 200.
 
 The assets folder is now `art.js` plus `img/`, `fonts/` and `audio/`.
 

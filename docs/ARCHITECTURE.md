@@ -86,7 +86,7 @@ public/
     art.js                     everything in the game, drawn from shapes
     img/*.png                  four decorative images: mascot, face, kegs, icon
     fonts/shotling.ttf         the display face
-    audio/theme.mp3            the theme. The only audio file; the beds are synthesised
+    audio/*.mp3                theme, drift, suspend, undertow — named after their slots
 
 infra/
   bootstrap.sh deploy.sh rollback.sh logs.sh bomb-voyage.service
