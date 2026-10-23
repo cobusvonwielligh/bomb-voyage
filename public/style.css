@@ -401,7 +401,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 
 .card {
   --panel-fill: #141b24f2;
-  border-radius: 16px; padding: 42px 48px 34px; width: 600px; position: relative;
+  border-radius: 16px; padding: 34px 48px 26px; width: 600px; position: relative;
   box-shadow: 0 0 80px #6b21a840, 0 22px 60px #000b;
 }
 .card.small { width: 340px; text-align: center; }
@@ -478,8 +478,8 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 #menuWrap { position: relative; }
 #mascot {
   position: absolute;
-  top: -84px; right: -104px;
-  width: 280px; height: 280px;
+  top: -58px; right: -74px;
+  width: 210px; height: 210px;
   z-index: 2;
   pointer-events: none;
   animation: bob 5.5s ease-in-out infinite;
@@ -524,7 +524,7 @@ h1 {
   font-family: var(--display);
   color: var(--gold); line-height: 1; letter-spacing: .05em;
   text-transform: uppercase;
-  margin: 0 0 12px;
+  margin: 0 0 10px;
   text-shadow: 0 4px 0 #0009, 0 0 34px #ffd21f55;
 }
 
@@ -545,7 +545,7 @@ h1 {
   filter: drop-shadow(0 3px 0 #0009) drop-shadow(0 0 26px #ffd21f44);
 }
 
-.sub { color: var(--dim); margin: 0 0 30px; font-size: 14.5px; letter-spacing: .04em; }
+.sub { color: var(--dim); margin: 0 0 24px; font-size: 14.5px; letter-spacing: .04em; }
 
 label {
   display: block; color: var(--dim); font-size: 11px; letter-spacing: .2em;
@@ -565,7 +565,7 @@ input[type=text]:focus {
 
 /* PLAY is the only thing on this page anyone needs to find, so it is the only filled control. */
 #play {
-  width: 100%; margin-top: 18px; padding: 18px; font-size: 32px; letter-spacing: .2em;
+  width: 100%; margin-top: 16px; padding: 15px; font-size: 32px; letter-spacing: .2em;
   font-family: var(--display); line-height: 1;
   color: #130f05;
   background: linear-gradient(180deg, #ffe066, var(--gold) 55%, #e0a800);
@@ -601,14 +601,14 @@ label { margin-bottom: 9px; }
  * anybody parsing the sentence, and it lets the left column stay the same width no matter how
  * many keys a row names. The right column is a plain description at body size, because this is
  * the one block on the page somebody actually reads rather than scans. */
-.keys { margin: 30px 0 0; padding: 24px 0 0; border-top: 1px solid #ffffff14; }
+.keys { margin: 24px 0 0; padding: 20px 0 0; border-top: 1px solid #ffffff14; }
 .keys h2 {
-  margin: 0 0 16px; font-size: 11px; font-weight: normal; color: var(--gold);
-  text-transform: uppercase; letter-spacing: .24em; font-family: var(--display);
+  margin: 0 0 14px; font-size: 11px; font-weight: 700; color: var(--gold);
+  text-transform: uppercase; letter-spacing: .26em; font-family: var(--text);
 }
 .keys dl {
   margin: 0; display: grid; grid-template-columns: max-content 1fr;
-  gap: 12px 20px; align-items: center;
+  gap: 9px 20px; align-items: center;
 }
 .keys dt { display: flex; align-items: center; gap: 4px; }
 .keys dd { margin: 0; color: var(--dim); font-size: 14px; }
@@ -630,7 +630,7 @@ kbd {
 kbd.wide { min-width: 58px; }
 
 .menuFoot {
-  margin: 24px 0 0; padding-top: 18px; border-top: 1px solid #ffffff12;
+  margin: 20px 0 0; padding-top: 15px; border-top: 1px solid #ffffff12;
   display: flex; justify-content: space-between; align-items: center;
   font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .14em;
 }

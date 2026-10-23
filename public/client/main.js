@@ -204,7 +204,7 @@ const net = createNet({
       sfx.play(m.ace ? 'fanfare' : 'kill');
       renderer?.addFlash(m.ace ? 0.45 : 0.3, m.ace ? '179,107,255' : '255,210,31');
     }
-    killFeed(`${m.i === world.you ? 'you' : m.name} — ${m.kind}`,
+    killFeed(`${m.i === world.you ? 'you' : m.name}: ${m.kind}`,
       { youKilled: m.i === world.you });
   },
   onChat: m => {
@@ -345,7 +345,7 @@ function loop(now) {
  */
 function setValue(el, text, { worse = false } = {}) {
   if (!el || el.textContent === String(text)) return;
-  const first = el.textContent === '' || el.textContent === '\u2014';
+  const first = el.textContent === '' || el.textContent === '--';
   el.textContent = text;
   if (first) return;                        // joining is not an event worth flashing
   const cls = worse ? 'bump-bad' : 'bump';
@@ -383,7 +383,7 @@ function drawRespawn(me) {
   btn.disabled = left > 0;
   setValue(btn, left > 0 ? `respawn in ${secs}` : 'respawn ready');
   $('deadText').textContent = left > 0
-    ? 'hold space to go again the moment it is ready'
+    ? 'hold space to go again as soon as it is ready'
     : 'space to respawn \u00b7 esc to leave';
 }
 
