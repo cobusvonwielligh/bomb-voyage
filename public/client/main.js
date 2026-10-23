@@ -636,15 +636,21 @@ function drawHud() {
   const mm = String(Math.floor(secs / 60)).padStart(2, '0');
   const ss = String(secs % 60).padStart(2, '0');
 
-  // A minute out, one warning. Then the last fifteen seconds get a tick each, climbing in pitch
-  // and loudness, so the end of a round arrives rather than simply happening.
+  // A minute out, one warning. Then the last twenty seconds get a tick each.
+  //
+  // Urgency is the cube of how far through the twenty you are, not a straight line. A linear
+  // ramp spends its first half audibly building, which makes twenty seconds of it exhausting;
+  // cubed, it stays a quiet metronome until about eight seconds out and then climbs hard. The
+  // shape is the point: the first half says "time is running out", the last few say "NOW".
+  const COUNTDOWN_FROM = 20;
   if (secs <= 60 && secs > 57 && warnedAt !== 60) { warnedAt = 60; sfx.play('warn'); }
   if (secs > 61) warnedAt = -1;             // a new round re-arms it
-  if (secs <= 15 && secs > 0 && secs !== tickedAt) {
+  if (secs <= COUNTDOWN_FROM && secs > 0 && secs !== tickedAt) {
     tickedAt = secs;
-    sfx.play('tick', undefined, undefined, { urgency: (15 - secs) / 14 });
+    const through = (COUNTDOWN_FROM - secs) / (COUNTDOWN_FROM - 1);
+    sfx.play('tick', undefined, undefined, { urgency: through * through * through });
   }
-  if (secs > 15) tickedAt = -1;
+  if (secs > COUNTDOWN_FROM) tickedAt = -1;
 
   $('vClock').textContent = `${mm}:${ss}`;
   $('clock').classList.toggle('low', secs <= 60);

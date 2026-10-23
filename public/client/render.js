@@ -11,7 +11,7 @@ import {
 } from '/shared/constants.js';
 import { cellType, cellHp } from '/shared/maps.js';
 import {
-  drawTile, drawFire, drawPerk, drawRock, playerShades, PALETTE, bake, bakeSea,
+  drawTile, drawFire, drawPerk, drawRock, drawShip, playerShades, PALETTE, bake, bakeSea,
 } from '/assets/art.js';
 
 const CHUNK_PX = TILE_PX * CHUNK_TILES;
@@ -300,7 +300,7 @@ export function createRenderer(canvas, world) {
   // visual noise once the whole map is zoomed to fit.
   const DRIFT_SPEED = [9, 22];            // world px/s
   const TRAIN_SPREAD = [Math.PI / 9, Math.PI / 4];   // 20-45 degrees off the drift
-  const TRAIN_WAVELENGTH = [70, 220];     // px between crests
+  const TRAIN_WAVELENGTH = [88, 275];     // px between crests (a quarter wider than the first pass)
   const TRAIN_SPEED = [16, 52];           // px/s the crests travel
   const TRAIN_AMPLITUDE = [7, 16];        // px/s of sideways push at the crest
 
@@ -316,7 +316,7 @@ export function createRenderer(canvas, world) {
    * train's, so the calm patches travel ACROSS the waves rather than with them — which is what
    * makes them read as areas of water rather than as part of the wave pattern.
    */
-  const ENVELOPE_WAVELENGTH = [320, 900];   // px across a band of chop
+  const ENVELOPE_WAVELENGTH = [400, 1125];  // px across a band of chop
   const ENVELOPE_SPEED = [4, 14];           // px/s the bands drift
   const ENVELOPE_FLOOR = 0.3;               // how calm the calm patches get
 
@@ -469,6 +469,57 @@ export function createRenderer(canvas, world) {
     });
   }
 
+  /* Where the ship is moored, and which way she lies.
+   *
+   * Deterministic in the map, not random: she is scenery, and scenery that moves when you
+   * respawn is a bug as far as the eye is concerned. The spot is picked from the shoreline list
+   * at an index derived from the map's own dimensions, which is stable for a given map and
+   * different between maps.
+   *
+   * She lies ALONGSIDE the coast rather than bow-on, because that is how a ship is moored, and
+   * close enough in that the rocks drawn over her cut off part of the hull — you see a ship
+   * parked behind the headland, not a model floating in open water.
+   */
+  let mooredFor = null, moored = null;
+  function mooring() {
+    if (mooredFor === world.map) return moored;
+    mooredFor = world.map;
+    moored = null;
+    const edges = shoreline();
+    if (!edges.length) return null;
+
+    // Prefer a stretch of coast facing left or right: the ship is three times longer than she
+    // is wide, and lying her along a north or south shore puts her across the map.
+    const side = edges.filter(e => (e.e & 1) || (e.e & 4));
+    const pool = side.length ? side : edges;
+    const pick = pool[(world.map.w * 7919 + world.map.h * 104729) % pool.length];
+
+    const dx = (pick.e & 1 ? 1 : 0) - (pick.e & 4 ? 1 : 0);
+    const dy = (pick.e & 8 ? 1 : 0) - (pick.e & 2 ? 1 : 0);
+    const out = Math.hypot(dx, dy) || 1;
+    moored = {
+      // 1.7 tiles off the rock: far enough to float, close enough to be partly hidden by it.
+      x: (pick.tx + 0.5 + (dx / out) * 1.7) * TILE_PX,
+      y: (pick.ty + 0.5 + (dy / out) * 1.7) * TILE_PX,
+      // Perpendicular to the way the shore faces, so she lies along it.
+      angle: Math.atan2(dx, -dy),
+    };
+    return moored;
+  }
+
+  function drawMoored(ox, oy) {
+    const m = mooring();
+    if (!m) return;
+    ctx.save();
+    ctx.translate(ox + m.x, oy + m.y);
+    ctx.rotate(m.angle);
+    // A slow roll at anchor. Tiny — a degree and a half — but a ship that is perfectly still on
+    // water that is not reads as a sprite rather than as a boat.
+    ctx.rotate(Math.sin(seaT * 0.45) * 0.026);
+    drawShip(ctx);
+    ctx.restore();
+  }
+
   function drawSea(vw, vh, ox, oy, dtMs) {
     if (!seaNear) return;
     seaT += dtMs / 1000;
@@ -589,6 +640,9 @@ export function createRenderer(canvas, world) {
     const ox = -Math.round(cam.x) + Math.round(sx), oy = -Math.round(cam.y) + Math.round(sy);
 
     drawSea(vw, vh, ox, oy, dtMs);
+    // Under the island chunks on purpose: the shoreline rocks are drawn over her, so part of the
+    // hull disappears behind the headland she is moored against.
+    drawMoored(ox, oy);
     drawDrops(vw, vh, ox, oy, Math.min(0.05, dtMs / 1000));
 
     const cx0 = Math.floor(cam.x / CHUNK_PX), cx1 = Math.floor((cam.x + vw) / CHUNK_PX);

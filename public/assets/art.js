@@ -687,6 +687,204 @@ export function drawPerk(c, { type = 1, bob = 0 }) {
   c.restore();
 }
 
+/**
+ * The ship, seen from directly above, moored off the island.
+ *
+ * Drawn at the origin, bow pointing along +x, about 100px long — the caller rotates and places
+ * it. Top-down is an unusual view of a boat and the thing that makes it readable is the HULL
+ * OUTLINE: a pointed bow, a wide waist and a square transom. Get that silhouette right and the
+ * deck furniture is detail; get it wrong and no amount of detail rescues it.
+ *
+ * Deliberately a little grander than it needs to be — a capstan, a hatch, a boat on the deck,
+ * two cannon a side. You only ever see part of it past the rocks, and the part you see should
+ * suggest the rest.
+ */
+export function drawShip(c) {
+  const L = 134, W = 38;                 // length bow-to-stern, beam at the waist
+
+  /* The hull outline, as one reusable path at a given inset.
+   *
+   * Top-down is an unusual view of a boat and the silhouette is the whole read: a sharp bow, a
+   * beam carried well aft, and a FLAT TRANSOM. Round the stern off and it becomes a canoe — the
+   * squared-off back is the single line that says "ship". Every deck layer is the same curve
+   * stepped inwards, which keeps the gunwale a constant thickness all the way round instead of
+   * pinching to nothing at the bow.
+   */
+  const hull = (i, fill) => {
+    const bx = L / 2 - i, sx = -L / 2 + i, hw = W / 2 - i, tw = W / 2.6 - i;
+    c.beginPath();
+    c.moveTo(bx, 0);
+    c.bezierCurveTo(bx - L * 0.16, -hw * 0.5, -L * 0.06, -hw, sx + L * 0.05, -tw);
+    c.lineTo(sx, -tw * 0.92);
+    c.lineTo(sx, tw * 0.92);
+    c.lineTo(sx + L * 0.06, tw);
+    c.bezierCurveTo(-L * 0.06, hw, bx - L * 0.16, hw * 0.5, bx, 0);
+    c.closePath();
+    if (fill) { c.fillStyle = fill; c.fill(); }
+  };
+
+  // ── in the water ──
+  // Disturbed water around her and a shadow under her, so she sits IN the sea rather than on
+  // top of it. Both go down before the hull.
+  // A ring, not a disc: a filled halo reads as a shadow in the wrong direction, where a ring
+  // reads as the water she has pushed aside.
+  c.save();
+  c.globalAlpha = 0.14;
+  c.strokeStyle = PALETTE.foam;
+  c.lineWidth = 3;
+  c.beginPath(); c.ellipse(0, 0, L / 2 + 8, W / 2 + 8, 0, 0, 7); c.stroke();
+  c.globalAlpha = 0.07;
+  c.lineWidth = 7;
+  c.beginPath(); c.ellipse(0, 0, L / 2 + 13, W / 2 + 12, 0, 0, 7); c.stroke();
+  c.restore();
+  c.save();
+  c.translate(4, 6);
+  c.globalAlpha = 0.32;
+  hull(0, '#000');
+  c.restore();
+
+  // ── hull ──
+  hull(0, '#2f2217');                    // wet planking at the waterline
+  hull(3, '#73512f');                    // gunwale, lit
+  hull(4.5, '#4e381f');                  // inner face of the rail, in shadow
+  hull(7, '#9a7047');                    // deck
+
+  // Deck furniture, clipped to the deck so nothing overhangs the rail.
+  c.save();
+  hull(7, null);                         // the same path again, used only as a clip
+  c.clip();
+
+  // Planking, running fore and aft as deck planks actually do.
+  for (let y = -W / 2; y < W / 2; y += 3) px(c, -L / 2, y, L, 1, 'rgba(0,0,0,0.13)');
+  for (let i = 0; i < 26; i++) {         // grain, so it is not a perfect comb
+    const gx = -L / 2 + hash(i, 3) * L, gy = -W / 2 + hash(3, i) * W;
+    px(c, gx, gy, 2 + hash(i, i) * 6, 1, 'rgba(0,0,0,0.1)');
+  }
+
+  // Raised quarterdeck aft, with its own shadow onto the main deck. This is what reads as a
+  // ship with a stern castle rather than as an open boat.
+  px(c, -L / 2 + 28, -W / 2, 3, W, 'rgba(0,0,0,0.22)');
+  rr(c, -L / 2 + 2, -W / 2 + 5, 26, W - 10, 3, '#a87a4e');
+  for (let y = -W / 2 + 7; y < W / 2 - 5; y += 3) px(c, -L / 2 + 2, y, 26, 1, 'rgba(0,0,0,0.12)');
+  px(c, -L / 2 + 2, -W / 2 + 5, 26, 1, 'rgba(255,255,255,0.16)');
+
+  // The wheel, right aft.
+  c.strokeStyle = '#3a2a1c'; c.lineWidth = 1.6;
+  c.beginPath(); c.arc(-L / 2 + 13, 0, 5, 0, 7); c.stroke();
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    c.beginPath();
+    c.moveTo(-L / 2 + 13, 0);
+    c.lineTo(-L / 2 + 13 + Math.cos(a) * 6.5, Math.sin(a) * 6.5);
+    c.stroke();
+  }
+
+  // Two cargo hatches with gratings. Cross-hatched, because a plain rectangle on a planked deck
+  // disappears into the planking.
+  for (const [hx, hw2, hh] of [[-10, 22, 20], [26, 15, 14]]) {
+    rr(c, hx, -hh / 2, hw2, hh, 2, '#4a3421');
+    rr(c, hx + 2, -hh / 2 + 2, hw2 - 4, hh - 4, 1, '#6b4e30');
+    for (let gx = hx + 3; gx < hx + hw2 - 2; gx += 4) px(c, gx, -hh / 2 + 2, 1, hh - 4, '#3a2a1c');
+    for (let gy = -hh / 2 + 3; gy < hh / 2 - 2; gy += 4) px(c, hx + 2, gy, hw2 - 4, 1, '#3a2a1c');
+  }
+
+  // The ship's boat, stowed upside down amidships. Instantly readable as "a boat on a boat",
+  // and the kind of detail that makes a vessel look lived in.
+  c.save();
+  c.translate(8, 0);
+  c.beginPath();
+  c.moveTo(10, 0);
+  c.bezierCurveTo(5, -5.5, -5, -5.5, -10, 0);
+  c.bezierCurveTo(-5, 5.5, 5, 5.5, 10, 0);
+  c.closePath();
+  c.fillStyle = '#6b4e30'; c.fill();
+  c.strokeStyle = '#3a2a1c'; c.lineWidth = 1; c.stroke();
+  px(c, -9, -0.5, 18, 1, '#3a2a1c');     // its keel, uppermost
+  c.restore();
+
+  // Coils of rope by the rail. Three rings each, because a single circle reads as a plate.
+  for (const [rx, ry] of [[-24, -W / 2 + 8], [40, W / 2 - 8], [-2, W / 2 - 7]]) {
+    c.strokeStyle = '#c9a874'; c.lineWidth = 1.1;
+    for (const r of [1.5, 2.8, 4.1]) { c.beginPath(); c.arc(rx, ry, r, 0, 7); c.stroke(); }
+  }
+
+  // The fo'c'sle: a short raised deck right forward, mirroring the quarterdeck.
+  rr(c, L / 2 - 38, -W / 2 + 8, 22, W - 16, 3, '#a87a4e');
+  for (let y = -W / 2 + 10; y < W / 2 - 8; y += 3) px(c, L / 2 - 38, y, 22, 1, 'rgba(0,0,0,0.12)');
+  px(c, L / 2 - 38, -W / 2 + 8, 22, 1, 'rgba(255,255,255,0.14)');
+  // An anchor stowed on the fo'c'sle: a stock, a shank and two flukes. Small, but it is the one
+  // object up here that is unmistakably nautical.
+  c.save();
+  c.translate(L / 2 - 27, 0);
+  c.strokeStyle = '#2b2f36'; c.lineWidth = 1.6; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(-6, 0); c.lineTo(7, 0); c.stroke();          // shank
+  c.beginPath(); c.moveTo(4, -4.5); c.lineTo(4, 4.5); c.stroke();      // stock
+  c.beginPath();
+  c.moveTo(-6, 0); c.quadraticCurveTo(-7, -4, -3, -5);
+  c.moveTo(-6, 0); c.quadraticCurveTo(-7, 4, -3, 5);
+  c.stroke();                                                          // flukes
+  c.restore();
+  px(c, L / 2 - 40, -W / 2, 2, W, 'rgba(0,0,0,0.18)');
+  c.restore();
+
+  // ── cannon ──
+  // Barrels run out through the ports, so they overhang the rail. Drawn after the clip is
+  // released, with a port shadow under each so they are not glued on.
+  for (const x of [-22, -2, 18]) {
+    for (const sgn of [-1, 1]) {
+      const y = sgn * (W / 2 - 3);
+      rr(c, x, y - (sgn > 0 ? 1 : 6), 2.6, 7, 1.3, '#23262c');
+      px(c, x, y + (sgn > 0 ? 4.5 : -5.5), 2.6, 1.3, '#15181d');  // the muzzle
+    }
+  }
+
+  /* ── masts ──
+   *
+   * From above a mast is a circle, and a circle is not a mast. What makes it legible is the YARD
+   * across it with furled canvas bundled on it: a long pale bar athwartships, square to the
+   * hull. Two of them at different lengths give the fore-and-aft arrangement away immediately.
+   */
+  const mast = (x, span, r) => {
+    rr(c, x - 1.4, -span / 2, 2.8, span, 1.4, '#3f2e1e');              // the spar
+    rr(c, x - 4, -span / 2 + 2, 8, span - 4, 4, '#d8cbab');            // canvas bundled on it
+    rr(c, x - 4, -span / 2 + 2, 8, (span - 4) / 2, 4, 'rgba(255,255,255,0.12)');
+    for (let i = -2; i <= 2; i++) px(c, x - 4, i * (span / 7), 8, 1.2, 'rgba(60,45,28,0.5)');
+    c.beginPath(); c.arc(x, 0, r, 0, 7); c.fillStyle = '#2a1d12'; c.fill();
+    c.beginPath(); c.arc(x - r * 0.3, -r * 0.3, r * 0.45, 0, 7);
+    c.fillStyle = 'rgba(255,255,255,0.22)'; c.fill();
+  };
+
+  // Rigging first, so the spars sit on top of it.
+  c.strokeStyle = 'rgba(24,16,9,0.38)';
+  c.lineWidth = 0.9;
+  for (const [x, span] of [[-18, W + 8], [18, W - 4]]) {
+    for (const sgn of [-1, 1]) {
+      c.beginPath(); c.moveTo(x, (sgn * span) / 2); c.lineTo(x - 26, sgn * (W / 2 - 5)); c.stroke();
+      c.beginPath(); c.moveTo(x, (sgn * span) / 2); c.lineTo(x + 24, sgn * (W / 2 - 7)); c.stroke();
+    }
+  }
+  mast(-18, W + 8, 4);
+  mast(18, W - 4, 3.4);
+
+  // Bowsprit, out over the bow with a jib furled along it. The detail that reads as "ship" from
+  // furthest away, because it is the one thing that breaks the hull outline.
+  rr(c, L / 2 - 16, -1.4, 30, 2.8, 1.4, '#3f2e1e');
+  rr(c, L / 2 - 4, -2.3, 13, 4.6, 2.3, '#d8cbab');
+  px(c, L / 2 + 2, -2.3, 1.2, 4.6, 'rgba(60,45,28,0.5)');
+
+  // A lantern at the stern. One warm point on a cold blue sea, and the only saturated colour on
+  // the whole thing — which is what makes the eye find her.
+  const lx = -L / 2 + 5;
+  c.beginPath(); c.arc(lx, 0, 7, 0, 7);
+  c.fillStyle = 'rgba(255,196,92,0.16)'; c.fill();
+  c.beginPath(); c.arc(lx, 0, 3.6, 0, 7);
+  c.fillStyle = 'rgba(255,196,92,0.4)'; c.fill();
+  c.beginPath(); c.arc(lx, 0, 2.1, 0, 7);
+  c.fillStyle = '#ffe3a6'; c.fill();
+  c.strokeStyle = 'rgba(40,28,16,0.7)'; c.lineWidth = 0.9;
+  c.beginPath(); c.moveTo(lx - 2.4, 0); c.lineTo(lx + 2.4, 0); c.stroke();
+}
+
 // ─── mascot ───────────────────────────────────────────────────────────────────
 
 /**
@@ -789,8 +987,12 @@ function waterLayer(cyclesX, cyclesY, amp, colour, alpha) {
   c.lineWidth = 2;
   const kx = (Math.PI * 2 * cyclesX) / WATER_TILE;
   const ky = (Math.PI * 2 * cyclesY) / WATER_TILE;
-  for (let row = 0; row < 8; row++) {
-    const y0 = (row + 0.5) * (WATER_TILE / 8);
+  // Six rows across the tile, not eight: a quarter more space between crests. Packed tighter
+  // the lines start to read as corduroy rather than as water, and the gaps are where the deeper
+  // colour shows through, which is most of what makes it look wet.
+  const ROWS = 6;
+  for (let row = 0; row < ROWS; row++) {
+    const y0 = (row + 0.5) * (WATER_TILE / ROWS);
     c.beginPath();
     for (let x = 0; x <= WATER_TILE; x += 4) {
       const y = y0 + Math.sin(x * kx + row * 1.7) * amp + Math.sin(y0 * ky) * amp * 0.4;
