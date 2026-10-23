@@ -31,6 +31,30 @@ export const QUIPS = [
   "{n}, if you survive this one I'll be amazed and so will you.",
 ];
 
+/**
+ * What he says when you hover PLAY on the landing page.
+ *
+ * Different register to the in-game lines: those are heckling, these are the last thing you read
+ * before the round starts, so they are closer to advice than abuse.
+ */
+export const MENU_QUIPS = [
+  'The trick is to be elsewhere when it goes off.',
+  'Corners kill. Mostly you.',
+  'Every wall is temporary. Including the one behind you.',
+  'Drop it, then leave. In that order.',
+  'The last pirate standing is usually the patient one.',
+  'Bombs are cheap. You are not.',
+  'If you can see the fuse, you are too close.',
+  'Dead ends are only dead for one of you.',
+  'Pick up everything. Apologise later.',
+  'Nobody wins standing still.',
+  'That bomb has a plan. Do you?',
+  'Fortune favours the bold. Statistics do not.',
+  'Blow up the walls, not the schedule.',
+  'There is no honour in the middle of a crossfire.',
+  'Press it. The worst that happens is everything.',
+];
+
 export const ON_DEATH = ['Oof.', 'Oof!', 'Oof… that one hurt.'];
 export const ON_SPAWN = ["Let's go!", "Let's go, {n}!", 'Back at it!'];
 

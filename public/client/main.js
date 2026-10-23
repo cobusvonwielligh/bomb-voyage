@@ -14,7 +14,7 @@ import { createWorld } from './world.js';
 import { createRenderer } from './render.js';
 import { createMusic } from './audio/music.js';
 import { createSfx } from './audio/sfx.js';
-import { createQuips } from './quips.js';
+import { createQuips, MENU_QUIPS } from './quips.js';
 
 const $ = id => document.getElementById(id);
 
@@ -44,6 +44,32 @@ const quips = createQuips({
   el: $('say'),
   nameOf: () => world.me()?.name ?? '',
 });
+
+/**
+ * The mascot's advice, while the pointer is on PLAY.
+ *
+ * A fresh line per hover rather than one per page load: hovering twice and getting the same
+ * sentence makes it read as static copy that happens to be hidden, which is the opposite of the
+ * effect. Focus counts as hover too, so tabbing to the button gets it as well.
+ */
+let lastMenuQuip = '';
+const menuSay = $('menuSay');
+
+function showMenuQuip() {
+  let line = MENU_QUIPS[(Math.random() * MENU_QUIPS.length) | 0];
+  if (line === lastMenuQuip && MENU_QUIPS.length > 1) {
+    line = MENU_QUIPS[(Math.random() * MENU_QUIPS.length) | 0];
+  }
+  lastMenuQuip = line;
+  menuSay.textContent = line;
+  menuSay.classList.add('show');
+}
+const hideMenuQuip = () => menuSay.classList.remove('show');
+
+$('play').addEventListener('pointerenter', showMenuQuip);
+$('play').addEventListener('focus', showMenuQuip);
+$('play').addEventListener('pointerleave', hideMenuQuip);
+$('play').addEventListener('blur', hideMenuQuip);
 
 const syncAudio = () => {
   $('musicBtn').textContent = music.playing ? '♪ on' : '♪ off';

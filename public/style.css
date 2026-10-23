@@ -717,6 +717,45 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   z-index: 0;
 }
 
+/* His advice, on hovering PLAY. White, where the in-game bubble is dark: this one sits over a
+ * near-black landing page and has to read as a piece of paper rather than another dim panel.
+ *
+ * Up and to his right, and inside #mascot so it rides the bob with him — a bubble that stayed
+ * still while his head moved would look pinned to the page rather than attached to him. */
+#menuSay {
+  position: absolute;
+  bottom: calc(100% - 46px);
+  left: calc(100% - 34px);
+  width: 232px;
+  padding: 12px 15px;
+  border-radius: 14px;
+  background: #fbf7ec;
+  color: #16202b;
+  font-size: 14.5px; line-height: 1.35; font-weight: 600;
+  text-wrap: balance;
+  box-shadow: 0 14px 34px #000a, 0 0 0 1.5px #ffffff33;
+  opacity: 0; transform: scale(.72) translate(-12px, 10px);
+  transform-origin: 0 100%;
+  pointer-events: none;
+  z-index: 3;
+  transition: opacity .18s ease, transform .18s cubic-bezier(.2, 1.5, .4, 1);
+}
+/* The tail, as a rotated square tucked under the bottom-left corner so it points back at him. */
+#menuSay::after {
+  content: '';
+  position: absolute; left: 20px; bottom: -6px;
+  width: 14px; height: 14px;
+  background: #fbf7ec;
+  transform: rotate(45deg);
+}
+#menuSay.show { opacity: 1; transform: scale(1) translate(0, 0); }
+
+/* Below this the bubble would run off the right-hand edge, so it goes over the card instead. */
+@media (max-width: 1260px) {
+  #menuSay { left: auto; right: calc(100% - 44px); transform-origin: 100% 100%; }
+  #menuSay::after { left: auto; right: 20px; }
+}
+
 @keyframes bob {
   0%, 100% { transform: translateY(0) rotate(-1deg); }
   50%      { transform: translateY(-16px) rotate(1deg); }
