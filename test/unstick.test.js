@@ -106,33 +106,48 @@ test('step() unsticks before it reads the position', () => {
   assert.ok(!blocked(s, p, p.x, p.y));
 });
 
-test('lane centring eases in and is never faster than a deliberate move', () => {
-  // The snap people feel is not the unstick, it is this: walking off a bomb you just placed
-  // turns that tile solid underneath you, lane centring fires, and at the old flat 2x rate a
-  // booted player was moved half a tile sideways in a single tick.
+test('lane centring is imperceptible, and corner assist is not', () => {
+  /* Two jobs, two rates, and conflating them was the bug.
+   *
+   * Corridor centring happens while you walk along unobstructed and nothing asked for it, so it
+   * has to be invisible — a unit a tick. Corner assist happens when you are pushing into a gap
+   * the game is refusing you, where every tick is a tick of standing still against a doorway you
+   * can see you fit through. That one has to be immediate.
+   */
   const { s } = world();
   const p = seat(s, 0, 2, 4);
   p.speed = 4;                                   // fully booted: the worst case
-  p.y = tileCentre(4) + 112;                     // most of a half-tile off the centre line
-  // Something beside the lane, or centring correctly declines to fire at all.
-  setTile(s.map, 4, 3, BLOCK.SOFT, BLOCK_HP[BLOCK.SOFT]);
-  setTile(s.map, 4, 5, BLOCK.SOFT, BLOCK_HP[BLOCK.SOFT]);
+  // A corridor, so centring fires at all, with an offset small enough that the hitbox stays
+  // clear of the walls — otherwise this measures the assist instead.
+  for (let x = 1; x <= 7; x++) {
+    setTile(s.map, x, 3, BLOCK.SOFT, BLOCK_HP[BLOCK.SOFT]);
+    setTile(s.map, x, 5, BLOCK.SOFT, BLOCK_HP[BLOCK.SOFT]);
+  }
+  p.y = tileCentre(4) + 24;
 
   const offsets = [];
-  for (let n = 0; n < 24; n++) {
+  for (let n = 0; n < 40; n++) {
     step(s, p, IN_RIGHT);
     offsets.push(Math.abs((((p.y % 256) + 256) % 256) - 128));
   }
-
-  const steps = offsets.slice(0, -1)
-    .map((o, i) => o - offsets[i + 1])
-    .filter(d => d > 0);
+  const steps = offsets.slice(0, -1).map((o, i) => o - offsets[i + 1]).filter(d => d > 0);
   assert.ok(steps.length, 'centring never fired');
-
   const biggest = Math.max(...steps);
-  assert.ok(biggest <= 14, `a single tick moved ${biggest} units sideways`);
-  assert.ok(biggest < speedOf(p), `sideways drift (${biggest}) outran walking (${speedOf(p)})`);
+  // 2 rather than 1: the very last step rounds off whatever fraction of a unit is left.
+  assert.ok(biggest <= 2, `gentle centring moved ${biggest} units in one tick`);
+  assert.ok(biggest < speedOf(p), 'sideways drift outran walking');
 
-  // And it decelerates: the last correction is smaller than the first.
-  assert.ok(steps.at(-1) <= steps[0], `centring sped up: ${steps.join(',')}`);
+  // And the assist: pressed into the jamb, it must clear a near-miss in a handful of ticks.
+  const { s: s2 } = world();
+  const q = seat(s2, 0, 2, 4);
+  for (let x = 1; x <= 7; x++) {
+    if (x !== 4) { setTile(s2.map, x, 3, BLOCK.SOFT, BLOCK_HP[BLOCK.SOFT]); }
+    setTile(s2.map, x, 5, BLOCK.SOFT, BLOCK_HP[BLOCK.SOFT]);
+  }
+  setTile(s2.map, 3, 4, BLOCK.SOFT, BLOCK_HP[BLOCK.SOFT]);   // something to be refused by
+  q.y = tileCentre(4) + 100;
+  let ticks = 0;
+  while (Math.abs((((q.y % 256) + 256) % 256) - 128) > 0 && ticks < 200) { step(s2, q, IN_RIGHT); ticks++; }
+  assert.ok(ticks <= 40, `corner assist took ${ticks} ticks to line up — that is a stuck player`);
 });
+

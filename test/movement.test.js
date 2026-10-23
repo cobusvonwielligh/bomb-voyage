@@ -76,7 +76,7 @@ test('movement', async t => {
     p.y = tileCentre(2) + CORNER_ASSIST_UNITS;      // clipping the lower jamb
     // Centring is deliberately gentle — a few units a tick, easing — so getting lined up takes
     // tens of ticks rather than two. The assertion is still that it arrives EXACTLY.
-    for (let i = 0; i < 90; i++) step(st, p, IN_RIGHT);
+    for (let i = 0; i < 220; i++) step(st, p, IN_RIGHT);
     assert.equal(p.y, tileCentre(2), 'straightened onto the doorway centre line');
     assert.ok(p.x > tileCentre(3), 'and went through');
   });
@@ -94,7 +94,7 @@ test('movement', async t => {
     for (let x = 1; x <= 7; x++) { setTile(st.map, x, 1, BLOCK.SOFT); setTile(st.map, x, 3, BLOCK.SOFT); }
     const p = spawn(st, 2, 2);
     p.y = tileCentre(2) + 60;
-    for (let i = 0; i < 60; i++) step(st, p, IN_RIGHT);
+    for (let i = 0; i < 160; i++) step(st, p, IN_RIGHT);
     assert.equal(p.y, tileCentre(2), 'drifted exactly onto the centre line');
   });
 

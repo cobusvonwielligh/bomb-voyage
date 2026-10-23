@@ -30,9 +30,23 @@ const HALF_TILE = UNITS_PER_TILE >> 1;
  *                  pushes you sideways.
  */
 const ALIGN_RATE = 1;
-const ALIGN_FRACTION = 7;        // move 1/7 of the remaining offset
-const ALIGN_MIN_UNITS = 2;       // and never less than this, so it terminates
-const ALIGN_MAX_UNITS = 6;       // a quarter of a tile per second at the very most
+const ALIGN_FRACTION = 24;       // move 1/24 of the remaining offset
+const ALIGN_MIN_UNITS = 1;       // and never less than this, so it terminates
+const ALIGN_MAX_UNITS = 1;       // one unit a tick: a tile takes eight seconds
+
+/* Rounding a corner is a different job from tidying up a lane, and they used to share a rate.
+ *
+ * Corridor centring happens while you are walking along unobstructed and nothing is asking for
+ * it — so it has to be invisible, and the numbers above make it so.
+ *
+ * Corner assist happens when you are PUSHING INTO a gap you are nearly lined up with and the
+ * game is refusing the move. Every tick it takes is a tick of standing still against a doorway
+ * you can plainly see you fit through, which is the single most infuriating thing a Bomberman
+ * can do. It needs to be immediate, so it gets its own, much faster, rate.
+ */
+const ASSIST_FRACTION = 2;       // half the remaining offset each tick
+const ASSIST_MIN_UNITS = 12;
+const ASSIST_RATE = 2;           // and it may outrun the legs, because it is not travel
 
 // Being shoved out of a solid tile eases rather than running at a constant rate: a fraction of
 // whatever is left each tick, capped well below walking pace and floored so it still terminates.
@@ -167,15 +181,17 @@ function moveAxis(state, p, ax, ay, speed) {
    * finishes and capped so it is never a lurch. From a third of a tile out that is about a
    * dozen ticks, decelerating the whole way — you feel the game tidy you up, not shove you.
    */
-  const straighten = () => {
+  const straighten = (urgent = false) => {
     const delta = -off;
     const mag = Math.abs(delta);
-    const step = Math.min(
-      mag,
-      Math.max(ALIGN_MIN_UNITS, (mag / ALIGN_FRACTION) | 0),
-      ALIGN_MAX_UNITS,
-      speed * ALIGN_RATE,
-    );
+    const step = urgent
+      ? Math.min(mag, Math.max(ASSIST_MIN_UNITS, (mag / ASSIST_FRACTION) | 0), speed * ASSIST_RATE)
+      : Math.min(
+        mag,
+        Math.max(ALIGN_MIN_UNITS, (mag / ALIGN_FRACTION) | 0),
+        ALIGN_MAX_UNITS,
+        speed * ALIGN_RATE,
+      );
     const pull = Math.sign(delta) * step;
     const cx = horizontal ? p.x : p.x + pull;
     const cy = horizontal ? p.y + pull : p.y;
@@ -188,7 +204,7 @@ function moveAxis(state, p, ax, ay, speed) {
   // the solid tile next to it. Straighten up and you fit. Beyond the window, you are genuinely
   // aiming at a wall and deserve to stop.
   if (wayBlocked && off !== 0 && Math.abs(off) <= CORNER_ASSIST_UNITS) {
-    if (straighten()) return true;
+    if (straighten(true)) return true;
   }
 
   if (!wayBlocked) {

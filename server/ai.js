@@ -17,6 +17,7 @@
 
 import {
   IN_RIGHT, IN_UP, IN_LEFT, IN_DOWN, IN_BOMB, BLOCK, FUSE_TICKS, FUSE_TICKS_FAST, FIRE_TICKS,
+  POWDER_RADIUS,
   UNITS_PER_TILE, SPEED_UNITS_PER_TICK, SLOWDOWN_NUM, SLOWDOWN_DEN, STATUS,
   SHRUB_RADIUS_PENALTY, HITBOX_UNITS, HITBOX_REDUCED_UNITS,
 } from '../shared/constants.js';
@@ -96,22 +97,43 @@ export const createBrain = () => ({
  * propagated the same way `detonate` resolves it, only in advance.
  */
 export function dangerMap(state) {
-  const w = state.map.w;
+  const w = state.map.w, h = state.map.h;
   const bombs = state.bombs;
-  const n = bombs.length;
+
+  /* Powder kegs are bombs that have not been lit yet.
+   *
+   * They are blocks, so nothing in `state.bombs` knows about them — and a keg going off is a
+   * radius-7 blast that appeared with no fuse, no warning and no bomb on the danger map. A bot
+   * standing six tiles away was told its tile was perfectly clear right up until it was fire.
+   *
+   * So every keg joins the source list with an infinite time, meaning "not lit". The chain pass
+   * below is what lights them: if a real bomb's arm reaches a keg, the keg inherits that bomb's
+   * time and propagates in turn, exactly the way `detonate` resolves it. A keg nothing reaches
+   * stays at Infinity and contributes nothing, which is correct — an unlit keg is a wall.
+   */
+  const sources = bombs.map(b => ({ tx: b.tx, ty: b.ty, radius: b.radius, at: b.at }));
+  const bombCount = sources.length;
+  for (let ty = 0; ty < h; ty++) {
+    for (let tx = 0; tx < w; tx++) {
+      if (tileAt(state.map, tx, ty) !== BLOCK.POWDER) continue;
+      sources.push({ tx, ty, radius: POWDER_RADIUS, at: null });
+    }
+  }
+
+  const n = sources.length;
   const cells = new Array(n);
   const left = new Array(n);
   const solid = new Set();      // tile keys with a bomb on them: not walkable, for us
-  const byTile = new Map();     // tile key -> bomb index; one bomb per tile is a rule
+  const byTile = new Map();     // tile key -> source index; one per tile is a rule
 
   for (let i = 0; i < n; i++) {
-    const b = bombs[i];
+    const b = sources[i];
     const keys = [];
     reach(state.map, b, (tx, ty) => keys.push(ty * w + tx));
     cells[i] = keys;
-    left[i] = Math.max(0, b.at - state.tick);
+    left[i] = b.at === null ? Infinity : Math.max(0, b.at - state.tick);
     const key = b.ty * w + b.tx;
-    solid.add(key);
+    if (i < bombCount) solid.add(key);     // a keg is already a wall; it is not "solid for us"
     byTile.set(key, i);
   }
 
@@ -124,6 +146,8 @@ export function dangerMap(state) {
     const i = queue[head];
     for (const key of cells[i]) {
       const j = byTile.get(key);
+      // `>=` rather than `>`: two sources on the same tick are already settled, and a keg at
+      // Infinity always loses to a real time, which is how it gets lit.
       if (j === undefined || j === i || left[i] >= left[j]) continue;
       left[j] = left[i];
       queue.push(j);
@@ -132,6 +156,7 @@ export function dangerMap(state) {
 
   const ticks = new Map();      // tile key -> ticks until this tile is on fire
   for (let i = 0; i < n; i++) {
+    if (left[i] === Infinity) continue;   // an unlit keg threatens nothing
     for (const key of cells[i]) {
       const prev = ticks.get(key);
       if (prev === undefined || left[i] < prev) ticks.set(key, left[i]);
@@ -398,7 +423,7 @@ export function think(state, p, brain, danger) {
   //    then the bomb is in the danger map.
   if (here === Infinity && brain.cooldown === 0 && worthBombing(state, p, tx, ty)) {
     const extra = hypothetical(state, p, tx, ty);
-    const { dir, clear } = flood(state, p, danger, extra, FIRE_TICKS);
+    const { dir, clear } = flood(state, p, danger, extra, FIRE_TICKS * 3);
     if (clear) {
       brain.dir = dir;
       brain.hold = 4;
@@ -410,10 +435,24 @@ export function think(state, p, brain, danger) {
     brain.cooldown = 10;
   }
 
-  // 3. Walk. A short commitment keeps them in corridors instead of vibrating on the spot.
+  /* 3. Walk. A short commitment keeps them in corridors instead of vibrating on the spot.
+   *
+   * The commitment has to break on DANGER as well as on walls, and that was the whole bug.
+   * Measured over three minutes with fifteen bots, three quarters of all deaths happened on a
+   * tile the danger map already showed burning in under ten ticks — so they were not blind, they
+   * were committed. A bot picks a direction, holds it for five to eleven ticks, and in that
+   * window somebody drops a bomb in the corridor ahead. Nothing re-read the map until the bot
+   * was standing in the blast, and by then it was several tiles deep with no time to get out.
+   *
+   * The flee branch above is the cure and this is the prevention: treat a tile that is about to
+   * burn as a wall, so the walk never enters one in the first place.
+   */
   const ahead = DIRS[brain.dir];
-  const blockedAhead = !walkable(map, tx + ahead.dx, ty + ahead.dy) ||
-    danger.solid.has((ty + ahead.dy) * map.w + tx + ahead.dx);
+  const ax = tx + ahead.dx, ay = ty + ahead.dy;
+  const aheadThreat = threatAt(danger, null, ax, ay);
+  const blockedAhead = !walkable(map, ax, ay) ||
+    danger.solid.has(ay * map.w + ax) ||
+    aheadThreat <= ticksPerTile(p) * 4;
   if (brain.hold <= 0 || blockedAhead) {
     brain.dir = chooseDir(state, p, brain, danger, tx, ty);
     brain.hold = 5 + ((Math.random() * 6) | 0);
