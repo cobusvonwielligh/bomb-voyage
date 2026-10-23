@@ -775,7 +775,13 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   border-radius: 16px; padding: 34px 48px 26px; width: 600px; position: relative;
   box-shadow: 0 0 80px #6b21a840, 0 22px 60px #000b;
 }
-.card.small { width: 340px; text-align: center; }
+.card.small {
+  /* Narrower, and padded to the buttons rather than to the old heading that used to sit above
+     them. The card was 340px of mostly nothing round three controls. */
+  width: 290px;
+  text-align: center;
+  padding: 20px 20px 18px;
+}
 /* Sitting lower in the card now that the instruction line under it is gone: the countdown button
    is the only other thing here, and the two were crowding the top edge together. */
 /* Only the round-over card has a heading now. The death card leads with the respawn button,
@@ -792,7 +798,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 /* The two quieter choices under it: outlined, not filled, so the respawn button stays the one
    thing the eye lands on. */
 .ghost {
-  width: 100%; margin-top: 8px; padding: 10px;
+  width: 100%; margin-top: 10px; padding: 9px;
   font-family: var(--nums); font-size: 12.5px; font-weight: 700;
   letter-spacing: .1em; text-transform: uppercase;
   color: var(--dim);
@@ -804,13 +810,31 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 .card.round .ghost { display: none; }
 /* The countdown gets its own face. The display font is for titles you read once, and this is a
  * number that changes every second a few inches from your eyes. */
+/* The one thing you came here to press, so it gets the same treatment as PLAY: filled, gold,
+   with the countdown in it. The two ghosts under it are alternatives, not peers. */
 #respawn {
-  width: 100%; margin-top: 16px; padding: 13px; font-family: var(--nums);
-  font-size: 15px; font-weight: 700; letter-spacing: .1em; text-transform: none;
+  width: 100%; margin: 0; padding: 14px;
+  font-family: var(--nums); font-size: 15px; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase;
+  color: #130f05;
+  background: linear-gradient(180deg, #ffe066, var(--gold) 55%, #e0a800);
+  border: none; border-radius: 10px;
+  box-shadow: 0 4px 0 #8a6f00, 0 10px 26px #ffd21f33;
+  text-shadow: 0 1px 0 #fff6;
+  transition: filter .12s, box-shadow .12s, opacity .12s;
+}
+#respawn:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow: 0 4px 0 #8a6f00, 0 12px 34px #ffd21f55;
+}
+/* Counting down: dimmed and flat, so it reads as "not yet" rather than as "broken". */
+#respawn:disabled {
+  opacity: .5;
+  background: linear-gradient(180deg, #6b5a28, #4d4120);
+  box-shadow: none; color: #d8cda8;
 }
 /* Counting down, not broken: dimmed but still legible, and the number keeps moving. */
-#respawn:disabled { opacity: .55; }
-#respawn:disabled:hover { background: transparent; color: var(--gold); }
+
 
 /* Round-over standings. A table, because a block of preformatted text only lines its columns up
    by luck, and your own row was indistinguishable from the other fifteen. */

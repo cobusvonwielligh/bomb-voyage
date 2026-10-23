@@ -17,6 +17,7 @@ import { createRenderer } from './render.js';
 import { createMusic } from './audio/music.js';
 import { createSfx } from './audio/sfx.js';
 import { createQuips, MENU_QUIPS } from './quips.js';
+import { bombTile } from '/shared/sim/bombs.js';
 
 const $ = id => document.getElementById(id);
 
@@ -408,7 +409,9 @@ function localBombFeedback(mask) {
   if (!pressed) return;
   const me = world.me();
   if (!me || !me.alive) return;
-  const tx = me.x >> 8, ty = me.y >> 8;
+  // The same tile the sim will choose, from the same function — the sound has to come from
+  // where the bomb actually lands, which with facing-placement is rarely where you stand.
+  const { tx, ty } = bombTile(world, me);
   if (world.bombs.some(b => b.tx === tx && b.ty === ty)) return;
   if (world.bombs.reduce((n, b) => n + ((b.o ?? b.owner) === world.you ? 1 : 0), 0) >= me.bombs) return;
   sfx.play('place', tx, ty);

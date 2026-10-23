@@ -13,6 +13,7 @@ import { cellType, cellHp } from '/shared/maps.js';
 import {
   drawTile, drawFire, drawPerk, drawRock, drawShip, playerShades, PALETTE, bake, bakeSea,
 } from '/assets/art.js';
+import { bombTile } from '/shared/sim/bombs.js';
 
 const CHUNK_PX = TILE_PX * CHUNK_TILES;
 
@@ -929,6 +930,7 @@ export function createRenderer(canvas, world) {
     for (const p of alive) drawTracer(ctx, p, ox, oy);
     for (const p of alive) drawOne(ctx, p, ox, oy, p.i === world.you);
 
+    drawAim(ox, oy);
     for (const p of alive) drawStamina(ctx, p, ox, oy);
     drawFloaters(ox, oy, dtMs);
 
@@ -1104,6 +1106,57 @@ export function createRenderer(canvas, world) {
     c.strokeText(p.name, px + TILE_PX / 2, py - 3);
     c.fillStyle = isMe ? PALETTE.gold : playerShades(p.i).light;
     c.fillText(p.name, px + TILE_PX / 2, py - 3);
+  }
+
+  /**
+   * The tile your next bomb would land on.
+   *
+   * Bombs go where you are facing, which makes placing one an aimed action — and an aimed
+   * action with no sight on it is a guess. This is the sight: a bracket on the target tile, in
+   * your own colour so sixteen of them never get confused, breathing slowly so it reads as live
+   * rather than as part of the terrain.
+   *
+   * Corners only, not a full outline. A closed box on a 32-pixel tile covers the tile; four
+   * corner marks say exactly the same thing while leaving the middle — where the bomb, the
+   * wall, or the person you are aiming at actually is — completely clear.
+   */
+  function drawAim(ox, oy) {
+    const me = world.me();
+    if (!me || !me.alive || world.observing) return;
+    const { tx, ty } = bombTile(world, me);
+    // Nothing to show if you are out of bombs: a sight on a shot you cannot take is a lie.
+    const live = world.bombs.reduce((n, b) => n + ((b.o ?? b.owner) === world.you ? 1 : 0), 0);
+    if (live >= me.bombs) return;
+
+    const k = playerShades(world.you);
+    const x = ox + tx * TILE_PX, y = oy + ty * TILE_PX;
+    const pulse = 0.55 + 0.25 * Math.sin(world.tick / 7);
+    const arm = TILE_PX * 0.3, inset = 3;
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    // A dark pass underneath, so the bracket survives being drawn over pale sand or bright fire.
+    for (const [colour, width, alpha] of [['#0b0f16', 4, 0.5], [k.light, 2, pulse]]) {
+      ctx.strokeStyle = colour;
+      ctx.lineWidth = width;
+      ctx.globalAlpha = alpha;
+      for (const [sx, sy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+        const cx = x + (sx > 0 ? inset : TILE_PX - inset);
+        const cy = y + (sy > 0 ? inset : TILE_PX - inset);
+        ctx.beginPath();
+        ctx.moveTo(cx + sx * arm, cy);
+        ctx.lineTo(cx, cy);
+        ctx.lineTo(cx, cy + sy * arm);
+        ctx.stroke();
+      }
+    }
+    // A faint wash inside, which is what makes the tile read as selected rather than framed.
+    ctx.globalAlpha = 0.1 * pulse;
+    ctx.fillStyle = k.base;
+    ctx.fillRect(x + 2, y + 2, TILE_PX - 4, TILE_PX - 4);
+    ctx.restore();
+    ctx.globalAlpha = 1;
   }
 
   /**

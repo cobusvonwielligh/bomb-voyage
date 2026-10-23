@@ -22,6 +22,7 @@ import {
   SHRUB_RADIUS_PENALTY, HITBOX_UNITS, HITBOX_REDUCED_UNITS,
 } from '../shared/constants.js';
 import { tileAt, walkable, toTile, has } from '../shared/sim/state.js';
+import { bombTile } from '../shared/sim/bombs.js';
 
 const DIRS = [
   { mask: IN_RIGHT, dx: 1, dy: 0 },
@@ -299,7 +300,7 @@ function nearestPlayer(state, me) {
   return best;
 }
 
-/** Something to break, or somebody to catch. */
+/** Something to break, or somebody to catch, measured at the tile the bomb would LAND on. */
 function worthBombing(state, p, tx, ty) {
   for (const d of DIRS) {
     const t = tileAt(state.map, tx + d.dx, ty + d.dy);
@@ -421,8 +422,12 @@ export function think(state, p, brain, danger) {
   //    checked itself out of, chain-detonated it instantly, and died with no warning at all. It
   //    costs one tick of standing still; the flee branch takes over on the next one, because by
   //    then the bomb is in the danger map.
-  if (here === Infinity && brain.cooldown === 0 && worthBombing(state, p, tx, ty)) {
-    const extra = hypothetical(state, p, tx, ty);
+  // Bombs land on the tile you are FACING, not the one underfoot — see bombTile. Everything
+  // the bot reasons about a bomb has to use that tile, or it checks its escape from the wrong
+  // blast and walks confidently into the real one.
+  const drop = bombTile(state, p);
+  if (here === Infinity && brain.cooldown === 0 && worthBombing(state, p, drop.tx, drop.ty)) {
+    const extra = hypothetical(state, p, drop.tx, drop.ty);
     const { dir, clear } = flood(state, p, danger, extra, FIRE_TICKS * 3);
     if (clear) {
       brain.dir = dir;

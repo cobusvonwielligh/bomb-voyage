@@ -2,9 +2,9 @@
 
 import {
   FUSE_TICKS, FUSE_TICKS_FAST, FIRE_TICKS, CHAIN_CAP_PER_TICK, IN_BOMB, STATUS, MAX_RADIUS,
-  BLOCK, POWDER_RADIUS,
+  BLOCK, POWDER_RADIUS, DIR_R, DIR_U, DIR_L, DIR_D,
 } from '../constants.js';
-import { has, toTile, tileCentre } from './state.js';
+import { has, toTile, tileCentre, tileAt } from './state.js';
 import { spread } from './fire.js';
 import { damage } from './blocks.js';
 import { maybeDrop } from './perks.js';
@@ -19,11 +19,42 @@ export function blocksPlayer(state, p, tx, ty) {
   return !(toTile(p.x) === tx && toTile(p.y) === ty);
 }
 
+/* Which tile a bomb from this player would land on.
+ *
+ * In FRONT of them, not underneath. You face a direction and the bomb goes there, which turns
+ * placing one into an aimed action rather than a thing that happens where you happen to be
+ * standing. The tile you are standing in is the guide: the facing tile is the neighbour of
+ * `toTile(p.x), toTile(p.y)`, so it changes the instant your centre crosses a tile boundary and
+ * never depends on where inside the tile you are.
+ *
+ * It falls back to the tile underneath when the facing one cannot take a bomb — a wall, the
+ * sea, the map edge, or another bomb. That fallback is not a compromise, it is the only way the
+ * game still works: the commonest reason to bomb anything is to break the wall you are facing,
+ * and a rule that refused would mean walls could never be broken by somebody looking at them.
+ *
+ * Exported because three other places have to agree with it exactly: the client's local
+ * feedback sound, and the bots' "is this worth bombing" and "where would the blast go".
+ */
+export function bombTile(state, p) {
+  const tx = toTile(p.x), ty = toTile(p.y);
+  const d = DIR_STEP[p.dir] ?? DIR_STEP[DIR_D];
+  const fx = tx + d.dx, fy = ty + d.dy;
+  const free = tileAt(state.map, fx, fy) === BLOCK.FLOOR && !bombAt(state, fx, fy);
+  return free ? { tx: fx, ty: fy } : { tx, ty };
+}
+
+const DIR_STEP = {
+  [DIR_R]: { dx: 1, dy: 0 },
+  [DIR_U]: { dx: 0, dy: -1 },
+  [DIR_L]: { dx: -1, dy: 0 },
+  [DIR_D]: { dx: 0, dy: 1 },
+};
+
 export function place(state, p, mask) {
   if (!(mask & IN_BOMB) || !p.alive) return;
   if (has(p, STATUS.PACIFISM)) return;
 
-  const tx = toTile(p.x), ty = toTile(p.y);
+  const { tx, ty } = bombTile(state, p);
   if (bombAt(state, tx, ty)) return;
 
   const live = state.bombs.reduce((n, b) => n + (b.owner === p.i ? 1 : 0), 0);

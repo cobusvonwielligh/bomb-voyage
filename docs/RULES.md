@@ -74,6 +74,26 @@ leaves that tile, the bomb becomes solid to you. Everyone else treats it as soli
 
 ## 3. Bombs
 
+**A bomb lands on the tile you are FACING, not the one you are standing on.** Placing one is an
+aimed action: you turn, you press, it goes there.
+
+The tile you are in is the guide — the target is its neighbour in your facing direction, so it
+changes the instant your centre crosses a boundary and never depends on where inside the tile
+you happen to be. The HUD draws a bracket on it in your own colour, which disappears when you
+have no bombs left, because a sight on a shot you cannot take is a lie.
+
+It **falls back to the tile underfoot** when the target cannot take a bomb — a wall, the sea,
+the map edge, or a bomb already there. That is not a compromise: the commonest reason to bomb
+anything is to break the wall you are looking at, and a rule that simply refused would mean
+walls could never be broken by somebody facing them.
+
+Four places have to agree on that tile exactly, and all four call the same `bombTile()`: the
+simulation, the client's prediction, the click sound, and the bots.
+
+> Note this is *our* rule, not Game of Bombs'. Theirs drops the bomb underneath you, as classic
+> Bomberman does.
+
+
 | Property | Value |
 |---|---|
 | Fuse | **72 ticks (2.4 s)** **(TUNE)** |

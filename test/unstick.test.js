@@ -6,7 +6,9 @@ import { createState, createPlayer, tileCentre, setTile } from '../shared/sim/st
 import { step, blocked, unstick, speedOf } from '../shared/sim/movement.js';
 import { place } from '../shared/sim/bombs.js';
 import { tick } from '../shared/sim/round.js';
-import { BLOCK, BLOCK_HP, IN_RIGHT, IN_LEFT, IN_BOMB, FUSE_TICKS } from '../shared/constants.js';
+import {
+  BLOCK, BLOCK_HP, IN_RIGHT, IN_LEFT, IN_DOWN, IN_BOMB, FUSE_TICKS, DIR_R, DIR_D,
+} from '../shared/constants.js';
 
 // A hand-authored empty room. The generated maps put an indestructible pillar on every even/even
 // tile, so a clear 3x3 does not exist on any of them by construction — and these tests need room
@@ -163,8 +165,11 @@ test('walking off your own bomb never pushes you', () => {
    */
   const { s, tx, ty } = world();
   const p = seat(s, 0, tx, ty);
+  // Facing a wall, so the bomb lands underneath — which is the case this test is about.
+  setTile(s.map, tx + 1, ty, BLOCK.SOFT, BLOCK_HP[BLOCK.SOFT]);
+  p.dir = DIR_R;
   place(s, p, IN_BOMB);
-  assert.equal(s.bombs.length, 1, 'setup failed: no bomb');
+  assert.deepEqual([s.bombs[0]?.tx, s.bombs[0]?.ty], [tx, ty], 'setup failed: bomb not underfoot');
 
   const pace = speedOf(p);
   let biggest = 0;
@@ -183,12 +188,11 @@ test('a bomb is still solid once you are clear of it', () => {
   // stand on it indefinitely.
   const { s, tx, ty } = world();
   const p = seat(s, 0, tx, ty);
-  place(s, p, IN_BOMB);
-  for (let n = 0; n < 60; n++) step(s, p, IN_RIGHT);
-  const away = p.x;
-  for (let n = 0; n < 60; n++) step(s, p, IN_LEFT);
-  assert.ok(p.x < away, 'did not walk back at all');
-  assert.ok((p.x >> 8) > tx, 'walked onto a bomb it should have been stopped by');
+  p.dir = DIR_D;
+  place(s, p, IN_BOMB);                      // lands on the tile below
+  assert.deepEqual([s.bombs[0]?.tx, s.bombs[0]?.ty], [tx, ty + 1]);
+  for (let n = 0; n < 60; n++) step(s, p, IN_DOWN);
+  assert.ok((p.y >> 8) === ty, 'walked onto a bomb it should have been stopped by');
 });
 
 test('a bomb never makes the unstick fire, however it is placed', () => {

@@ -5,12 +5,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createState, createPlayer, setTile, tileAt, hpAt, tileCentre, hashState } from '../shared/sim/state.js';
 import { spread } from '../shared/sim/fire.js';
-import { place, detonate } from '../shared/sim/bombs.js';
+import { place, detonate, bombTile } from '../shared/sim/bombs.js';
 import { tick } from '../shared/sim/round.js';
 import { drop, maybeDrop } from '../shared/sim/perks.js';
 import {
   BLOCK, BLOCK_HP, IN_BOMB, IN_RIGHT, FUSE_TICKS, STATUS, PERK, MAX_RADIUS, SCORE,
-  PERK_WEIGHTS, FIRE_LETHAL_TICKS, FIRE_TICKS,
+  PERK_WEIGHTS, FIRE_LETHAL_TICKS, FIRE_TICKS, DIR_R, DIR_U, DIR_L, DIR_D,
 } from '../shared/constants.js';
 
 function room(w = 15, h = 15) {
@@ -125,6 +125,7 @@ test('bombs in the round loop', async t => {
     const st = room();
     const p = immortal(spawn(st, 0, 3, 3));
     p.bombs = 1;
+    p.dir = DIR_R;                           // facing the block, so the bomb lands against it
     setTile(st.map, 4, 3, BLOCK.REINFORCED, BLOCK_HP[BLOCK.REINFORCED]);
     for (let n = 0; n < 5; n++) { run(st, 1, [IN_BOMB]); run(st, FUSE_TICKS + 2); }
     assert.equal(tileAt(st.map, 4, 3), BLOCK.REINFORCED, 'still standing after five');
@@ -152,6 +153,7 @@ test('bombs in the round loop', async t => {
     const killer = spawn(st, 0, 3, 3);
     const victim = spawn(st, 1, 4, 3);
     victim.status = 0; victim.statusUntil = {};
+    killer.dir = DIR_R;                      // bombs go where you are looking
     place(st, killer, IN_BOMB);
     run(st, FUSE_TICKS + 1);
     assert.equal(victim.alive, false);
@@ -176,16 +178,30 @@ test('bombs in the round loop', async t => {
     assert.equal(q.shields, 0, 'and was spent');
   });
 
-  await t.test('you can walk off your own bomb but not back onto it', () => {
+  await t.test('you cannot walk into a bomb you placed in front of you', () => {
+    // Bombs land on the tile you are facing, so walking forward is walking into one.
     const st = room();
     const p = spawn(st, 0, 3, 3);
+    p.dir = DIR_R;
     place(st, p, IN_BOMB);
-    run(st, 20, [IN_RIGHT]);
-    assert.ok(p.x > tileCentre(3), 'walked off it');
-    const escaped = p.x;
-    run(st, 30, [4]);                        // IN_LEFT: try to come back
-    assert.ok(p.x < escaped, 'moved back toward it');
-    assert.ok(p.x > tileCentre(3), 'but could not re-enter the tile');
+    assert.equal(st.bombs[0].tx, 4, 'the bomb did not land in front');
+    run(st, 40, [IN_RIGHT]);
+    assert.ok(p.x < tileCentre(4), 'walked into its own bomb');
+    assert.ok(p.x > tileCentre(3), 'did not even approach it');
+  });
+
+  await t.test('facing a wall, the bomb lands underfoot instead', () => {
+    // Otherwise the commonest action in the game — break the wall you are looking at — would
+    // be impossible, because the tile you are aiming at is the wall itself.
+    const st = room();
+    const p = spawn(st, 0, 3, 3);
+    p.dir = DIR_R;
+    setTile(st.map, 4, 3, BLOCK.SOFT, BLOCK_HP[BLOCK.SOFT]);
+    place(st, p, IN_BOMB);
+    assert.equal(st.bombs.length, 1);
+    assert.deepEqual([st.bombs[0].tx, st.bombs[0].ty], [3, 3], 'no fallback to the tile underfoot');
+    run(st, FUSE_TICKS + 2);
+    assert.equal(tileAt(st.map, 4, 3), BLOCK.FLOOR, 'the wall survived a bomb placed beside it');
   });
 
   await t.test('walking over a perk picks it up and applies it', () => {
@@ -347,4 +363,68 @@ test('fire stops killing before it stops being drawn', () => {
   st.fires.push({ tx: 4, ty: 4, kind: 'core', rot: 0, until: st.tick + grace + 1, owner: 1 });
   tick(st, []);
   assert.equal(p.alive, false, 'live fire stopped killing');
+});
+
+test('bombs land on the tile you are facing', async t => {
+  const open = () => {
+    const st = createState({ id: 't', name: 't', w: 11, h: 11, seed: 1, density: 0, reinforced: 0, shrubs: 0 });
+    for (let y = 0; y < 11; y++) for (let x = 0; x < 11; x++) {
+      setTile(st.map, x, y, (x === 0 || y === 0 || x === 10 || y === 10) ? BLOCK.IRON : BLOCK.FLOOR);
+    }
+    return st;
+  };
+  const at = (st, tx, ty, dir) => {
+    const p = createPlayer(0, 'p');
+    p.alive = true; p.dir = dir;
+    p.x = tileCentre(tx); p.y = tileCentre(ty);
+    st.players[0] = p;
+    return p;
+  };
+
+  await t.test('each of the four directions', () => {
+    for (const [dir, dx, dy] of [[DIR_R, 1, 0], [DIR_U, 0, -1], [DIR_L, -1, 0], [DIR_D, 0, 1]]) {
+      const st = open();
+      const p = at(st, 5, 5, dir);
+      place(st, p, IN_BOMB);
+      assert.deepEqual([st.bombs[0].tx, st.bombs[0].ty], [5 + dx, 5 + dy], `facing ${dir}`);
+    }
+  });
+
+  await t.test('the facing tile is read from the tile you are IN, not from where in it you are', () => {
+    // Otherwise the target would slide across a tile boundary as you walked, and the sight
+    // would disagree with the bomb on the frames that matter most.
+    const st = open();
+    const p = at(st, 5, 5, DIR_R);
+    p.x = tileCentre(5) + 100;               // most of the way across the tile
+    assert.deepEqual(bombTile(st, p), { tx: 6, ty: 5 });
+    p.x = tileCentre(5) - 100;               // most of the way back
+    assert.deepEqual(bombTile(st, p), { tx: 6, ty: 5 });
+  });
+
+  await t.test('the sea and the map edge fall back too, not just walls', () => {
+    const st = open();
+    const p = at(st, 1, 5, DIR_L);           // facing the iron border
+    place(st, p, IN_BOMB);
+    assert.deepEqual([st.bombs[0].tx, st.bombs[0].ty], [1, 5]);
+  });
+
+  await t.test('a bomb already in front falls back to underfoot', () => {
+    const st = open();
+    const p = at(st, 5, 5, DIR_R);
+    p.bombs = 2;
+    place(st, p, IN_BOMB);
+    place(st, p, IN_BOMB);
+    assert.equal(st.bombs.length, 2, 'the second bomb was refused');
+    assert.deepEqual([st.bombs[1].tx, st.bombs[1].ty], [5, 5]);
+  });
+
+  await t.test('and with both tiles taken, nothing is placed', () => {
+    const st = open();
+    const p = at(st, 5, 5, DIR_R);
+    p.bombs = 5;
+    place(st, p, IN_BOMB);
+    place(st, p, IN_BOMB);
+    place(st, p, IN_BOMB);
+    assert.equal(st.bombs.length, 2, 'placed a third bomb on an occupied tile');
+  });
 });
