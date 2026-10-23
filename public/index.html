@@ -61,7 +61,9 @@
 <div id="hud">
   <div id="topbar" class="edge">
     <span id="clock"><span class="v" id="vClock">--:--</span><span class="k">left</span></span>
-    <span class="stat"><span class="k">ping</span><span class="v" id="vPing">--</span></span>
+    <!-- The dot lives with the ping, because they answer the same question: is the link
+         healthy. Next to the volume controls it was just another icon in a row of icons. -->
+    <span class="stat"><span class="k">ping</span><span class="v" id="vPing">--</span><span id="conn" data-state="connecting" title="connecting"></span></span>
     <span class="stat"><span class="k">alive</span><span class="v" id="vOnline">--</span></span>
     <span class="stat"><span class="k">map</span><span class="v" id="vMap">--</span></span>
     <span class="sep"></span>
@@ -80,7 +82,6 @@
     </span>
 
     <span class="right">
-      <span id="conn" data-state="connecting" title="connecting"></span>
       <!-- Icon and level in one control: the icon is the mute toggle, the slider unrolls out of
            it on hover or focus, and the level stays readable as a bar under the glyph while it is
            collapsed. Four separate widgets used to take 200px of a bar that has a clock in it. -->

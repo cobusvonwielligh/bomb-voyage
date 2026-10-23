@@ -223,6 +223,8 @@ canvas#game {
 #conn {
   width: 9px; height: 9px; border-radius: 50%;
   flex: 0 0 auto;
+  /* Sat on the ping's baseline, which puts it under the text rather than beside it. */
+  align-self: center; margin-left: 1px;
   background: var(--bad);
   box-shadow: 0 0 0 2px #0006, 0 0 8px currentColor;
   color: var(--bad);
