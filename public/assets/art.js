@@ -72,8 +72,12 @@ const hash = (x, y) => {
   n = (n ^ (n >>> 13)) * 1274126177;
   return ((n ^ (n >>> 16)) >>> 0) / 4294967295;
 };
-const light = 'rgba(255,255,255,0.12)';
-const dark = 'rgba(0,0,0,0.28)';
+// The bevel pair, softened. At 0.12/0.28 the lit and shaded faces of a block were nearly three
+// stops apart, which on a grid of them reads as a checkerboard rather than as lighting — and it
+// was the single biggest source of contrast on the map. Halving the shadow and easing the
+// highlight keeps the form without the map looking etched.
+const light = 'rgba(255,255,255,0.09)';
+const dark = 'rgba(0,0,0,0.16)';
 
 /** Top-left highlight, bottom-right shadow. Apply to every solid block. */
 const bevel = (c, x, y, w, h, t = 2) => {
@@ -101,9 +105,12 @@ export function drawTile(c, type, tx = 0, ty = 0, dmg = 0) {
 
       // Broad tonal drift: whole tiles a shade lighter or darker than their neighbours.
       const tone = hash(tx * 3, ty * 3);
+      // Halved from the first pass: tile-to-tile drift should be felt, not seen. At the old
+      // range adjacent floor tiles were visibly different colours and the floor read as a
+      // patchwork.
       px(c, 0, 0, S, S, tone > 0.5
-        ? `rgba(255,255,255,${(tone - 0.5) * 0.09})`
-        : `rgba(0,0,0,${(0.5 - tone) * 0.13})`);
+        ? `rgba(255,255,255,${(tone - 0.5) * 0.05})`
+        : `rgba(0,0,0,${(0.5 - tone) * 0.06})`);
 
       // Grain: a scatter of single pixels, dense enough to texture and sparse enough to stay
       // cheap. Eighteen samples a tile over a cached chunk is nothing.
@@ -111,7 +118,7 @@ export function drawTile(c, type, tx = 0, ty = 0, dmg = 0) {
         const gx = (hash(tx * 17 + i, ty * 7) * S) | 0;
         const gy = (hash(ty * 13 + i, tx * 11) * S) | 0;
         const g = hash(i * 5 + tx, i * 3 + ty);
-        px(c, gx, gy, 1, 1, g > 0.5 ? 'rgba(255,255,255,0.045)' : 'rgba(0,0,0,0.07)');
+        px(c, gx, gy, 1, 1, g > 0.5 ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.045)');
       }
 
       // Flagstones, on about one tile in six: the stone the sand has blown off.
@@ -119,8 +126,8 @@ export function drawTile(c, type, tx = 0, ty = 0, dmg = 0) {
         const sx = 3 + ((hash(tx, ty + 5) * 7) | 0);
         const sy = 3 + ((hash(tx + 5, ty) * 7) | 0);
         rr(c, sx, sy, 16, 13, 2, PALETTE.floorAccent);
-        px(c, sx, sy, 16, 1, 'rgba(255,255,255,0.07)');
-        px(c, sx, sy + 12, 16, 1, 'rgba(0,0,0,0.16)');
+        px(c, sx, sy, 16, 1, 'rgba(255,255,255,0.05)');
+        px(c, sx, sy + 12, 16, 1, 'rgba(0,0,0,0.1)');
       }
 
       // Pebbles and shell fragments.
@@ -130,8 +137,8 @@ export function drawTile(c, type, tx = 0, ty = 0, dmg = 0) {
 
       // The seam where the chunk cache joins tiles. A hair of shadow on two sides gives the
       // floor a grid without drawing a grid, and hides the join entirely.
-      px(c, 0, 0, S, 1, 'rgba(0,0,0,0.07)');
-      px(c, 0, 0, 1, S, 'rgba(0,0,0,0.07)');
+      px(c, 0, 0, S, 1, 'rgba(0,0,0,0.05)');
+      px(c, 0, 0, 1, S, 'rgba(0,0,0,0.05)');
       break;
     }
 
@@ -245,11 +252,15 @@ export function drawTile(c, type, tx = 0, ty = 0, dmg = 0) {
       // The powder mark. Small and red, dead centre between the hoops: the universal "this one
       // is dangerous", and the one bit of pure red on an island of browns and blues.
       c.save();
-      c.strokeStyle = '#e03c2e'; c.lineWidth = 2.2; c.lineCap = 'round';
+      c.lineCap = 'round';
       c.beginPath();
       c.moveTo(13, 15); c.lineTo(19, 21);
       c.moveTo(19, 15); c.lineTo(13, 21);
-      c.stroke();
+      // Black underneath, red on top. The mark sits on mid-brown staves, and a bare red stroke
+      // at this size has almost no luminance contrast against that — it goes muddy the moment
+      // the board is zoomed out. The dark border is what keeps it legible.
+      c.strokeStyle = '#140c08'; c.lineWidth = 4.2; c.stroke();
+      c.strokeStyle = '#e03c2e'; c.lineWidth = 2.2; c.stroke();
       c.restore();
       c.strokeStyle = '#d8c9a8'; c.lineWidth = 1.6; c.lineCap = 'round';
       c.beginPath(); c.moveTo(20, 7); c.quadraticCurveTo(25, 3, 22, 1); c.stroke();
@@ -271,6 +282,38 @@ export function drawTile(c, type, tx = 0, ty = 0, dmg = 0) {
     }
   }
   if (dmg > 0) drawCracks(c, dmg, tx, ty);
+  if (CASTS_SHADOW.has(type)) castShadow(c);
+}
+
+/* Blocks that stand proud of the floor and therefore throw one.
+ *
+ * Water and floor are flat, and iron is the one thing deliberately kept visually quiet, so none
+ * of those get one. */
+const CASTS_SHADOW = new Set([
+  BLOCK.SOFT, BLOCK.REINFORCED, BLOCK.MONOLITH, BLOCK.POWDER, BLOCK.COLUMN, BLOCK.SHRUB_SOLID,
+]);
+
+/**
+ * A shadow along the bottom and right edges of a solid block.
+ *
+ * It is drawn INSIDE the block's own tile rather than onto the floor beside it, which is not
+ * where a real shadow would fall — but the chunk renderer draws each tile independently and has
+ * no idea what its neighbour is, so a shadow that spilled outwards would be painted over by
+ * whatever tile is drawn next. Inside the tile it survives, and at two pixels the eye reads the
+ * block as raised either way.
+ *
+ * Top-left light, matching every other piece of shading in the file.
+ */
+function castShadow(c) {
+  const S = TILE_PX;
+  const g = c.createLinearGradient(0, S - 5, 0, S);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,0.3)');
+  px(c, 0, S - 5, S, 5, g);
+  const h = c.createLinearGradient(S - 5, 0, S, 0);
+  h.addColorStop(0, 'rgba(0,0,0,0)');
+  h.addColorStop(1, 'rgba(0,0,0,0.22)');
+  px(c, S - 5, 0, 5, S, h);
 }
 
 /**

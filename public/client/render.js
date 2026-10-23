@@ -294,7 +294,7 @@ export function createRenderer(canvas, world) {
    * slight angle is what produces the wandering interference a real surface has. Identical
    * headings would just sum into one bigger wave.
    */
-  const current = { angle: 0, speed: 0, trains: [] };
+  const current = { angle: 0, speed: 0, trains: [], surface: [] };
 
   // The ranges. A drift is a drift, not a river, and a wavelength shorter than ~60px turns into
   // visual noise once the whole map is zoomed to fit.
@@ -304,14 +304,56 @@ export function createRenderer(canvas, world) {
   const TRAIN_SPEED = [16, 52];           // px/s the crests travel
   const TRAIN_AMPLITUDE = [7, 16];        // px/s of sideways push at the crest
 
+  /* The envelope: a wave within the wave.
+   *
+   * Real water is not evenly rough. Wind lanes, fetch and shelter leave bands of chop sitting
+   * next to bands of near-glass, and those bands drift. A uniformly agitated surface is the
+   * thing that reads as "simulation" rather than as sea, however good the individual waves are.
+   *
+   * So each train's amplitude is multiplied by a second, much longer, much slower wave running
+   * at its own heading. Where the envelope peaks the train is at full strength; in its troughs
+   * it drops to ENVELOPE_FLOOR of it. The envelope's heading is rolled independently of the
+   * train's, so the calm patches travel ACROSS the waves rather than with them — which is what
+   * makes them read as areas of water rather than as part of the wave pattern.
+   */
+  const ENVELOPE_WAVELENGTH = [320, 900];   // px across a band of chop
+  const ENVELOPE_SPEED = [4, 14];           // px/s the bands drift
+  const ENVELOPE_FLOOR = 0.3;               // how calm the calm patches get
+
+  /* The two tiled surface layers get the same treatment as the particles.
+   *
+   * These are the squiggles you actually see — the particle field is the motion, this is the
+   * texture. They used to drift at a hard-coded (11, 5) and (-7, 9) and were drawn axis-aligned,
+   * so every map had the same sea running the same way down the screen whatever the current
+   * underneath it was doing. Now the whole pattern is rotated to the map's heading and each
+   * layer drifts at its own angle off it, which is what produces parallax that looks like water
+   * rather than like two sheets sliding.
+   */
+  const SURFACE_DRIFT = [5, 15];                   // px/s each layer travels
+  const SURFACE_SPREAD = [-Math.PI / 5, Math.PI / 5];
+
   const between = ([lo, hi]) => lo + Math.random() * (hi - lo);
 
+  function rollSurface() {
+    current.surface = [0, 1].map(() => {
+      const a = between(SURFACE_SPREAD);
+      const sp = between(SURFACE_DRIFT);
+      return { sx: Math.cos(a) * sp, sy: Math.sin(a) * sp };
+    });
+  }
+
   function rollCurrent() {
+    // The heading everything is rolled around: a full turn, so no two maps share an orientation.
     current.angle = Math.random() * Math.PI * 2;
     current.speed = between(DRIFT_SPEED);
+    rollSurface();
     current.trains = [-1, 1].map(side => {
+      // Each train is rotated off the drift by its own random angle, on its own side of it.
       const heading = current.angle + side * between(TRAIN_SPREAD);
       const wavelength = between(TRAIN_WAVELENGTH);
+      // The envelope gets a heading of its own, anywhere on the circle.
+      const envHeading = Math.random() * Math.PI * 2;
+      const envWavelength = between(ENVELOPE_WAVELENGTH);
       return {
         // Precomputed because this runs per particle per frame.
         dx: Math.cos(heading), dy: Math.sin(heading),
@@ -319,9 +361,25 @@ export function createRenderer(canvas, world) {
         w: ((Math.PI * 2) / wavelength) * between(TRAIN_SPEED),   // and per second
         amp: between(TRAIN_AMPLITUDE),
         phase: Math.random() * Math.PI * 2,
+        edx: Math.cos(envHeading), edy: Math.sin(envHeading),
+        ek: (Math.PI * 2) / envWavelength,
+        ew: ((Math.PI * 2) / envWavelength) * between(ENVELOPE_SPEED),
+        ephase: Math.random() * Math.PI * 2,
       };
     });
   }
+
+  /**
+   * How strong this train is at this point, right now. Between ENVELOPE_FLOOR and 1.
+   *
+   * Kept as its own function so both flow axes use the identical value: computing it twice from
+   * the same inputs would be correct, but a single call site is one fewer place for the two
+   * components of one vector to drift apart.
+   */
+  const envelopeAt = (s, x, y, t) => {
+    const e = Math.sin((x * s.edx + y * s.edy) * s.ek - t * s.ew + s.ephase);
+    return ENVELOPE_FLOOR + (1 - ENVELOPE_FLOOR) * (0.5 + 0.5 * e);
+  };
   rollCurrent();
 
   /**
@@ -334,14 +392,16 @@ export function createRenderer(canvas, world) {
   const flowX = (x, y, t) => {
     let v = Math.cos(current.angle) * current.speed;
     for (const s of current.trains) {
-      v += Math.sin((x * s.dx + y * s.dy) * s.k - t * s.w + s.phase) * s.amp * -s.dy;
+      const a = s.amp * envelopeAt(s, x, y, t);
+      v += Math.sin((x * s.dx + y * s.dy) * s.k - t * s.w + s.phase) * a * -s.dy;
     }
     return v;
   };
   const flowY = (x, y, t) => {
     let v = Math.sin(current.angle) * current.speed;
     for (const s of current.trains) {
-      v += Math.sin((x * s.dx + y * s.dy) * s.k - t * s.w + s.phase) * s.amp * s.dx;
+      const a = s.amp * envelopeAt(s, x, y, t);
+      v += Math.sin((x * s.dx + y * s.dy) * s.k - t * s.w + s.phase) * a * s.dx;
     }
     return v;
   };
@@ -416,14 +476,23 @@ export function createRenderer(canvas, world) {
     ctx.fillStyle = PALETTE.seaDeep;
     ctx.fillRect(0, 0, vw, vh);
 
-    // Two layers drifting at different speeds and angles. Parallax between them is the whole
-    // reason a flat fill reads as moving water.
-    for (const [pattern, sx, sy, alpha] of [[seaNear, 11, 5, 1], [seaFar, -7, 9, 1]]) {
+    // Two layers drifting at different speeds and angles, the whole thing rotated to this map's
+    // heading. Parallax between them is the reason a flat fill reads as moving water; the
+    // rotation is the reason it is not the same sea on every map.
+    //
+    // The fill has to cover the viewport once rotated, so it is sized to the diagonal and
+    // centred — a viewport-sized rect turned 40 degrees leaves two bare corners.
+    const reach = Math.hypot(vw, vh) / 2 + 256;
+    for (let i = 0; i < 2; i++) {
+      const pattern = i === 0 ? seaNear : seaFar;
+      const d = current.surface[i] ?? { sx: 11, sy: 5 };
       ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.translate((seaT * sx) % 128, (seaT * sy) % 128);
+      ctx.translate(vw / 2, vh / 2);
+      ctx.rotate(current.angle);
+      // Modulo the pattern size, so the offset never grows large enough to lose precision.
+      ctx.translate((seaT * d.sx) % 128, (seaT * d.sy) % 128);
       ctx.fillStyle = pattern;
-      ctx.fillRect(-128, -128, vw + 256, vh + 256);
+      ctx.fillRect(-reach, -reach, reach * 2, reach * 2);
       ctx.restore();
     }
 

@@ -131,8 +131,9 @@ export const REGEN_CLEAR_RADIUS_TILES = 4;
 
 /* Powder kegs.
  *
- * At most two in a round, and at least one guaranteed — a map event you can plan around is worth
- * far more than a random one you might never see. Placement rides on the existing regrowth cycle
+ * At most six in a round, and at least one guaranteed — a map event you can plan around is worth
+ * far more than a random one you might never see. Six over ten minutes is roughly one every
+ * ninety seconds, which is often enough to be part of the map rather than a rumour. Placement rides on the existing regrowth cycle
  * (every 20 s) because that function already knows which tiles are quiet: dropping a keg next to
  * a player would be a free kill nobody could read coming.
  *
@@ -140,9 +141,9 @@ export const REGEN_CLEAR_RADIUS_TILES = 4;
  * special in the blast code — a keg IS a bomb, which is why it chains through other kegs, bombs
  * and walls exactly the way you would expect.
  */
-export const POWDER_MAX_PER_ROUND = 2;
+export const POWDER_MAX_PER_ROUND = 6;
 export const POWDER_RADIUS = 7;
-export const POWDER_CHANCE_PER_CYCLE = 0.12;
+export const POWDER_CHANCE_PER_CYCLE = 0.36;
 // Six minutes in, the first one stops being optional. A round must never pass without one.
 export const POWDER_GUARANTEE_TICK = Math.round(0.6 * 10 * 60 * TICK_HZ);
 
