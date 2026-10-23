@@ -16,10 +16,11 @@ const HALF_TILE = UNITS_PER_TILE >> 1;
 // drift is assistance, not travel, so it is allowed to outrun the legs.
 const ALIGN_RATE = 2;
 
-// How fast being shoved out of a solid tile goes. A quarter tile a tick clears one in four ticks
-// — fast enough that nobody dies waiting, slow enough that it reads as motion rather than as the
-// game glitching.
-const UNSTICK_UNITS_PER_TICK = UNITS_PER_TILE >> 2;
+// Being shoved out of a solid tile eases rather than running at a constant rate: a quarter of
+// whatever is left each tick, never faster than the player's own legs and never slower than this
+// floor, which is what guarantees it terminates. Decelerating into the gap is the difference
+// between being walked out and being flicked out.
+const UNSTICK_MIN_UNITS = 6;
 
 export function speedOf(p) {
   let s = SPEED_UNITS_PER_TICK[Math.min(p.speed, SPEED_UNITS_PER_TICK.length - 1)];
@@ -196,7 +197,9 @@ export function unstick(state, p) {
     const gx = nx - p.x, gy = ny - p.y;
     const horizontal = Math.abs(gx) >= Math.abs(gy);
     const gap = horizontal ? gx : gy;
-    const move = Math.sign(gap) * Math.min(Math.abs(gap), UNSTICK_UNITS_PER_TICK);
+    const left = Math.abs(gap);
+    const rate = Math.min(Math.max(left >> 2, UNSTICK_MIN_UNITS), speedOf(p));
+    const move = Math.sign(gap) * Math.min(left, rate);
     if (horizontal) p.x += move; else p.y += move;
     return true;
   }

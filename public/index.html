@@ -148,17 +148,33 @@
   <div id="menuWrap">
     <div class="card edge">
       <h1 id="title">Bomb&nbsp;Voyage</h1>
-      <p class="sub">16 scoundrels &middot; 10 minutes &middot; one very short fuse</p>
+      <p class="sub">Online multiplayer &middot; sixteen pirates, one island, and nowhere to hide</p>
       <label for="name">your name</label>
       <input id="name" type="text" placeholder="pick a name" autocomplete="off" autofocus>
       <button id="play">play</button>
-      <ul class="keys">
-        <li><b>arrows / wasd</b></li><li>move</li>
-        <li><b>space / k</b></li><li>bomb</li>
-        <li><b>enter</b></li><li>chat &middot; /help for commands</li>
-        <li><b>tab</b></li><li>scores &amp; ranks</li>
-        <li><b>esc</b></li><li>leave</li>
-      </ul>
+      <div class="keys">
+        <h2>Controls</h2>
+        <dl>
+          <dt><kbd>&#8592;</kbd><kbd>&#8593;</kbd><kbd>&#8595;</kbd><kbd>&#8594;</kbd>
+              <span class="or">or</span> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt>
+          <dd>Move</dd>
+
+          <dt><kbd class="wide">Space</kbd> <span class="or">or</span> <kbd>K</kbd></dt>
+          <dd>Drop a bomb &mdash; and respawn when you are dead</dd>
+
+          <dt><kbd class="wide">Enter</kbd></dt>
+          <dd>Chat</dd>
+
+          <dt><kbd>/</kbd></dt>
+          <dd>Commands &mdash; try <code>/help</code> or <code>/bots 8</code></dd>
+
+          <dt><kbd class="wide">Tab</kbd></dt>
+          <dd>Scores, ranks and the all-time board</dd>
+
+          <dt><kbd class="wide">Esc</kbd></dt>
+          <dd>Close a panel, or leave the game</dd>
+        </dl>
+      </div>
       <p class="menuFoot">
         <a href="https://github.com/cobusvonwielligh/bomb-voyage"
            target="_blank" rel="noopener noreferrer">
@@ -170,7 +186,7 @@
         </a>
       </p>
     </div>
-    <div id="mascot" class="edge"><img src="/assets/mascot.png" alt="" width="240" height="240"></div>
+    <div id="mascot"><img src="/assets/mascot.png" alt="" width="260" height="260"></div>
   </div>
 </div>
 

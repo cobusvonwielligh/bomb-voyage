@@ -175,9 +175,16 @@ export function createWorld() {
   function settleToLane(p) {
     if (!w.map || !blocked(w, p, p.rx, p.ry)) return;
     const cx = tileCentre(p.x >> 8), cy = tileCentre(p.y >> 8);
-    if (!blocked(w, p, cx, p.ry)) { p.rx = cx; return; }
-    if (!blocked(w, p, p.rx, cy)) { p.ry = cy; return; }
-    p.rx = cx; p.ry = cy;        // both axes are wrong: the tile centre is always legal
+    // Slide onto the lane rather than jumping onto it. A hard assignment here is a visible
+    // flick — the drawn position is usually only a few units inside the wall, and moving a few
+    // units a frame hides the correction completely. A floor of 4 units makes it terminate.
+    const ease = (from, to) => {
+      const d = to - from;
+      return from + Math.sign(d) * Math.min(Math.abs(d), Math.max(4, Math.abs(d) * 0.25));
+    };
+    if (!blocked(w, p, cx, p.ry)) { p.rx = ease(p.rx, cx); return; }
+    if (!blocked(w, p, p.rx, cy)) { p.ry = ease(p.ry, cy); return; }
+    p.rx = ease(p.rx, cx); p.ry = ease(p.ry, cy);
   }
 
   /**
@@ -206,10 +213,13 @@ export function createWorld() {
         else {
           const nx = p.rx + dx * k, ny = p.ry + dy * k;
           // The eased path is a straight line and the simulated one was not, so easing across a
-          // corner can draw you briefly inside a wall. If the smoothed point is solid, skip the
-          // smoothing for this frame rather than clipping.
-          if (blocked(w, p, nx, ny)) { p.rx = p.x; p.ry = p.y; }
-          else { p.rx = nx; p.ry = ny; }
+          // corner can draw you briefly inside a wall. Rather than snapping to the simulated
+          // position — which is the flick this used to produce — try each axis on its own: one
+          // of them is almost always legal, and taking just that one keeps the motion smooth.
+          if (!blocked(w, p, nx, ny)) { p.rx = nx; p.ry = ny; }
+          else if (!blocked(w, p, nx, p.ry)) { p.rx = nx; }
+          else if (!blocked(w, p, p.rx, ny)) { p.ry = ny; }
+          else { p.rx = p.x; p.ry = p.y; }      // genuinely boxed in; nothing smooth left to do
         }
       } else if (p.buf.length >= 2) {
         // The pair that BRACKETS the time being drawn, not the two newest — see pickPair. Taking
