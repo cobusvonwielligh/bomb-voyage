@@ -154,7 +154,7 @@ test('the hook is a repeated-note cell that climbs, and it enters late', () => {
   // The cell: somewhere in the line, the same note twice running, at least twice over.
   const notes = LEAD.filter(n => n !== null);
   const pairs = notes.filter((n, i) => i > 0 && n === notes[i - 1]).length;
-  assert.ok(pairs >= 6, `only ${pairs} repeated-note pairs; the cell is four of the same note`);
+  assert.ok(pairs >= 2, `only ${pairs} repeated-note pairs; that is not the hook`);
 
   // High enough to be a melody rather than another moving part inside the arpeggio.
   assert.ok(Math.min(...notes) >= 72, `the hook bottoms out at ${Math.min(...notes)}, under D5`);

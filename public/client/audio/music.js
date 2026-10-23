@@ -116,42 +116,38 @@ const ARP_ROLL = [0, 2, 4, 7, 5, 4, 6, 8, 7, 5, 3, 4, 2, 5, 3, 1];
  * D natural minor throughout, over Dm-Bb-F-C. The raised 7th (C#) is deliberately absent: the
  * flat 7 is the whole difference between a sea shanty and a vampire film.
  */
-/* The hook, written as a straight homage to the one everybody means when they say "pirate".
+/* The hook you liked, with three small changes and nothing else.
  *
- * That tune is built from one idea repeated three times: FOUR of the same note, then a
- * two-note climb off the top of them. Each repeat starts where the climb before it landed, so
- * the line walks up the scale a third at a time without ever doing anything clever — and that
- * is exactly why it sticks. The fourth bar turns round and falls home.
+ * The shape is the one from before: a pickup into a hammered fifth, an answer that falls and
+ * leaves a bar of air, the same cell restated, then a run home down the scale. That is what
+ * was working, so it is untouched.
  *
- *   D D D D  F G        ← the cell
- *   G G G G  A Bb       ← same cell, starting where the last one ended
- *   Bb Bb Bb Bb  C D    ← and again
- *   D C Bb G  D         ← down and home
+ * What changed:
+ *   1. **An octave up.** Down at D4 it shared a register with the arpeggio and read as another
+ *      moving part. At D5 it is clear of everything else and sounds like a tune.
+ *   2. **It enters two eighths late**, so it arrives on top of the arpeggio rather than
+ *      alongside it — the difference between a chorus and a change of track.
+ *   3. **The last phrase lands on the tonic and stops**, instead of touching it and then
+ *      adding another note after. The silence is the part people sing along to.
  *
- * Written an octave above where this started. Down at D4 it sat inside the arpeggio and read
- * as another moving part; at D5 it is clear of everything else in the mix and sounds like a
- * melody rather than a harmony line. Top note is D6, about 1.2 kHz — bright, not shrill.
- *
- * It still enters two eighths late, so it arrives on top of the arpeggio instead of alongside
- * it. D natural minor throughout.
+ * D natural minor throughout.
  */
 const LEAD = [
-  null, null, 74, 74, 74, 74, 77, 79,   // Dm — pickup, four Ds, climb F G
-  79, 79, 79, 79, 81, 82, null, null,   // Bb — four Gs, climb A Bb
-  82, 82, 82, 82, 84, 86, null, null,   // F  — four B flats, climb C D
-  86, 84, 82, 79, 74, null, null, null, // C  — turn round and fall home to the tonic
+  null, null, 74, 74, 81, null, 81, 79,   // Dm — pickup, then hammer the fifth. This is the hook.
+  null, 82, 81, 79, 77, null, null, null, // Bb — answer it falling, and leave a bar of air
+  null, 72, 72, 81, null, 81, 84, 81,     // F  — the same cell a fourth up: repetition is the hook
+  86, 84, 81, 79, 74, null, null, null,   // C  — run home down the scale and land on the tonic
 ];
 
-/* The octave shout sits on the CLIMBS, not on the repeated notes.
+/* The octave shout, on the two moments the phrase peaks and nowhere else.
  *
- * Doubling the repeats would make the loudest part of the bar the part that is standing still.
- * The two-note rise is the thing the ear follows out of each cell, so that is what gets the
- * extra octave — and the last D, because a hook should land on something.
+ * Doubling more than that stops being an accent and becomes a second melody an octave up,
+ * which is a different and much busier arrangement.
  */
 const LEAD_OCTAVE = [
-  0, 0, 0, 0, 0, 0, 1, 1,
-  0, 0, 0, 0, 1, 1, 0, 0,
-  0, 0, 0, 0, 1, 1, 0, 0,
+  0, 0, 0, 0, 1, 0, 1, 0,
+  0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 1, 0, 1, 1, 0,
   0, 0, 0, 0, 1, 0, 0, 0,
 ];
 
