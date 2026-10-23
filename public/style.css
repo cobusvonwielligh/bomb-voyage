@@ -167,10 +167,16 @@ canvas#game {
  *
  * `inline-block` matters too: the bump animation scales these, and a scaled inline box
  * contributes its unscaled size to layout only if it is a block. */
-.stat { display: flex; align-items: baseline; gap: 6px; }
-.stat .k { color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: .14em; }
+.stat { display: flex; align-items: baseline; gap: 7px; }
+/* Was 10px in --dim, which is about 3:1 against the bar and sits below the readable threshold
+   for type this small. Up a point, and lifted toward the ink: these are labels you read out of
+   the corner of your eye mid-fight, not footnotes. */
+.stat .k {
+  color: #aab6c8; font-size: 11px; text-transform: uppercase; letter-spacing: .12em;
+}
 .stat .v {
-  font-family: var(--nums); font-variant-numeric: tabular-nums; font-size: 13px;
+  font-family: var(--nums); font-variant-numeric: tabular-nums; font-size: 15px;
+  font-weight: 600;
   display: inline-block; text-align: left;
 }
 #vPing { min-width: 5.2ch; }
@@ -189,7 +195,7 @@ canvas#game {
   font-variant-numeric: tabular-nums;
   display: inline-block; min-width: 5.2ch; text-align: left;
 }
-#clock .k { color: var(--dim); font-size: 9px; text-transform: uppercase; letter-spacing: .16em; }
+#clock .k { color: #aab6c8; font-size: 10px; text-transform: uppercase; letter-spacing: .14em; }
 #clock.low .v { color: var(--bad); animation: tick 1s steps(2) infinite; }
 @keyframes tick { 50% { opacity: .55; } }
 
@@ -203,13 +209,14 @@ canvas#game {
 /* loadout */
 #gear { display: flex; gap: 14px; align-items: center; }
 .pip {
-  display: flex; align-items: center; gap: 6px;
-  font-family: var(--nums); font-variant-numeric: tabular-nums; font-size: 14px;
+  display: flex; align-items: center; gap: 7px;
+  font-family: var(--nums); font-variant-numeric: tabular-nums; font-size: 16px;
+  font-weight: 600;
 }
 /* 1.5x. These are the only pictures in the bar and they were losing to the text beside them. */
 .pip svg { width: 20px; height: 20px; display: block; }
 .pip .n { display: inline-block; min-width: 1.2ch; text-align: right; }
-.pip .cap { color: var(--dim); font-size: 11px; }
+.pip .cap { color: #9fabbd; font-size: 13px; }
 .pip.max .n { color: var(--gold); }
 #shields { display: flex; gap: 4px; min-width: 11px; }
 #shields i {

@@ -235,31 +235,75 @@ export function createRenderer(canvas, world) {
     dropsFor = world.map;
   }
 
-  /** The current at a point. Two crossed waves plus a constant drift. */
   /**
-   * The current. Two crossed waves plus a prevailing drift, rolled fresh for each map.
+   * The current: a prevailing drift with two wave trains riding on it, all rolled per map.
    *
    * The drift used to run straight down the screen at a fixed speed, which reads as a conveyor
-   * belt rather than as water. The angle and the speed are now drawn from the range a real
-   * surface drift sits in, and the swell is offset thirty degrees from it — wind waves and the
-   * current beneath them are never quite aligned, and that disagreement is most of what makes a
-   * moving surface look wet.
+   * belt rather than as water. What was still fixed after that was the WAVES: both sine terms
+   * were axis-aligned, one travelling along y and one along x, so whatever the drift was doing
+   * underneath, the surface corrugation always ran square to the screen. The current angle only
+   * scaled their amplitude, which is not the same as turning them.
+   *
+   * So each train now has its own direction, wavelength, speed and amplitude. The sine is taken
+   * along a PROJECTION onto that direction — `x*cos(a) + y*sin(a)` is distance measured along
+   * the heading — which is what actually makes a plane wave travel that way.
+   *
+   * The two headings straddle the drift by a random 20-45 degrees rather than a fixed 30. Wind
+   * waves and the current beneath them are never quite aligned, and two trains crossing at a
+   * slight angle is what produces the wandering interference a real surface has. Identical
+   * headings would just sum into one bigger wave.
    */
-  const current = { angle: 0, speed: 0, swell: 0, phase: 0 };
+  const current = { angle: 0, speed: 0, trains: [] };
+
+  // The ranges. A drift is a drift, not a river, and a wavelength shorter than ~60px turns into
+  // visual noise once the whole map is zoomed to fit.
+  const DRIFT_SPEED = [9, 22];            // world px/s
+  const TRAIN_SPREAD = [Math.PI / 9, Math.PI / 4];   // 20-45 degrees off the drift
+  const TRAIN_WAVELENGTH = [70, 220];     // px between crests
+  const TRAIN_SPEED = [16, 52];           // px/s the crests travel
+  const TRAIN_AMPLITUDE = [7, 16];        // px/s of sideways push at the crest
+
+  const between = ([lo, hi]) => lo + Math.random() * (hi - lo);
+
   function rollCurrent() {
     current.angle = Math.random() * Math.PI * 2;
-    current.speed = 9 + Math.random() * 13;         // world px/s: a drift, not a river
-    current.swell = current.angle + (Math.PI / 6) * (Math.random() < 0.5 ? -1 : 1);
-    current.phase = Math.random() * 100;
+    current.speed = between(DRIFT_SPEED);
+    current.trains = [-1, 1].map(side => {
+      const heading = current.angle + side * between(TRAIN_SPREAD);
+      const wavelength = between(TRAIN_WAVELENGTH);
+      return {
+        // Precomputed because this runs per particle per frame.
+        dx: Math.cos(heading), dy: Math.sin(heading),
+        k: (Math.PI * 2) / wavelength,          // radians of phase per pixel
+        w: ((Math.PI * 2) / wavelength) * between(TRAIN_SPEED),   // and per second
+        amp: between(TRAIN_AMPLITUDE),
+        phase: Math.random() * Math.PI * 2,
+      };
+    });
   }
   rollCurrent();
 
-  const flowX = (x, y, t) =>
-    Math.sin(y * 0.012 + t * 0.55 + current.phase) * 13 * Math.cos(current.swell)
-      + Math.cos(current.angle) * current.speed;
-  const flowY = (x, y, t) =>
-    Math.cos(x * 0.009 - t * 0.45 + current.phase) * 13 * Math.sin(current.swell)
-      + Math.sin(current.angle) * current.speed;
+  /**
+   * Flow at a point, as a vector.
+   *
+   * Each train pushes ACROSS its own direction of travel, not along it: water in a passing swell
+   * moves side to side while the crest moves forward. Pushing along the heading would make the
+   * particles race the wave and the whole field would shear apart.
+   */
+  const flowX = (x, y, t) => {
+    let v = Math.cos(current.angle) * current.speed;
+    for (const s of current.trains) {
+      v += Math.sin((x * s.dx + y * s.dy) * s.k - t * s.w + s.phase) * s.amp * -s.dy;
+    }
+    return v;
+  };
+  const flowY = (x, y, t) => {
+    let v = Math.sin(current.angle) * current.speed;
+    for (const s of current.trains) {
+      v += Math.sin((x * s.dx + y * s.dy) * s.k - t * s.w + s.phase) * s.amp * s.dx;
+    }
+    return v;
+  };
 
   function drawDrops(vw, vh, ox, oy, dt) {
     if (dropsFor !== world.map) seedDrops();
