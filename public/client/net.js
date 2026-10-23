@@ -7,7 +7,7 @@
 import { PING_EVERY_MS, RTT_SAMPLES, CLOCK_SAFETY_MS, TICK_MS } from '/shared/constants.js';
 import { createTransport } from './transport.js';
 
-export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onScores, onStreak }) {
+export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onScores, onStreak, onRejected }) {
   let ws = null;
   // serverTick ≈ performance.now()/TICK_MS + tickOffset. Keeping an offset rather than a
   // timestamped sample means the estimate is continuous: a new ping nudges it instead of
@@ -83,14 +83,13 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
     {
       switch (m.t) {
         case 'welcome':
-          // sessionStorage, not localStorage: the resume token identifies a TAB, not a browser.
-          // localStorage is shared across tabs, so two tabs both claimed the same seat, each
-          // hello evicted the other, and the pair flapped forever. It survives a reload, which
-          // is the case resume actually exists for.
-          // Guarded: a welcome with no id (a round restart used to send one) must not overwrite
-          // a good token with the string "undefined", which the server then accepts as a real id.
+          // localStorage, so the identity outlives the tab: it is meant to BE you, not to be
+          // this window. Two tabs therefore share it, and the server refuses the second one
+          // rather than handing one person two of sixteen seats. /logout is the way out.
+          // Guarded: a welcome with no id must not overwrite a good token with "undefined",
+          // which the server would then accept as a real id.
           if (m.playerId) {
-            sessionStorage.setItem('bv.playerId', m.playerId);
+            localStorage.setItem('bv.playerId', m.playerId);
             hello = { ...hello, playerId: m.playerId };
           }
           connectedAt = performance.now();
@@ -115,7 +114,14 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
           }
           break;
         }
-        case 'reject': onStatus?.(`rejected: ${m.why}`); closedByUs = true; break;
+        case 'reject':
+          // `forget` means the stored identity is what was refused, so drop it: the next attempt
+          // then arrives as a new player instead of being turned away for the same reason.
+          if (m.forget) { try { localStorage.removeItem('bv.playerId'); } catch { /* private mode */ } }
+          closedByUs = true;
+          onStatus?.(`rejected: ${m.why}`);
+          onRejected?.(m);
+          break;
         case 'mapchange': onWelcome?.({ ...m, mapOnly: true }); break;
         case 'roundend': onRoundEnd?.(m); break;
         case 'scores': onScores?.(m); break;
@@ -159,7 +165,7 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
 
   return {
     connect(name) {
-      hello = { t: 'hello', name, playerId: sessionStorage.getItem('bv.playerId') || null };
+      hello = { t: 'hello', name, playerId: localStorage.getItem('bv.playerId') || null };
       open();
     },
     send(msg) { if (ws?.open) ws.send(msg); },
@@ -170,6 +176,12 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
       ws?.close();
       ws = null;
     },
+    /** Drop the stored identity. The seat is only released if the server is told as well. */
+    forgetIdentity() {
+      try { localStorage.removeItem('bv.playerId'); } catch { /* private mode */ }
+      hello = hello ? { ...hello, playerId: null } : hello;
+    },
+
     get clientTick() { return clientTick; },
     get rtt() { return Math.round(rttMin()); },
     /** 'webtransport' or 'websocket' — shown in the HUD so a bad round can be attributed. */

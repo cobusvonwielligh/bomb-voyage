@@ -219,6 +219,23 @@ const net = createNet({
     }
     pushLine(li);
   },
+  /**
+   * Turned away. The usual reason is that this browser's identity is already in a game, which is
+   * a state somebody can be stuck in forever if the only feedback is the word "rejected" — so
+   * when the server says the identity is the problem, offer the way out next to the message.
+   */
+  onRejected: m => {
+    running = false;
+    $('menu').style.display = 'grid';
+    $('hud').classList.remove('on');
+    $('play').disabled = false;
+    toast(m.why);
+    if (m.forget) {
+      // net.js has already dropped the stored id, so pressing play again simply works.
+      $('signedOut').textContent = `${m.why}. press play to start a new session.`;
+      $('signedOut').style.display = '';
+    }
+  },
   // The connection readout lives in the HUD, which is hidden until you are in a game. Before
   // that, a full server or an unreachable one has to say so somewhere you can actually see it.
   onStatus: s => {
@@ -651,6 +668,7 @@ nameInput.maxLength = NAME_MAX_CHARS;
 nameInput.value = localStorage.getItem('bv.name') || '';
 
 function play() {
+  $('signedOut').style.display = 'none';
   const name = nameInput.value.trim();
   if (!name) { nameInput.focus(); return; }
   if ($('play').disabled) return;          // double-click would otherwise open a second socket

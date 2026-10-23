@@ -8,7 +8,7 @@ import {
   TILE_PX, UNITS_PER_TILE, FUSE_TICKS, FIRE_TICKS, playerColor, SCORE, ROUND_INTERMISSION_MS,
   RANK_NAMES, RANK_THRESHOLDS, rankForScore,
   STREAK_WINDOW_TICKS, STREAK_NAMES, STREAK_ACE, GAMESPEED_MIN, GAMESPEED_MAX,
-  SPAWN_CANDIDATES, IDLE_KICK_TICKS, TAKEOVER_LIMIT, TAKEOVER_WINDOW_TICKS,
+  SPAWN_CANDIDATES, IDLE_KICK_TICKS,
 } from '../shared/constants.js';
 import { MAPS, encodeCells } from '../shared/maps.js';
 import { createState, createPlayer, expireStatuses, applyStatus, tileCentre } from '../shared/sim/state.js';
@@ -83,45 +83,28 @@ export function createRoom({ onKick, onBroadcast, maxPlayers = MAX_PLAYERS, lead
     streaks[seat] = newStreak();
   }
 
-  /**
-   * Claim a seat held by this same id, whether or not its socket is still up.
-   *
-   * The latest use of an id wins. Moving from laptop to phone, reloading before the old socket
-   * has been noticed as dead, or a half-open connection the server still believes in: all of
-   * them are one person, and all of them should land back in the seat they were already in,
-   * with their score.
-   *
-   * The guard is what stops that becoming a war. If two clients genuinely share an id, each
-   * takeover kicks the other, the kicked one reconnects, and they flap forever — which is
-   * exactly what two tabs sharing a localStorage id used to do. So an id gets a few takeovers
-   * inside a short window and then stops being trusted: the newcomer is handed a fresh id and
-   * sits down somewhere else instead.
-   */
-  function reclaim(seat, name) {
-    const s = seats[seat];
-    const now = state.tick;
-    s.takeovers = (s.takeovers ?? []).filter(t => now - t < TAKEOVER_WINDOW_TICKS);
-    const wasLive = s.connected;
-    if (wasLive) {
-      if (s.takeovers.length >= TAKEOVER_LIMIT) return null;   // flapping, not a person
-      s.takeovers.push(now);
-    }
-    s.connected = true;
-    s.goneSince = 0;
-    s.lastInputAt = now;
-    s.name = name || s.name;
-    if (state.players[seat]) state.players[seat].name = s.name;
-    return { seat, resumed: true, playerId: s.playerId, replaced: wasLive };
-  }
-
   function join(playerId, name) {
     const existing = findSeatByPlayerId(playerId);
 
     if (existing >= 0) {
-      const taken = reclaim(existing, name);
-      if (taken) return { ...taken, displaced: null };
-      // Too many takeovers too fast: treat this as a second client and give it its own identity.
-      playerId = null;
+      const held = seats[existing];
+
+      // An id is one person, and one person plays once. A second window on the same identity is
+      // turned away rather than quietly handed a second seat or allowed to steal the first — a
+      // sixteen-seat server where one person can hold two of them is a smaller server.
+      //
+      // Only a LIVE seat refuses. A socket that has actually gone is the reconnect case, and
+      // that has to keep working: a wifi roam must not lock you out of your own score.
+      if (held.connected) {
+        return { seat: -1, resumed: false, playerId: null, displaced: null, why: 'already-playing' };
+      }
+
+      held.connected = true;
+      held.goneSince = 0;
+      held.lastInputAt = state.tick;
+      held.name = name || held.name;
+      if (state.players[existing]) state.players[existing].name = held.name;
+      return { seat: existing, resumed: true, playerId, displaced: null };
     }
 
     // A full server that is full of bots is not full. Turning away a real person so a brain we
@@ -654,6 +637,16 @@ export function createRoom({ onKick, onBroadcast, maxPlayers = MAX_PLAYERS, lead
     return on;
   }
 
+  /**
+   * Give up the seat and the identity. The score is banked on the way out by `release`, so
+   * signing out is not a way to dodge a bad round.
+   */
+  function logout(seat) {
+    if (!seats[seat]) return false;
+    release(seat);
+    return true;
+  }
+
   /** Pressing SPACE while dead. Kept separate from the input mask so the intent is explicit. */
   function requestRespawn(seat) {
     const p = state.players[seat];
@@ -664,7 +657,7 @@ export function createRoom({ onKick, onBroadcast, maxPlayers = MAX_PLAYERS, lead
 
   return {
     start, stop, join, disconnect, input, requestRespawn, welcomeFor, roundInfo, stats,
-    setBots, botCount, restartRound, toggleGod,
+    setBots, botCount, restartRound, toggleGod, logout,
     kickSeat, seatOfName, setMap, setGameSpeed,
     isBot: seat => !!seats[seat]?.isBot,
     maps: () => MAPS.map(m => m.id),

@@ -580,6 +580,14 @@ input[type=text]:focus {
 
 label { margin-bottom: 9px; }
 
+/* Shown when the server turned this browser away because its identity is already in a game. It
+   has to say what to do next, not just that something went wrong. */
+#signedOut {
+  display: none; margin: 12px 0 0; padding: 10px 12px;
+  background: #e8655a14; border: 1px solid #e8655a44; border-radius: 8px;
+  color: var(--bad); font-size: 12.5px; text-align: center;
+}
+
 /* Hovering runs the same conic gradient through the glyphs themselves: the text is painted by the
  * gradient and clipped to the letterforms, so it flows rather than just changing colour.
  *
