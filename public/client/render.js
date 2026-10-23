@@ -33,6 +33,18 @@ export function createRenderer(canvas, world) {
   const splashes = [];         // shoreline foam, capped — see spawnSplash
   const floaters = [];         // "+1 BOMB" rising off a player — see addFloater
   let seaT = 0;
+  let drunk = 0;                       // 0..1, eased, so it fades in and out rather than snapping
+  let depth = null, depthFor = '';     // the depth gradient, rebuilt only when the view changes
+
+  // Sun glints on the open water. Cheap, stateless, and most of what makes a surface read wet.
+  const GLINTS = 46;
+  const GLINT_LIFE_S = 1.6;
+  /** Deterministic 0..1 from one integer, so a glint stays put for its whole life. */
+  const hash01 = n => {
+    let x = (n * 374761393) ^ 0x5bf03635;
+    x = (x ^ (x >>> 13)) * 1274126177;
+    return ((x ^ (x >>> 16)) >>> 0) / 4294967295;
+  };
 
   function ensureBaked() {
     if (baked) return;
@@ -529,9 +541,10 @@ export function createRenderer(canvas, world) {
    */
   const SHIP_SCALE = 2;
   const SHIP_ALPHA = 0.42;
-  // Half again what the ship gets. A boulder is a shape in the water, not an object on it:
-  // once you can make out its edges clearly it stops being distance and starts being clutter.
-  const ROCK_ALPHA = 0.21;
+  // Nearly solid. A boulder is a real object sitting in the water, not a shadow under it —
+  // what keeps it in the background is its COLOUR, which is mixed well down toward the deep
+  // sea, not its transparency. Fading it out just made it look like a rendering fault.
+  const ROCK_ALPHA = 0.88;
   // Her centre sits this far outside the island's bounding box. The visible ocean margin is two
   // or three tiles, so at two and a half she is half in frame and half past the edge of the
   // board — present, cut off, and obviously not something you can interact with.
@@ -711,11 +724,11 @@ export function createRenderer(canvas, world) {
 
       // The water piling up around it. Wide and faint — a bright collar is what made these look
       // like islands rather than like something barely breaking the surface.
-      ctx.globalAlpha = ROCK_ALPHA * (0.09 + 0.03 * Math.sin(seaT * 1.1 + k.phase)) / 0.42;
+      ctx.globalAlpha = 0.12 + 0.04 * Math.sin(seaT * 1.1 + k.phase);
       ctx.strokeStyle = PALETTE.foam;
       ctx.lineWidth = 3;
       ctx.beginPath(); ctx.ellipse(x, y, k.r * 1.25, k.r * 1.05, 0, 0, 7); ctx.stroke();
-      ctx.globalAlpha = ROCK_ALPHA * 0.12;
+      ctx.globalAlpha = 0.06;
       ctx.lineWidth = 9;
       ctx.beginPath(); ctx.ellipse(x, y, k.r * 1.6, k.r * 1.35, 0, 0, 7); ctx.stroke();
 
@@ -734,9 +747,9 @@ export function createRenderer(canvas, world) {
       // and the only part of a rock that caught the eye from across the board — which is the
       // opposite of what a piece of background is for.
       for (const l of k.lumps) lump({ ...l, dx: l.dx - l.r * 0.22, dy: l.dy - l.r * 0.24 },
-        0.6, '#3c424c', 0.4);                                         // the lit shoulder
+        0.6, '#3c424c', 0.75);                                        // the lit shoulder
       for (const l of k.lumps) lump({ ...l, dx: l.dx - l.r * 0.3, dy: l.dy - l.r * 0.34 },
-        0.26, '#4b515c', 0.275);                                      // the dry cap
+        0.26, '#4b515c', 0.5);                                        // the dry cap
 
       // A wet line where it goes into the water, which is what sells "half submerged".
       ctx.globalAlpha = ROCK_ALPHA * 0.7;
@@ -756,6 +769,29 @@ export function createRenderer(canvas, world) {
     seaT += dtMs / 1000;
 
     ctx.fillStyle = PALETTE.seaDeep;
+    ctx.fillRect(0, 0, vw, vh);
+
+    /* Depth.
+     *
+     * Open water is not one colour. It goes darker as it gets deeper and further from land, and
+     * without that the sea is a flat field with some squiggles on it. A radial gradient centred
+     * on the island — lighter at the coast, black-blue at the corners of the board — gives the
+     * whole thing a middle, and it costs one fill.
+     *
+     * Built once per view rather than per frame: a canvas gradient is an object, and allocating
+     * one sixty times a second to draw the same thing is work nobody asked for.
+     */
+    if (!depth || depthFor !== `${vw}x${vh}`) {
+      const [lx, ly, lw, lh] = landBounds();
+      const cx = ox + (lx + lw / 2) * TILE_PX, cy = oy + (ly + lh / 2) * TILE_PX;
+      const r = Math.hypot(vw, vh) * 0.62;
+      depth = ctx.createRadialGradient(cx, cy, Math.min(vw, vh) * 0.18, cx, cy, r);
+      depth.addColorStop(0, 'rgba(29,81,118,0.30)');     // shelf, close in
+      depth.addColorStop(0.45, 'rgba(18,50,82,0.16)');
+      depth.addColorStop(1, 'rgba(2,8,16,0.55)');        // the deep, at the edges
+      depthFor = `${vw}x${vh}`;
+    }
+    ctx.fillStyle = depth;
     ctx.fillRect(0, 0, vw, vh);
 
     // Two layers drifting at different speeds and angles, the whole thing rotated to this map's
@@ -778,18 +814,74 @@ export function createRenderer(canvas, world) {
       ctx.restore();
     }
 
-    // A band of lighter shallows hugging the island, drawn in world space over the open sea.
+    /* Sun glints: a sparse scatter of bright specks that live for a moment and go.
+     *
+     * This is the single cheapest thing that makes water look like water rather than like a
+     * moving texture. Real sea is covered in points of reflected sky appearing and vanishing,
+     * and the eye reads that as a wet surface before it reads anything else.
+     *
+     * Positions come from a hash of the index and a slowly advancing epoch, so each glint sits
+     * still for its whole short life and a new one appears somewhere else — no state, no
+     * allocation, deterministic enough never to flicker as a group.
+     */
     ctx.save();
-    ctx.translate(ox, oy);
-    ctx.globalAlpha = 0.45;
-    ctx.fillStyle = PALETTE.seaMid;
-    for (const s of shoreline()) {
-      if (s.e & 1) ctx.fillRect((s.tx + 1) * TILE_PX, s.ty * TILE_PX, TILE_PX, TILE_PX);
-      if (s.e & 4) ctx.fillRect((s.tx - 1) * TILE_PX, s.ty * TILE_PX, TILE_PX, TILE_PX);
-      if (s.e & 2) ctx.fillRect(s.tx * TILE_PX, (s.ty - 1) * TILE_PX, TILE_PX, TILE_PX);
-      if (s.e & 8) ctx.fillRect(s.tx * TILE_PX, (s.ty + 1) * TILE_PX, TILE_PX, TILE_PX);
+    ctx.fillStyle = '#dff0ff';
+    for (let i = 0; i < GLINTS; i++) {
+      const epoch = Math.floor(seaT / GLINT_LIFE_S + i * 0.37);
+      const f = (seaT / GLINT_LIFE_S + i * 0.37) % 1;
+      const hx = hash01(i * 7919 + epoch * 104729);
+      const hy = hash01(i * 7919 + epoch * 104729 + 1);
+      // A short rise and a long fall, so they twinkle out rather than blinking off.
+      const life = f < 0.25 ? f / 0.25 : 1 - (f - 0.25) / 0.75;
+      ctx.globalAlpha = life * 0.5;
+      const gx = hx * vw, gy = hy * vh;
+      const len = 1.5 + hash01(i + epoch) * 3.5;
+      ctx.fillRect(gx, gy, len, 1);
+      ctx.fillRect(gx + len / 2 - 0.5, gy - 1, 1, 3);
     }
     ctx.restore();
+    ctx.globalAlpha = 1;
+
+    // Shallows: two bands rather than one, so the water shelves away from the coast instead of
+    // stepping from pale to deep in a single tile.
+    ctx.save();
+    ctx.translate(ox, oy);
+    const shelf = (reachTiles, alpha, colour) => {
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = colour;
+      for (const s of shoreline()) {
+        for (let n = 1; n <= reachTiles; n++) {
+          if (s.e & 1) ctx.fillRect((s.tx + n) * TILE_PX, s.ty * TILE_PX, TILE_PX, TILE_PX);
+          if (s.e & 4) ctx.fillRect((s.tx - n) * TILE_PX, s.ty * TILE_PX, TILE_PX, TILE_PX);
+          if (s.e & 2) ctx.fillRect(s.tx * TILE_PX, (s.ty - n) * TILE_PX, TILE_PX, TILE_PX);
+          if (s.e & 8) ctx.fillRect(s.tx * TILE_PX, (s.ty + n) * TILE_PX, TILE_PX, TILE_PX);
+        }
+      }
+    };
+    shelf(2, 0.16, PALETTE.seaMid);     // the outer, deeper step
+    shelf(1, 0.42, PALETTE.seaLight);   // and the bright water right against the rock
+
+    /* Caustics in the shallows: slow bright ripples where the light reaches the bottom.
+     *
+     * Only against the coast, which is both where they would really be and the only place the
+     * cost is bounded — the shoreline list is a few dozen tiles, not the whole board.
+     */
+    ctx.globalCompositeOperation = 'lighter';
+    for (const s of shoreline()) {
+      const dx = (s.e & 1 ? 1 : 0) - (s.e & 4 ? 1 : 0);
+      const dy = (s.e & 8 ? 1 : 0) - (s.e & 2 ? 1 : 0);
+      if (!dx && !dy) continue;
+      const cx = (s.tx + 0.5 + dx * 1.1) * TILE_PX, cy = (s.ty + 0.5 + dy * 1.1) * TILE_PX;
+      const beat = Math.sin(seaT * 0.9 + (s.tx + s.ty) * 0.6);
+      ctx.globalAlpha = 0.05 + 0.045 * (beat * 0.5 + 0.5);
+      ctx.fillStyle = PALETTE.foam;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, TILE_PX * (0.42 + 0.12 * beat), TILE_PX * 0.2, (s.tx + s.ty) * 0.7, 0, 7);
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.restore();
+    ctx.globalAlpha = 1;
   }
 
   function drawSplashes(ox, oy, dtMs) {
@@ -857,6 +949,26 @@ export function createRenderer(canvas, world) {
       : Math.max(originX, Math.min(originX + worldW - vw, cam.x));
     cam.y = worldH <= vh ? originY + (worldH - vh) / 2
       : Math.max(originY, Math.min(originY + worldH - vh, cam.y));
+
+    /* Drunk camera: a slow roll and a lazy drift, not a shake.
+     *
+     * A shake is an impact — short, high frequency, and it means something hit you. Being drunk
+     * is the opposite: low frequency, continuous, and it never quite settles. So the board
+     * leans a degree or two and wanders a few pixels on two slow sines, which is enough to make
+     * lining up a corridor feel wrong without making anybody ill.
+     *
+     * Rotation is about the centre of the board rather than the origin, or the whole thing
+     * swings away like a door.
+     */
+    const meNow = world.me();
+    drunk += ((meNow && (meNow.status & STATUS.DRUNK) ? 1 : 0) - drunk) * (1 - Math.exp(-dtMs / 400));
+    if (drunk > 0.01) {
+      const roll = Math.sin(seaT * 0.63) * 0.035 * drunk;
+      ctx.translate(vw / 2, vh / 2);
+      ctx.rotate(roll);
+      ctx.translate(-vw / 2, -vh / 2);
+      ctx.translate(Math.sin(seaT * 0.41) * 9 * drunk, Math.cos(seaT * 0.29) * 6 * drunk);
+    }
 
     // Shake is applied to the draw offset, not to the camera, so it cannot accumulate into the
     // follow logic or drift the view. Decay is time-based for the same reason the follow is.

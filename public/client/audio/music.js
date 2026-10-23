@@ -52,10 +52,13 @@ const CHORDS = [
   { bass: 43, notes: [64, 67, 71], chank: [64, 67, 71] },   // Cmaj7
   { bass: 40, notes: [62, 67, 71], chank: [62, 67, 71] },   // Em7
   { bass: 38, notes: [66, 69, 76], chank: [64, 66, 69] },   // D9
-  { bass: 48, notes: [60, 64, 67] },   // C
-  { bass: 43, notes: [59, 62, 67] },   // G
+  // The back half moves to D minor. The arpeggio engine is unchanged — it is the chords under
+  // it that decide whether a sea shanty or a car advert comes out, and Dm-Bb-F-C is the
+  // progression every pirate tune ever written sits on.
+  { bass: 38, notes: [62, 65, 69] },   // Dm
+  { bass: 34, notes: [62, 65, 70] },   // Bb
   { bass: 41, notes: [60, 65, 69] },   // F
-  { bass: 43, notes: [62, 67, 71] },   // G, voiced high to lift into the repeat
+  { bass: 36, notes: [60, 64, 67] },   // C, pulling back round to the Dm
 ];
 
 // Semitones above the bar's root; null is a rest. The root lands on the downbeat and then the
@@ -82,15 +85,27 @@ const CHANK = [
 // three notes; this one climbs and comes back down.
 const ARP_ROLL = [0, 2, 4, 6, 8, 6, 7, 5, 3, 1, 2, 4, 6, 4, 2, 1];
 
-// Back half only. Nulls are rests — a melody needs to breathe.
-// Thinned deliberately. The shape is the same four phrases, but with roughly half the notes: a
-// line that plays on every other beat stops being a melody and becomes a texture, and over a
-// sixteen-minute round a texture is what you end up muting. The rests are the tune.
+/* The hook. Eight eighth-notes a bar, four bars, nulls are rests.
+ *
+ * The old line was four long notes a bar — correct, inoffensive, and not a tune. What makes a
+ * shanty singable is three things, and all of them are deliberate here:
+ *
+ *   1. **A rhythmic cell that repeats.** Bars 1 and 3 share the same three-quaver pickup into
+ *      a held note. Repetition is what a hook IS; a melody that never says the same thing
+ *      twice is a solo.
+ *   2. **Leaps, not steps.** D up to A is a fifth and F up to D is a sixth. Stepwise lines are
+ *      what you write when you are being careful, and nobody has ever hummed one.
+ *   3. **It lands on the tonic at the end of the phrase and rests there.** The silence in bar 4
+ *      is the part people sing along to.
+ *
+ * D natural minor throughout, over Dm-Bb-F-C. The raised 7th (C#) is deliberately absent: the
+ * flat 7 is the whole difference between a sea shanty and a vampire film.
+ */
 const LEAD = [
-  76, null, null, null, 72, null, null, null,
-  null, null, 79, null, null, null, 76, null,
-  74, null, null, null, 71, null, null, null,
-  null, null, 72, null, null, null, 67, null,
+  62, 62, 65, 69, null, 69, 67, 65,     // Dm   — up to the fifth and lean on it
+  65, null, 67, 65, 62, null, null, null, // Bb  — fall back, breathe
+  60, 62, 65, 69, null, 72, 69, null,   // F    — same cell, carried a step higher
+  74, 72, 69, 67, 65, null, null, null, // C    — down the scale and home
 ];
 
 /**

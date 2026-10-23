@@ -51,7 +51,21 @@ const DIR_STEP = {
 };
 
 export function place(state, p, mask) {
-  if (!(mask & IN_BOMB) || !p.alive) return;
+  /* One bomb per PRESS, not per tick the key is down.
+   *
+   * It was per tick, and that was survivable only because the bomb landed underneath you and
+   * the second attempt found the tile already taken. Aimed placement broke it: the first bomb
+   * goes in front, the next tick finds that tile occupied and falls back to the tile underfoot,
+   * and a single tap lays two bombs a third of a second apart.
+   *
+   * The edge is tracked on the player rather than in the client, so prediction and the server
+   * agree without the client having to send anything new — it replays the same masks through
+   * the same function and arrives at the same answer.
+   */
+  const held = (mask & IN_BOMB) !== 0;
+  const pressed = held && !p.bombHeld;
+  p.bombHeld = held;
+  if (!pressed || !p.alive) return;
   if (has(p, STATUS.PACIFISM)) return;
 
   const { tx, ty } = bombTile(state, p);

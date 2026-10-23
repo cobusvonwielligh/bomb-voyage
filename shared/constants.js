@@ -176,10 +176,18 @@ export const POWDER_GUARANTEE_TICK = Math.round(0.6 * 10 * 60 * TICK_HZ);
  * makes stopping a real tactical choice rather than a punishment, and it means an exhausted
  * player is never stuck: limping still refills, slowly.
  */
-export const STAMINA_MAX = 300;                    // 10 s of running at 1 per tick
-export const STAMINA_DRAIN_PER_TICK = 1;
-export const STAMINA_REGEN_MOVING = 1;             // only while exhausted; see movement.js
-export const STAMINA_REGEN_IDLE = 2;
+/* Counted in tenths of a unit, so every rate stays a whole number.
+ *
+ * The sim is integers only — floats in a shared simulation are a determinism bug waiting for a
+ * platform that rounds differently. Wanting a 15% change to rates that were 1 and 2 forced the
+ * issue: 1.15 and 2.3 are not integers, so the unit got ten times finer instead.
+ *
+ * 3450 at 10 a tick is 11.5 seconds of running, which is the old ten plus the fifteen percent.
+ */
+export const STAMINA_MAX = 3450;
+export const STAMINA_DRAIN_PER_TICK = 10;
+export const STAMINA_REGEN_MOVING = 12;            // only while exhausted; see movement.js
+export const STAMINA_REGEN_IDLE = 23;
 export const STAMINA_RECOVER_UNITS = Math.round(STAMINA_MAX / 3);
 export const STAMINA_TIRED_NUM = 1, STAMINA_TIRED_DEN = 2;   // half pace when exhausted
 // Below this fraction the indicator appears beside the player. Above it nothing is drawn: a
@@ -187,9 +195,9 @@ export const STAMINA_TIRED_NUM = 1, STAMINA_TIRED_DEN = 2;   // half pace when e
 // — at a half the warning and the limp arrived almost together, which is a notification rather
 // than a warning.
 export const STAMINA_SHOW_AT = 0.7;
-// Each Lung perk adds this much to your ceiling, up to MAX_STAMINA_LEVELS of them. Four levels
-// takes ten seconds of running to twenty.
-export const STAMINA_PER_LEVEL = 75;
+// Each Stim adds this much to your ceiling, up to MAX_STAMINA_LEVELS of them. Four of them
+// takes eleven and a half seconds of running to twenty-three.
+export const STAMINA_PER_LEVEL = 750;
 export const MAX_STAMINA_LEVELS = 4;
 export const staminaMaxFor = p => STAMINA_MAX + Math.min(p?.staminaLevel ?? 0, MAX_STAMINA_LEVELS) * STAMINA_PER_LEVEL;
 
@@ -202,6 +210,8 @@ export const PERK = {
   NUKE: 11, BLUE_FIRE: 12, HEART: 13, KEY: 14,
   // Raises your maximum stamina, so you can run for longer before the limp.
   STAMINA: 15,
+  // Rum: tough and useless. See STATUS.DRUNK.
+  RUM: 16,
 };
 
 /* What actually drops.
@@ -214,7 +224,7 @@ export const PERK = {
  */
 export const PERK_WEIGHTS = {
   [PERK.BOMB]: 26, [PERK.FIRE]: 24, [PERK.SKATE]: 18, [PERK.SHIELD]: 12, [PERK.GIFT]: 0,
-  [PERK.STAMINA]: 20,
+  [PERK.STAMINA]: 18, [PERK.RUM]: 10,
   [PERK.KICK]: 0, [PERK.JELLY]: 0, [PERK.DETONATOR]: 0, [PERK.BAT]: 0, [PERK.JETPACK]: 0,
   [PERK.NUKE]: 0, [PERK.BLUE_FIRE]: 0, [PERK.HEART]: 0, [PERK.KEY]: 0,
 };
@@ -258,8 +268,9 @@ export const MAX_SHIELDS = 1;
 export const STATUS = {
   INVULN: 1, PACIFISM: 2, SLOWDOWN: 4, INVISIBLE: 8,
   CHANGELING: 16, REDUCTION: 32, FAST_DET: 64,
-  // Reserved
-  NYAN: 128,
+  // Rum. Blast arms stop hurting you; only the tile the bomb was on still does. In exchange
+  // you cannot walk straight.
+  DRUNK: 128,
 };
 
 export const STATUS_TICKS = {
@@ -270,7 +281,19 @@ export const STATUS_TICKS = {
   [STATUS.CHANGELING]: 300,
   [STATUS.REDUCTION]: 450,
   [STATUS.FAST_DET]: 300,
+  [STATUS.DRUNK]: 600,        // 20 s — long enough to be a decision, short enough to survive
 };
+
+/* How drunk is drunk.
+ *
+ * The sway is a slow wander added to your heading, in units, applied across the axis you are
+ * walking along. Not a random walk and not an input inversion: inversion is just broken
+ * controls, and randomness cannot be predicted by the client, which would make every step a
+ * reconciliation. It is a sum of two sines on the tick, seeded per player, so both machines
+ * compute the same stagger and it still never repeats in a way anybody notices.
+ */
+export const DRUNK_SWAY_UNITS = 20;
+export const DRUNK_SWAY_RATE_A = 0.09, DRUNK_SWAY_RATE_B = 0.041;
 
 export const INVULN_TICKS_SHIELD = 60; // 2 s after a shield breaks
 

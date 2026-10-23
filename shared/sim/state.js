@@ -47,6 +47,8 @@ export function createPlayer(i, name) {
     status: 0,         // bitmask
     statusUntil: {},   // STATUS bit -> tick
     score: 0, kills: 0, deaths: 0,
+    // Was the bomb key down last tick? Edge detection for placement — see bombs.place.
+    bombHeld: false,
     stamina: STAMINA_MAX,
     staminaLevel: 0,   // Lung perks collected; raises the ceiling, see staminaMaxFor
     tired: false,

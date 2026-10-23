@@ -4,11 +4,12 @@ import {
   PERK, PERK_WEIGHTS, PERK_DROP_CHANCE_SOFT, PERK_DROP_ALWAYS, PERK_EXPIRE_TICKS,
   MAX_BOMBS_CARRIED, MAX_RADIUS, MAX_SKATES, MAX_SHIELDS, SCORE, BLOCK, HITBOX_UNITS, STATUS,
   PERKS_DROPPED_ON_DEATH, START_BOMBS, START_RADIUS, GIFT_DISEASE_CHANCE, MAX_STAMINA_LEVELS,
+  STATUS_TICKS,
   PERK_TARGET_PER_PLAYER, PERK_TARGET_MIN, PERK_SCARCE_BOOST, PERK_GLUT_FLOOR,
   PERK_TAKE_DECAY, PERK_DEMAND_BOOST,
 } from '../constants.js';
 import { staminaMaxFor } from '../constants.js';
-import { tileAt, toTile } from './state.js';
+import { tileAt, toTile, applyStatus } from './state.js';
 import { infect } from './statuses.js';
 import { randInt } from '../util/rng.js';
 
@@ -81,6 +82,20 @@ function apply(state, p, type) {
     case PERK.SHIELD: if (p.shields < MAX_SHIELDS) { p.shields++; return true; } return false;
     // A Stim. Tops you up as well as raising the ceiling, because a perk that
     // only pays off the next time you stop running does not feel like a pickup.
+    /* Rum. Fire's arms stop killing you; only the bomb's own tile still does.
+     *
+     * Not "half damage" — there is no health here, so the only way to take less of something
+     * that kills you outright is to be killed by less of it. Standing in the middle of a blast
+     * is still fatal; being caught by the end of an arm is not, and that is exactly the kind
+     * of death the rum is meant to save you from.
+     *
+     * Paid for in control: see DRUNK in movement.js. A defensive perk with no cost is just a
+     * better perk, and this is supposed to be a decision.
+     */
+    case PERK.RUM:
+      applyStatus(state, p, STATUS.DRUNK, STATUS_TICKS[STATUS.DRUNK]);
+      return true;
+
     case PERK.STAMINA:
       if ((p.staminaLevel ?? 0) >= MAX_STAMINA_LEVELS) return false;
       p.staminaLevel = (p.staminaLevel ?? 0) + 1;

@@ -612,6 +612,7 @@ const PERK_SKIN = {
   4: { dark: '#15402f', mid: '#1d6347', rim: '#5ad1a0' },   // shield — green
   5: { dark: '#4a1d42', mid: '#752d69', rim: '#ff8fd8' },   // gift   — magenta
   15: { dark: '#4a4212', mid: '#75671d', rim: '#ffe04a' },  // stim   — yellow
+  16: { dark: '#3d2415', mid: '#64402a', rim: '#d99a55' },  // rum    — bottle brown
 };
 
 export const PERK_ART = {
@@ -678,6 +679,27 @@ export const PERK_ART = {
     c.closePath();
     c.fillStyle = '#ffe04a'; c.fill();
     c.strokeStyle = '#4a4212'; c.lineWidth = 1.2; c.stroke();
+  },
+  // Rum: a bottle with a cork and a pale label. The one perk whose silhouette is a real object
+  // rather than a symbol, which is what makes it read instantly even at a small size.
+  16: c => {
+    rr(c, 14, 3, 4, 5, 1, '#8a5a32');                     // neck
+    rr(c, 14.5, 1.5, 3, 2.5, 1, '#d8c49a');               // cork
+    c.beginPath();
+    c.moveTo(14, 8);
+    c.bezierCurveTo(9, 11, 8.5, 14, 8.5, 18);
+    c.lineTo(8.5, 25);
+    c.quadraticCurveTo(8.5, 28, 11.5, 28);
+    c.lineTo(20.5, 28);
+    c.quadraticCurveTo(23.5, 28, 23.5, 25);
+    c.lineTo(23.5, 18);
+    c.bezierCurveTo(23.5, 14, 23, 11, 18, 8);
+    c.closePath();
+    c.fillStyle = '#6b4327'; c.fill();
+    px(c, 10, 12, 2, 13, 'rgba(255,255,255,0.18)');       // the highlight down one side
+    rr(c, 9.5, 17, 13, 7, 1, '#e6dcc2');                  // label
+    px(c, 11.5, 19, 9, 1, '#7a5330');
+    px(c, 11.5, 21.5, 6, 1, '#7a5330');
   },
 };
 

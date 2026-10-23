@@ -8,6 +8,7 @@ import {
   SPEED_UNITS_PER_TICK, SLOWDOWN_NUM, SLOWDOWN_DEN,
   STAMINA_MAX, STAMINA_DRAIN_PER_TICK, STAMINA_REGEN_MOVING, STAMINA_REGEN_IDLE,
   STAMINA_RECOVER_UNITS, STAMINA_TIRED_NUM, STAMINA_TIRED_DEN, staminaMaxFor,
+  DRUNK_SWAY_UNITS, DRUNK_SWAY_RATE_A, DRUNK_SWAY_RATE_B,
   IN_RIGHT, IN_UP, IN_LEFT, IN_DOWN, DIR_R, DIR_U, DIR_L, DIR_D, STATUS,
 } from '../constants.js';
 import { walkable, has, tileCentre } from './state.js';
@@ -339,6 +340,31 @@ export function step(state, p, mask) {
   const speed = speedOf(p);
   stamina(p, true);
   p.moving = true;
+
+  /* Drunk: you wander across the line you are walking along.
+   *
+   * Two sines on the tick, at rates that do not divide into each other, seeded by seat so no
+   * two drunks stagger in step. Deterministic in (tick, seat) on purpose — the client replays
+   * the same arithmetic, so a drunk player is predicted exactly like a sober one and the whole
+   * thing costs nothing in reconciliation.
+   *
+   * Across the direction of travel rather than along it. Inverting the controls would be
+   * "broken", and slowing you down is already what Slowdown does; wandering is the only one of
+   * the three that reads as being drunk rather than as being punished — and it is genuinely
+   * hard to thread a corridor with, which is the point.
+   */
+  if (has(p, STATUS.DRUNK)) {
+    const t = state.tick + p.i * 37;
+    const sway = Math.round(
+      (Math.sin(t * DRUNK_SWAY_RATE_A) + Math.sin(t * DRUNK_SWAY_RATE_B)) * (DRUNK_SWAY_UNITS / 2),
+    );
+    if (sway) {
+      // Nudge the axis you are NOT travelling on. moveAxis sorts out the legality.
+      const nx = dx ? p.x : p.x + sway;
+      const ny = dx ? p.y + sway : p.y;
+      if (!blocked(state, p, nx, ny)) { p.x = nx; p.y = ny; }
+    }
+  }
 
   /* Diagonals: one axis a tick, but the one that WORKS.
    *

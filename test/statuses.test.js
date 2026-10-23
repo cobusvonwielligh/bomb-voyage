@@ -191,11 +191,12 @@ test('statuses change what you can do', async t => {
     const st = room();
     const p = spawn(st, 0, 3, 3);
     applyStatus(st, p, STATUS.PACIFISM);
-    place(st, p, IN_BOMB);
+    // Placement is edge-triggered now, so a press has to be released before the next one.
+    place(st, p, IN_BOMB); place(st, p, 0);
     assert.equal(st.bombs.length, 0);
 
     p.status = 0; p.statusUntil = {};
-    place(st, p, IN_BOMB);
+    place(st, p, IN_BOMB); place(st, p, 0);
     assert.equal(st.bombs.length, 1, 'and only while it lasts');
   });
 

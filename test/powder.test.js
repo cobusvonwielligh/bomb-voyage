@@ -15,6 +15,7 @@ import {
   BLOCK, BLOCK_HP, POWDER_RADIUS, POWDER_MAX_PER_ROUND, POWDER_GUARANTEE_TICK,
   REGEN_EVERY_TICKS, TICK_HZ, ROUND_TICKS,
   STAMINA_MAX, STAMINA_RECOVER_UNITS, MAX_STAMINA_LEVELS, staminaMaxFor,
+  STAMINA_DRAIN_PER_TICK, STAMINA_REGEN_MOVING,
 } from '../shared/constants.js';
 
 // A wide empty room, so a blast arm is stopped by a keg and nothing else.
@@ -137,9 +138,10 @@ test('running empties it, and standing still refills twice as fast as limping', 
   p.x = tileCentre(3); p.y = tileCentre(4); p.alive = true;
   s.players[0] = p;
 
-  // Ten seconds of running at one a tick.
+  // Eleven and a half seconds of running. Counted in tenths of a unit, so the loop is in
+  // ticks rather than in units.
   assert.equal(p.stamina, STAMINA_MAX);
-  for (let n = 0; n < STAMINA_MAX; n++) stamina(p, true);
+  for (let n = 0; n < Math.ceil(STAMINA_MAX / STAMINA_DRAIN_PER_TICK); n++) stamina(p, true);
   assert.equal(p.stamina, 0);
   assert.equal(p.tired, true, 'empty but not tired');
 
@@ -154,7 +156,7 @@ test('tired has hysteresis, so the speed cannot flip every tick', () => {
   // regain a point and sprint, the next you spend it and crawl. It reads as packet loss.
   const s = createState(ROOM);
   const p = createPlayer(0, 'p0');
-  for (let n = 0; n < STAMINA_MAX; n++) stamina(p, true);
+  for (let n = 0; n < Math.ceil(STAMINA_MAX / STAMINA_DRAIN_PER_TICK); n++) stamina(p, true);
   assert.equal(p.tired, true);
 
   // Over a long run it legitimately flips more than once: you recover to the threshold, sprint
@@ -167,7 +169,9 @@ test('tired has hysteresis, so the speed cannot flip every tick', () => {
     lastFlip = n;
     was = p.tired;
   }
-  assert.ok(closest >= STAMINA_RECOVER_UNITS,
+  // In TICKS, not units. Limping back to the recovery threshold takes RECOVER/REGEN_MOVING
+  // ticks, and that gap is the latch doing its job.
+  assert.ok(closest >= STAMINA_RECOVER_UNITS / STAMINA_REGEN_MOVING,
     `tired flipped twice only ${closest} ticks apart; the latch is not holding`);
 });
 

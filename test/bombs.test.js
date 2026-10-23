@@ -31,6 +31,16 @@ function spawn(st, seat, tx, ty) {
 
 const run = (st, n, inputs = []) => { for (let i = 0; i < n; i++) tick(st, inputs); };
 
+/** One tap of the bomb key: placement is edge-triggered, so a press has to be released. */
+const tap = (st, p) => { place(st, p, IN_BOMB); place(st, p, 0); };
+
+/** The same through the round loop, for tests that drive it with input masks. */
+const tapTick = (st, seat = 0) => {
+  const held = []; held[seat] = IN_BOMB;
+  tick(st, held);
+  tick(st, []);
+};
+
 /** Tests about blocks and drops should not also be tests about blowing yourself up. */
 function immortal(p) { p.status = STATUS.INVULN; p.statusUntil[STATUS.INVULN] = 1e9; return p; }
 const at = (cells, tx, ty) => cells.some(c => c.tx === tx && c.ty === ty);
@@ -91,12 +101,12 @@ test('bombs in the round loop', async t => {
   await t.test('placing respects the bomb cap and one-per-tile', () => {
     const st = room();
     const p = spawn(st, 0, 3, 3);
-    place(st, p, IN_BOMB);
-    place(st, p, IN_BOMB);
+    tap(st, p);
+    tap(st, p);
     assert.equal(st.bombs.length, 1, 'cap of one, and only one per tile');
     p.bombs = 2;
     p.x = tileCentre(5);
-    place(st, p, IN_BOMB);
+    tap(st, p);
     assert.equal(st.bombs.length, 2);
   });
 
@@ -105,7 +115,7 @@ test('bombs in the round loop', async t => {
     const p = spawn(st, 0, 3, 3);
     p.status = STATUS.PACIFISM;
     p.statusUntil[STATUS.PACIFISM] = 999;
-    place(st, p, IN_BOMB);
+    tap(st, p);
     assert.equal(st.bombs.length, 0);
   });
 
@@ -127,10 +137,10 @@ test('bombs in the round loop', async t => {
     p.bombs = 1;
     p.dir = DIR_R;                           // facing the block, so the bomb lands against it
     setTile(st.map, 4, 3, BLOCK.REINFORCED, BLOCK_HP[BLOCK.REINFORCED]);
-    for (let n = 0; n < 5; n++) { run(st, 1, [IN_BOMB]); run(st, FUSE_TICKS + 2); }
+    for (let n = 0; n < 5; n++) { tapTick(st); run(st, FUSE_TICKS + 2); }
     assert.equal(tileAt(st.map, 4, 3), BLOCK.REINFORCED, 'still standing after five');
     assert.equal(hpAt(st.map, 4, 3), 1);
-    run(st, 1, [IN_BOMB]); run(st, FUSE_TICKS + 2);
+    tapTick(st); run(st, FUSE_TICKS + 2);
     assert.equal(tileAt(st.map, 4, 3), BLOCK.FLOOR, 'six does it');
   });
 
@@ -140,7 +150,7 @@ test('bombs in the round loop', async t => {
     p.bombs = 10; p.radius = 2;
     for (let i = 0; i < 8; i++) {
       p.x = tileCentre(2 + i * 2);
-      place(st, p, IN_BOMB);
+      tap(st, p);
       st.bombs.at(-1).at = st.tick + FUSE_TICKS + i * 10;   // wildly different fuses
     }
     assert.equal(st.bombs.length, 8);
@@ -154,7 +164,7 @@ test('bombs in the round loop', async t => {
     const victim = spawn(st, 1, 4, 3);
     victim.status = 0; victim.statusUntil = {};
     killer.dir = DIR_R;                      // bombs go where you are looking
-    place(st, killer, IN_BOMB);
+    tap(st, killer);
     run(st, FUSE_TICKS + 1);
     assert.equal(victim.alive, false);
     assert.equal(killer.kills, 1);
@@ -165,7 +175,7 @@ test('bombs in the round loop', async t => {
     const st = room();
     const p = spawn(st, 0, 3, 3);
     p.status = STATUS.INVULN; p.statusUntil[STATUS.INVULN] = 9999;
-    place(st, p, IN_BOMB);
+    tap(st, p);
     run(st, FUSE_TICKS + 1);
     assert.equal(p.alive, true, 'invulnerable');
 
@@ -183,7 +193,7 @@ test('bombs in the round loop', async t => {
     const st = room();
     const p = spawn(st, 0, 3, 3);
     p.dir = DIR_R;
-    place(st, p, IN_BOMB);
+    tap(st, p);
     assert.equal(st.bombs[0].tx, 4, 'the bomb did not land in front');
     run(st, 40, [IN_RIGHT]);
     assert.ok(p.x < tileCentre(4), 'walked into its own bomb');
@@ -197,7 +207,7 @@ test('bombs in the round loop', async t => {
     const p = spawn(st, 0, 3, 3);
     p.dir = DIR_R;
     setTile(st.map, 4, 3, BLOCK.SOFT, BLOCK_HP[BLOCK.SOFT]);
-    place(st, p, IN_BOMB);
+    tap(st, p);
     assert.equal(st.bombs.length, 1);
     assert.deepEqual([st.bombs[0].tx, st.bombs[0].ty], [3, 3], 'no fallback to the tile underfoot');
     run(st, FUSE_TICKS + 2);
@@ -263,7 +273,7 @@ test('bombs in the round loop', async t => {
     for (let n = 0; n < 8; n++) {
       p.x = tileCentre(4 + n);
       if (tileAt(st.map, 4 + n, 3) !== BLOCK.FLOOR) continue;
-      place(st, p, IN_BOMB);
+      tap(st, p);
       run(st, FUSE_TICKS + 2);
     }
     assert.ok(p.radius > 1 || p.bombs > 1 || p.speed > 0 || st.perks.length > 0,
@@ -385,7 +395,7 @@ test('bombs land on the tile you are facing', async t => {
     for (const [dir, dx, dy] of [[DIR_R, 1, 0], [DIR_U, 0, -1], [DIR_L, -1, 0], [DIR_D, 0, 1]]) {
       const st = open();
       const p = at(st, 5, 5, dir);
-      place(st, p, IN_BOMB);
+      tap(st, p);
       assert.deepEqual([st.bombs[0].tx, st.bombs[0].ty], [5 + dx, 5 + dy], `facing ${dir}`);
     }
   });
@@ -404,7 +414,7 @@ test('bombs land on the tile you are facing', async t => {
   await t.test('the sea and the map edge fall back too, not just walls', () => {
     const st = open();
     const p = at(st, 1, 5, DIR_L);           // facing the iron border
-    place(st, p, IN_BOMB);
+    tap(st, p);
     assert.deepEqual([st.bombs[0].tx, st.bombs[0].ty], [1, 5]);
   });
 
@@ -412,8 +422,8 @@ test('bombs land on the tile you are facing', async t => {
     const st = open();
     const p = at(st, 5, 5, DIR_R);
     p.bombs = 2;
-    place(st, p, IN_BOMB);
-    place(st, p, IN_BOMB);
+    tap(st, p);
+    tap(st, p);
     assert.equal(st.bombs.length, 2, 'the second bomb was refused');
     assert.deepEqual([st.bombs[1].tx, st.bombs[1].ty], [5, 5]);
   });
@@ -422,9 +432,9 @@ test('bombs land on the tile you are facing', async t => {
     const st = open();
     const p = at(st, 5, 5, DIR_R);
     p.bombs = 5;
-    place(st, p, IN_BOMB);
-    place(st, p, IN_BOMB);
-    place(st, p, IN_BOMB);
+    tap(st, p);
+    tap(st, p);
+    tap(st, p);
     assert.equal(st.bombs.length, 2, 'placed a third bomb on an occupied tile');
   });
 });

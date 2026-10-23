@@ -68,13 +68,17 @@ function killInFire(state) {
   const deadline = state.tick + (FIRE_TICKS - FIRE_LETHAL_TICKS);
   const fresh = state.fires.filter(f => f.until > deadline);
   if (!fresh.length) return;
+  // Rum: the arms stop hurting, the core still does. Computed once rather than per player.
+  const cores = fresh.filter(f => f.kind === 'core');
 
   for (const p of state.players) {
     if (!p || !p.alive) continue;
     if (has(p, STATUS.INVULN)) continue;
 
     const half = (has(p, STATUS.REDUCTION) ? HITBOX_REDUCED_UNITS : HITBOX_UNITS) >> 1;
-    if (!burns(fresh, p.x, p.y, half)) continue;
+    // Drunk: only the tile the bomb itself was on. Everything else in the blast is survivable.
+    const lethal = has(p, STATUS.DRUNK) ? cores : fresh;
+    if (!lethal.length || !burns(lethal, p.x, p.y, half)) continue;
 
     if (p.shields > 0) {
       p.shields--;
@@ -96,7 +100,7 @@ function killInFire(state) {
     // which is `detonate` push order and therefore deterministic. One of them must match, because
     // `burns()` just returned true for the identical box.
     const tx = toTile(p.x), ty = toTile(p.y);
-    const overlapped = fresh.find(f =>
+    const overlapped = lethal.find(f =>
       f.tx >= (p.x - half) >> 8 && f.tx <= (p.x + half - 1) >> 8 &&
       f.ty >= (p.y - half) >> 8 && f.ty <= (p.y + half - 1) >> 8);
     const fire = fresh.find(f => f.tx === tx && f.ty === ty) || overlapped;

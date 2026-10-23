@@ -49,6 +49,7 @@ const PERK_LABEL = {
   4: { text: 'SHIELD', colour: '#5ad1a0' },
   5: { text: 'GIFT', colour: '#ff8fd8' },
   15: { text: '+ STIM', colour: '#ffe04a' },
+  16: { text: 'RUM', colour: '#d99a55' },
 };
 
 // The mascot is an image now, ringed by the same moving gradient as the panels. The hand-drawn
