@@ -7,7 +7,7 @@ import { createState, createPlayer, setTile, tileCentre, hashState } from '../sh
 import { step, blocked, speedOf } from '../shared/sim/movement.js';
 import {
   BLOCK, IN_RIGHT, IN_LEFT, IN_DOWN, IN_UP, UNITS_PER_TILE, CORNER_ASSIST_UNITS,
-  SPEED_UNITS_PER_TICK, STATUS, DIR_R,
+  SPEED_UNITS_PER_TICK, STATUS, DIR_R, DIR_D, DIR_L, BLOCK_HP,
 } from '../shared/constants.js';
 import { applyStatus } from '../shared/sim/state.js';
 
@@ -74,7 +74,9 @@ test('movement', async t => {
   await t.test('corner assist straightens you through a doorway you are nearly lined up with', () => {
     const st = doorway(); const p = spawn(st, 2, 2);
     p.y = tileCentre(2) + CORNER_ASSIST_UNITS;      // clipping the lower jamb
-    for (let i = 0; i < 30; i++) step(st, p, IN_RIGHT);
+    // Centring is deliberately gentle — a few units a tick, easing — so getting lined up takes
+    // tens of ticks rather than two. The assertion is still that it arrives EXACTLY.
+    for (let i = 0; i < 90; i++) step(st, p, IN_RIGHT);
     assert.equal(p.y, tileCentre(2), 'straightened onto the doorway centre line');
     assert.ok(p.x > tileCentre(3), 'and went through');
   });
@@ -92,7 +94,7 @@ test('movement', async t => {
     for (let x = 1; x <= 7; x++) { setTile(st.map, x, 1, BLOCK.SOFT); setTile(st.map, x, 3, BLOCK.SOFT); }
     const p = spawn(st, 2, 2);
     p.y = tileCentre(2) + 60;
-    for (let i = 0; i < 20; i++) step(st, p, IN_RIGHT);
+    for (let i = 0; i < 60; i++) step(st, p, IN_RIGHT);
     assert.equal(p.y, tileCentre(2), 'drifted exactly onto the centre line');
   });
 
@@ -141,5 +143,61 @@ test('movement', async t => {
       return hashState(st);
     };
     assert.equal(run(), run());
+  });
+});
+
+test('a held diagonal slides along whatever is in the way', async t => {
+  // Holding down-left with a wall below you used to do nothing at all: movement committed to
+  // the axis you were facing and stopped dead when it was blocked, even with the other axis
+  // wide open. You had to let go of one key to get round anything.
+  await t.test('blocked below, pressed down-left: you go left', () => {
+    const st = room();
+    const p = spawn(st, 4, 4);
+    p.dir = DIR_D;                                   // facing the blocked axis
+    setTile(st.map, 4, 5, BLOCK.SOFT, BLOCK_HP[BLOCK.SOFT]);
+    const x0 = p.x;
+    for (let i = 0; i < 12; i++) step(st, p, IN_DOWN | IN_LEFT);
+    // Down is legal until the hitbox is flush against the wall, and taking that slack is
+    // correct — what matters is that it then carries on LEFT instead of standing there.
+    assert.ok(p.x < x0, 'did not slide along the obstacle');
+    assert.ok(!blocked(st, p, p.x, p.y), 'ended up inside the wall');
+    assert.ok(p.y >> 8 === 4, 'walked into the tile below');
+  });
+
+  await t.test('blocked left, pressed down-left: you go down', () => {
+    const st = room();
+    const p = spawn(st, 4, 4);
+    p.dir = DIR_L;
+    setTile(st.map, 3, 4, BLOCK.SOFT, BLOCK_HP[BLOCK.SOFT]);
+    const y0 = p.y, x0 = p.x;
+    for (let i = 0; i < 12; i++) step(st, p, IN_DOWN | IN_LEFT);
+    assert.ok(p.y > y0, 'did not fall back to the open axis');
+    assert.ok(p.x <= x0, 'moved away from the direction held');
+    assert.ok(!blocked(st, p, p.x, p.y));
+  });
+
+  await t.test('boxed into the corner, you stop', () => {
+    const st = room();
+    const p = spawn(st, 4, 4);
+    setTile(st.map, 4, 5, BLOCK.SOFT, BLOCK_HP[BLOCK.SOFT]);
+    setTile(st.map, 3, 4, BLOCK.SOFT, BLOCK_HP[BLOCK.SOFT]);
+    const y0 = p.y, x0 = p.x;
+    for (let i = 0; i < 12; i++) step(st, p, IN_DOWN | IN_LEFT);
+    // Both axes take their slack up to the walls and then stop. What must not happen is ending
+    // up inside either of them.
+    assert.ok(!blocked(st, p, p.x, p.y), 'walked into a corner it should have stopped against');
+    assert.ok(p.x <= x0 && p.y >= y0);
+    assert.ok((p.x >> 8) === 4 && (p.y >> 8) === 4, 'left the tile it was boxed into');
+  });
+
+  await t.test('a clear diagonal does not stutter between the two axes', () => {
+    // One axis a tick is the rule; what must not happen is alternating every tick, which halves
+    // your speed in both directions and looks like a limp.
+    const st = room();
+    const p = spawn(st, 4, 4);
+    p.dir = DIR_R;
+    const x0 = p.x;
+    for (let i = 0; i < 10; i++) step(st, p, IN_RIGHT | IN_DOWN);
+    assert.ok(p.x - x0 >= speedOf(p) * 9, 'the preferred axis lost ticks to the other one');
   });
 });

@@ -30,9 +30,9 @@ const HALF_TILE = UNITS_PER_TILE >> 1;
  *                  pushes you sideways.
  */
 const ALIGN_RATE = 1;
-const ALIGN_FRACTION = 4;        // move 1/4 of the remaining offset
-const ALIGN_MIN_UNITS = 3;       // and never less than this, so it terminates
-const ALIGN_MAX_UNITS = 14;
+const ALIGN_FRACTION = 7;        // move 1/7 of the remaining offset
+const ALIGN_MIN_UNITS = 2;       // and never less than this, so it terminates
+const ALIGN_MAX_UNITS = 6;       // a quarter of a tile per second at the very most
 
 // Being shoved out of a solid tile eases rather than running at a constant rate: a fraction of
 // whatever is left each tick, capped well below walking pace and floored so it still terminates.
@@ -280,18 +280,49 @@ export function step(state, p, mask) {
 
   if (!dx && !dy) { p.moving = false; stamina(p, false); return; }
 
-  // Both axes held: keep moving along the one already facing, so holding a diagonal into a
-  // corner does not stutter between the two.
+  const speed = speedOf(p);
+  stamina(p, true);
+  p.moving = true;
+
+  /* Diagonals: one axis a tick, but the one that WORKS.
+   *
+   * Movement stays axis-locked — that is what keeps a tile game feeling like a tile game, and
+   * what lets the remote interpolation draw an L instead of a diagonal. What changes is which
+   * axis is chosen when you are holding two.
+   *
+   * Before, it committed to whichever way you were already facing and stopped dead if that way
+   * was blocked: holding down-left against a wall below you did nothing at all, even though
+   * left was wide open. Now the preferred axis is tried first and the other is the fallback, so
+   * holding a diagonal into any obstacle slides you along it. Pressed against a corner where
+   * neither works you stop, which is correct.
+   *
+   * The preference is still the way you are facing, so holding a diagonal down a clear corridor
+   * does not stutter between the two axes.
+   */
   if (dx && dy) {
     const facingH = p.dir === DIR_L || p.dir === DIR_R;
-    if (facingH) dy = 0; else dx = 0;
+    let first = facingH ? [dx, 0] : [0, dy];
+    let second = facingH ? [0, dy] : [dx, 0];
+
+    /* Swap when the preferred axis is walled and the other is not.
+     *
+     * The test has to be "is the full step legal", not "did moveAxis return true" — moveAxis
+     * reports success for sliding flush against a wall, which is movement but not progress. A
+     * player holding down-left against a floor below them would spend every tick re-seating
+     * themselves against that floor and never go left at all.
+     */
+    const open = ([ax, ay]) => !blocked(state, p, p.x + ax * speed, p.y + ay * speed);
+    if (!open(first) && open(second)) [first, second] = [second, first];
+
+    // Face the axis actually travelled, so the sprite and the next tick's preference agree with
+    // what happened rather than with what was asked for.
+    const faceOf = ([ax, ay]) => (ax > 0 ? DIR_R : ax < 0 ? DIR_L : ay < 0 ? DIR_U : DIR_D);
+    if (moveAxis(state, p, first[0], first[1], speed)) { p.dir = faceOf(first); return; }
+    if (moveAxis(state, p, second[0], second[1], speed)) p.dir = faceOf(second);
+    return;
   }
 
   p.dir = dx > 0 ? DIR_R : dx < 0 ? DIR_L : dy < 0 ? DIR_U : DIR_D;
-  p.moving = true;
-  stamina(p, true);
-
-  const speed = speedOf(p);
   moveAxis(state, p, dx, dy, speed);
 }
 
