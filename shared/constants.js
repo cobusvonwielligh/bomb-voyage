@@ -232,6 +232,12 @@ export const TAKEOVER_WINDOW_TICKS = 20 * TICK_HZ; // 20 s
 // ─── Presentation ─────────────────────────────────────────────────────────────
 // Here rather than in art.js because the sim's tracer sampling rate must match the renderer's.
 
+// How long a freshly spawned player is drawn oversized, shrinking to normal. Appearing out of
+// nowhere in a sixteen-player scrum is invisible otherwise, and you need to know instantly
+// whether the thing that just materialised is next to you.
+export const SPAWN_POP_TICKS = 18;   // 0.6 s
+export const SPAWN_POP_SCALE = 3.4;
+
 export const TRACER_SAMPLES = 8;
 export const TRACER_EVERY_TICKS = 3;
 export const VOLUME_MUSIC_DEFAULT = 0.10;

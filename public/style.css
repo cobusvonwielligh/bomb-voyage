@@ -215,6 +215,15 @@ canvas#game {
 }
 .bump { display: inline-block; animation: bump .45s cubic-bezier(.2,1.4,.4,1); }
 
+/* A quarter of the jump. Used where a number changes every second and the full bump would be a
+ * strobe rather than a signal. */
+@keyframes bumpCalm {
+  0%   { transform: scale(1);    color: var(--gold); }
+  35%  { transform: scale(1.11); color: #fff; }
+  100% { transform: scale(1);    color: inherit; }
+}
+.bump-calm { display: inline-block; animation: bumpCalm .45s ease-out; }
+
 @keyframes bumpBad {
   0%   { transform: scale(1);    color: var(--bad); }
   35%  { transform: scale(1.45); color: #fff; text-shadow: 0 0 16px var(--bad); }
@@ -406,11 +415,14 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 }
 .card.small { width: 340px; text-align: center; }
 #deadTitle { font-family: var(--display); color: var(--bad); font-size: 30px; margin-bottom: 8px; }
-#deadText { white-space: pre-line; font-size: 12px; }
+#deadText { white-space: pre-line; }
+/* The countdown gets its own face. The display font is for titles you read once, and this is a
+ * number that changes every second a few inches from your eyes. */
 #respawn {
-  width: 100%; margin-top: 16px; padding: 12px; font-family: var(--display);
-  font-size: 18px; letter-spacing: .14em;
+  width: 100%; margin-top: 16px; padding: 13px; font-family: var(--nums);
+  font-size: 15px; font-weight: 700; letter-spacing: .1em; text-transform: none;
 }
+#deadText { font-family: var(--nums); font-size: 12px; letter-spacing: .02em; }
 /* Counting down, not broken: dimmed but still legible, and the number keeps moving. */
 #respawn:disabled { opacity: .55; }
 #respawn:disabled:hover { background: transparent; color: var(--gold); }

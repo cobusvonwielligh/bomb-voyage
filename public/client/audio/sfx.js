@@ -28,6 +28,11 @@ const DEFAULT_MAX_PER_FRAME = 4;
 // Sounds that are about you, not about a place. Never panned, never attenuated.
 const CLOSE_UP = new Set(['kill', 'ownDeath', 'ownSpawn', 'fanfare', 'click', 'warn']);
 
+// Sounds whose whole job is to say WHERE. Panned to the full width of the field rather than the
+// gentle third the general rolloff gives, because a cue you have to concentrate to place is not
+// a cue in a game where you are being chased.
+const WIDE_PAN = new Set(['spawn']);
+
 export function createSfx({ listener }) {
   let bus = null, space = null;
   let volume = readVolume();
@@ -72,7 +77,7 @@ export function createSfx({ listener }) {
    * Pan and attenuation for a world position, or null if it is too far away to be worth hearing.
    * @param tx tile x, or undefined for a non-positional sound
    */
-  function place(tx, ty) {
+  function place(tx, ty, wide = false) {
     if (tx === undefined) return { pan: 0, level: 1 };
     const me = listener();
     if (!me) return { pan: 0, level: 1 };
@@ -80,7 +85,9 @@ export function createSfx({ listener }) {
     const d = Math.sqrt(dx * dx + dy * dy);
     if (d > SFX_MAX_DISTANCE_TILES) return null;
     return {
-      pan: Math.max(-1, Math.min(1, dx / SFX_MAX_DISTANCE_TILES)),
+      // Three times the spread for the sounds whose whole job is direction. Everything else keeps
+      // the gentle version: a map where every footstep is hard left or hard right is a headache.
+      pan: Math.max(-1, Math.min(1, (dx / SFX_MAX_DISTANCE_TILES) * (wide ? 3 : 1))),
       // Linear rolloff, not inverse-square. Inverse-square is physically right and sounds wrong
       // here, because a bomb four tiles away matters nearly as much as one at your feet.
       level: 1 - 0.75 * (d / SFX_MAX_DISTANCE_TILES),
@@ -273,15 +280,31 @@ export function createSfx({ listener }) {
       s.start(t); s.stop(t + 0.06);
     },
 
-    /** Rising triangle: the inverse of death, deliberately. */
+    /**
+     * Somebody has arrived over there. Rising, the inverse of death, and the one positional cue
+     * that is allowed to be loud: it is panned and attenuated by where it happened, so the sound
+     * alone tells you which side of you a player just materialised on. A quiet version of that
+     * is no cue at all.
+     */
     spawn(c, out, t, level) {
-      const g = voiceGain(c, out, t, { a: 0.02, d: 0.3, peak: 0.2 * level });
-      const o = c.createOscillator();
-      o.type = 'triangle';
-      o.frequency.setValueAtTime(220, t);
-      o.frequency.exponentialRampToValueAtTime(jit(660, 0.02), t + 0.28);
-      o.connect(g);
-      o.start(t); o.stop(t + 0.4);
+      const g = voiceGain(c, out, t, { a: 0.015, d: 0.34, peak: 0.34 * level, send: 0.25 });
+      for (const [mul, detune] of [[1, 0], [1.5, 6]]) {
+        const o = c.createOscillator();
+        o.type = 'triangle';
+        o.detune.value = detune;
+        o.frequency.setValueAtTime(220 * mul, t);
+        o.frequency.exponentialRampToValueAtTime(jit(660, 0.02) * mul, t + 0.3);
+        o.connect(g);
+        o.start(t); o.stop(t + 0.45);
+      }
+      // A soft thump of air underneath, so an arrival behind you is felt as well as heard.
+      const tg = voiceGain(c, out, t, { a: 0.004, d: 0.18, peak: 0.22 * level });
+      const thump = c.createOscillator();
+      thump.type = 'sine';
+      thump.frequency.setValueAtTime(190, t);
+      thump.frequency.exponentialRampToValueAtTime(70, t + 0.16);
+      thump.connect(tg);
+      thump.start(t); thump.stop(t + 0.26);
     },
 
     /** You are back. Same shape, with a fifth under it so it feels like a start, not an event. */
@@ -438,7 +461,7 @@ export function createSfx({ listener }) {
       const used = spent.get(name) || 0;
       if (used >= cap) return;
 
-      const where = place(CLOSE_UP.has(name) ? undefined : tx, ty);
+      const where = place(CLOSE_UP.has(name) ? undefined : tx, ty, WIDE_PAN.has(name));
       if (!where) return;                   // too far away to hear
 
       const c = audioContext();

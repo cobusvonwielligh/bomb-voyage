@@ -96,6 +96,12 @@ export function createWorld() {
   };
 
   /** Keep the local map in step with the server so predicted blasts stop at the right walls. */
+  /** Mark a player as having just appeared, so the renderer can make it impossible to miss. */
+  w.markSpawn = i => {
+    const p = w.players[i];
+    if (p) p.spawnAt = w.tick;
+  };
+
   w.applyBlockEvent = e => {
     if (!w.map) return;
     const i = e.y * w.map.w + e.x;

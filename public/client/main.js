@@ -132,6 +132,9 @@ const net = createNet({
         }
 
         case 'spawn':
+          world.markSpawn(e.i);
+          // Panned and attenuated by where it happened, so the sound alone tells you which side
+          // of you somebody just appeared on. Your own is centred, because you are not elsewhere.
           if (e.i === world.you) sfx.play('ownSpawn');
           else sfx.playAtUnits('spawn', e.x, e.y);
           break;
@@ -360,13 +363,13 @@ function loop(now) {
  * the reflow the browser coalesces both changes into no change at all, and two pickups in quick
  * succession only flash once.
  */
-function setValue(el, text, { worse = false } = {}) {
+function setValue(el, text, { worse = false, calm = false } = {}) {
   if (!el || el.textContent === String(text)) return;
   const first = el.textContent === '' || el.textContent === '--';
   el.textContent = text;
   if (first) return;                        // joining is not an event worth flashing
-  const cls = worse ? 'bump-bad' : 'bump';
-  el.classList.remove('bump', 'bump-bad');
+  const cls = calm ? 'bump-calm' : worse ? 'bump-bad' : 'bump';
+  el.classList.remove('bump', 'bump-bad', 'bump-calm');
   void el.offsetWidth;
   el.classList.add(cls);
 }
@@ -398,9 +401,10 @@ function drawRespawn(me) {
   const left = Math.max(0, RESPAWN_DELAY_TICKS - (world.tick - diedAtTick));
   const secs = Math.ceil(left / TICK_HZ);
   btn.disabled = left > 0;
-  setValue(btn, left > 0 ? `respawn in ${secs}` : 'respawn ready');
+  // Calm: this ticks once a second right in front of you, and the full bump is a strobe.
+  setValue(btn, left > 0 ? `respawn in ${secs}\u2026` : 'respawn', { calm: true });
   $('deadText').textContent = left > 0
-    ? 'hold space to go again as soon as it is ready'
+    ? 'hold space to go again\u2026'
     : 'space to respawn \u00b7 esc to leave';
 }
 

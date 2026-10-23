@@ -20,10 +20,30 @@ export const PALETTE = {
   outline: '#161b24',
   fireCore: '#fff4c2', fireMid: '#ff9b3d', fireEdge: '#e63f27',
   gold: '#ffd21f', text: '#e8eef7',
+  // The pirate. Taken off the mascot so the sprites and the artwork are the same character: red
+  // bandana, cream sash, dark boots. Every one of these is a neutral against all sixteen player
+  // hues, which is what lets the costume stay constant while the coat carries the identity.
+  cloth: '#c0392b', clothDark: '#8f2a20',
+  skin: '#e8b68a', skinDark: '#c4936c',
+  patch: '#14181f', patchStrap: '#272d38',
+  sash: '#e8dcc0', belt: '#3a2f22',
+  boot: '#4a3728', bootDark: '#2f231a',
+  cuff: '#e8dcc0', grin: '#f4f1e8',
+
   // The sea, and the rock the island is made of. The rock is brown-grey boulder, not the blue
   // slate the walls are: the coast has to read as a different material from the level.
   seaDeep: '#0a1a2e', seaMid: '#123252', seaLight: '#1d5176', foam: '#cfe7f5',
   rock: '#4a4036', rockLit: '#6b5e4f', rockTop: '#857665', rockDark: '#2b241d', sand: '#6e6346',
+};
+
+/** The costume, pulled out of the palette so the sprite code reads as a description of a pirate. */
+const PIRATE = {
+  cloth: PALETTE.cloth, clothDark: PALETTE.clothDark,
+  skin: PALETTE.skin, skinDark: PALETTE.skinDark,
+  patch: PALETTE.patch, patchStrap: PALETTE.patchStrap,
+  sash: PALETTE.sash, belt: PALETTE.belt,
+  boot: PALETTE.boot, bootDark: PALETTE.bootDark,
+  cuff: PALETTE.cuff, grin: PALETTE.grin,
 };
 
 /** 16 maximally distinct player colours, plus their light/dark shades. Slots come from
@@ -229,30 +249,84 @@ function drawCracks(c, dmg, tx, ty) {
  * Caller handles Changeling (flip Y) and Reduction (scale 0.5) with a transform.
  */
 export function drawPlayer(c, { dir = 3, frame = 0, colorIndex = 0, dead = false }) {
-  const S = TILE_PX, k = playerShades(colorIndex);
-  const ox = S / 2 - 6, oy = S / 2 - 9;
-  c.save(); c.translate(ox, oy);
+  const k = playerShades(colorIndex);
+  const ox = TILE_PX / 2 - 6, oy = TILE_PX / 2 - 9;
+  c.save();
+  c.translate(ox, oy);
   if (dead) c.globalAlpha = 0.45;
 
   const bob = frame ? 1 : 0;
-  // legs
-  px(c, 2 + (frame ? 1 : 0), 13, 3, 4, PALETTE.outline);
-  px(c, 7 - (frame ? 1 : 0), 13, 3, 4, PALETTE.outline);
-  // body
+  const back = dir === DIRS.U;
+  const side = dir === DIRS.R || dir === DIRS.L;
+  // Profiles are drawn facing right and mirrored for left, so there is one set of coordinates to
+  // get right instead of two that drift apart.
+  if (dir === DIRS.L) { c.translate(12, 0); c.scale(-1, 1); }
+
+  // ── boots ──
+  px(c, 1 + (frame ? 1 : 0), 13, 4, 4, PIRATE.boot);
+  px(c, 7 - (frame ? 1 : 0), 13, 4, 4, PIRATE.bootDark);
+
+  // ── coat ──
+  // The player's colour IS the coat, because colour is how you tell sixteen people apart at a
+  // glance and the costume must never win that fight.
   rr(c, 1, 6 + bob, 10, 8, 3, k.base);
   px(c, 1, 6 + bob, 3, 8, k.light);
   px(c, 8, 6 + bob, 3, 8, k.dark);
-  // helmet
-  rr(c, 1, 0 + bob, 10, 8, 4, '#e9edf4');
-  px(c, 1, 1 + bob, 3, 5, '#ffffff');
-  px(c, 8, 1 + bob, 3, 5, '#b9c2d0');
-  // visor — rotates with facing
-  if (dir === DIRS.D) rr(c, 2, 3 + bob, 8, 4, 2, '#1b2430');
-  else if (dir === DIRS.U) rr(c, 3, 3 + bob, 6, 3, 1, '#2a3443');
-  else if (dir === DIRS.R) rr(c, 5, 3 + bob, 6, 4, 2, '#1b2430');
-  else rr(c, 1, 3 + bob, 6, 4, 2, '#1b2430');
-  // the player's colour must be visible from every angle — chest band
-  px(c, 1, 9 + bob, 10, 2, k.dark);
+
+  if (side) {
+    // A coat tail behind him, so a profile is not a featureless slab.
+    px(c, 0, 9 + bob, 2, 5, k.dark);
+    px(c, 8, 8 + bob, 3, 2, PIRATE.cuff);
+  } else {
+    // Sash across the chest, and a belt. Cream against any hue, so the costume reads on all 16.
+    c.save();
+    c.beginPath();
+    c.rect(1, 6 + bob, 10, 8);
+    c.clip();
+    c.translate(6, 10 + bob);
+    c.rotate(back ? -0.6 : 0.6);
+    // Two pixels, not three: the coat is the player's identity and the costume may not crowd it.
+    px(c, -7, -1, 14, 2, PIRATE.sash);
+    c.restore();
+    px(c, 1, 12 + bob, 10, 2, PIRATE.belt);
+    px(c, 5, 12 + bob, 2, 2, PALETTE.gold);
+  }
+
+  // ── head ──
+  rr(c, 2, 1 + bob, 8, 7, 3, back ? PIRATE.skinDark : PIRATE.skin);
+
+  // ── bandana ──
+  // Red, always, on every colour of coat: it is the thing that says "pirate" from across the map,
+  // and it has to be the same red every time or it stops being a uniform.
+  rr(c, 1, 0 + bob, 10, 4, 2, PIRATE.cloth);
+  px(c, 1, 2 + bob, 10, 2, PIRATE.clothDark);
+  // The knot and its tails, trailing behind whichever way he is facing.
+  if (side) {
+    px(c, 0, 2 + bob, 2, 2, PIRATE.cloth);
+    px(c, -1, 3 + bob, 2, 2, PIRATE.clothDark);
+  } else {
+    px(c, 0, 2 + bob, 2, 3, PIRATE.cloth);
+    px(c, 10, 2 + bob, 2, 3, PIRATE.cloth);
+  }
+
+  // ── face ──
+  if (!back) {
+    if (side) {
+      px(c, 7, 4 + bob, 2, 2, PALETTE.outline);          // the one visible eye
+      px(c, 9, 5 + bob, 1, 1, PIRATE.skinDark);          // nose
+      px(c, 6, 4 + bob, 1, 1, PIRATE.patch);             // patch strap crossing the temple
+    } else {
+      // Small features, wide apart. At twelve pixels of face a patch drawn 3x3 is a third of his
+      // head and reads as a hole rather than as an eye patch, so it is 2x2 with a strap that
+      // stops at the edge of the head instead of running off it.
+      px(c, 3, 4 + bob, 2, 2, PALETTE.outline);          // open eye
+      px(c, 7, 4 + bob, 2, 2, PIRATE.patch);             // eye patch
+      px(c, 6, 4 + bob, 4, 1, PIRATE.patchStrap);        // strap, held inside the head
+      px(c, 4, 6 + bob, 4, 1, PIRATE.grin);              // grin
+      px(c, 7, 6 + bob, 1, 1, PALETTE.gold);             // the gold tooth, same as the mascot
+    }
+  }
+
   c.restore();
 }
 

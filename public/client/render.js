@@ -6,7 +6,7 @@
 
 import {
   TILE_PX, CHUNK_TILES, UNITS_PER_TILE, TRACER_SAMPLES, FUSE_TICKS, FIRE_TICKS, STATUS,
-  BLOCK, BLOCK_HP, SEA_MARGIN_TILES,
+  BLOCK, BLOCK_HP, SEA_MARGIN_TILES, SPAWN_POP_TICKS, SPAWN_POP_SCALE,
 } from '/shared/constants.js';
 import { cellType, cellHp } from '/shared/maps.js';
 import {
@@ -463,6 +463,26 @@ export function createRenderer(canvas, world) {
     c.globalAlpha = 1;
   }
 
+  /** A shockwave under an arriving player, in their own colour, so it says WHO as well as WHERE. */
+  function drawSpawnRing(c, cx, cy, pop, i) {
+    const t = (pop - 1) / (SPAWN_POP_SCALE - 1);     // 1 at the moment of arrival, 0 when settled
+    const k = playerShades(i);
+    c.save();
+    c.globalAlpha = t * 0.55;
+    c.lineWidth = 2 + t * 3;
+    c.strokeStyle = k.light;
+    c.beginPath();
+    c.arc(cx, cy, TILE_PX * (0.4 + (1 - t) * 1.6), 0, 7);
+    c.stroke();
+    c.globalAlpha = t * 0.25;
+    c.fillStyle = k.base;
+    c.beginPath();
+    c.arc(cx, cy, TILE_PX * 0.5 * pop, 0, 7);
+    c.fill();
+    c.restore();
+    c.globalAlpha = 1;
+  }
+
   function drawOne(c, p, ox, oy, isMe) {
     if (!p.alive) return;
     const px = ox + (p.rx / UNITS_PER_TILE) * TILE_PX - TILE_PX / 2;
@@ -481,10 +501,25 @@ export function createRenderer(canvas, world) {
     const flipped = (p.status & STATUS.CHANGELING) !== 0;
     const small = (p.status & STATUS.REDUCTION) !== 0;
 
-    if (flipped || small) {
+    // Arriving. A player who simply appears at full size in a sixteen-player scrum is invisible,
+    // so they land huge and collapse to size over about half a second. Cubic ease-out: nearly
+    // all of the shrink happens in the first third, which is what makes it read as a landing
+    // rather than as a slow zoom.
+    let pop = 1;
+    if (p.spawnAt !== undefined) {
+      const age = (world.tick - p.spawnAt) / SPAWN_POP_TICKS;
+      if (age >= 0 && age < 1) pop = 1 + (SPAWN_POP_SCALE - 1) * Math.pow(1 - age, 3);
+      else p.spawnAt = undefined;
+    }
+
+    if (pop > 1) drawSpawnRing(c, px + TILE_PX / 2, py + TILE_PX / 2, pop, p.i);
+
+    const sx = (small ? 0.55 : 1) * pop;
+    const sy = (small ? 0.55 : 1) * pop * (flipped ? -1 : 1);
+    if (sx !== 1 || sy !== 1) {
       c.save();
       c.translate(px + TILE_PX / 2, py + TILE_PX / 2);
-      c.scale(small ? 0.55 : 1, (small ? 0.55 : 1) * (flipped ? -1 : 1));
+      c.scale(sx, sy);
       c.drawImage(sprite, -TILE_PX / 2, -TILE_PX / 2);
       c.restore();
     } else {
