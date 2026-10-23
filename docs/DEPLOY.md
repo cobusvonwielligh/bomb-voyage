@@ -6,44 +6,54 @@ Two requirements shape all of this:
 2. **Moving from a personal AWS account into the eezi VPC later must be a config change, not a
    rewrite.**
 
+**Current target:** `af-south-1` (Cape Town), one `t3.micro`, hostname
+`16.28.138.34.sslip.io`. Cape Town puts the whole team at roughly **15 ms** instead of the
+~165 ms the netcode was designed to survive, so the game will feel better than specified.
+
 ---
 
 ## 1. The shape
 
 ```
-                    ┌──────────────────────────────┐
-  browser ──443──►  │ EC2 t3.micro (free tier)     │
-   wss://           │  docker: bomb-voyage         │
-   https://         │   node server/index.js       │
-                    │   :443  HTTP + WS, one port  │
-                    │   /data/leaderboard.json     │
-                    └──────────────────────────────┘
+                    ┌──────────────────────────────────┐
+  browser ──443──►  │ EC2 t3.micro · af-south-1        │
+   wss://           │  systemd: bomb-voyage.service    │
+   https://         │   node server/index.js           │
+                    │   :443 HTTPS + WSS  :80 redirect │
+                    │  /var/lib/bomb-voyage/           │
+                    │    certs/ · leaderboard.json     │
+                    └──────────────────────────────────┘
 ```
 
-One instance. One container. One port. No load balancer, no CDN, no bucket, no database, no
-second domain. The WebSocket shares the HTTP server, so `wss://game.example.com/ws` is the same
-origin as the page — no CORS, no preflight, nothing extra for IT to allow.
+One instance. One process. No load balancer, no CDN, no bucket, no database, no second domain.
+The WebSocket shares the HTTP server, so `wss://host/ws` is the same origin as the page — no
+CORS, no preflight, nothing extra for IT to allow.
 
-**There is deliberately no load balancer.** It would add a second thing to configure, sticky
-session concerns, and cost — for one process serving 16 people. Add one the day there are two
-servers.
+**No Docker.** The plan originally called for a container; building it, the honest answer was
+that a single Node process with one dependency does not need one. systemd starts it, restarts
+it on crash, and survives reboots, and `npm run deploy` is an rsync instead of an image build.
+If this ever moves to ECS Fargate, the Dockerfile is six lines written on that day. *Skipped:
+container runtime. Add when: the target is ECS or there is more than one service.*
+
+**No load balancer.** It would add sticky-session concerns and cost, for one process serving
+16 people. Add one the day there are two servers.
 
 ---
 
 ## 2. Why this survives corporate IT
 
-Every one of these is a thing that commonly gets a game blocked, and the choice that avoids it:
+Each row is a thing that commonly gets a game blocked, and the choice that avoids it:
 
 | Common blocker | What we do |
 |---|---|
-| Non-standard ports | **All game traffic on 443.** Port 80 is open inbound too, but only to serve the HTTP→HTTPS redirect and Let's Encrypt renewals — never game traffic. Nothing else is exposed. |
-| Plain `ws://` upgrade on port 80 | **`wss://` on 443.** TLS-wrapped, so proxies pass it as HTTPS. |
-| Multiple domains / CDNs | **One hostname.** `Content-Security-Policy: default-src 'self'` — the page is incapable of requesting anything else. |
-| Web fonts, analytics, Google APIs | None. Zero external requests. Verify in the Network tab. |
+| Non-standard ports | **All game traffic on 443.** Port 80 is open only for the HTTPS redirect and certificate renewal. |
+| Plain `ws://` on 80 | **`wss://` on 443.** TLS-wrapped, so proxies pass it as ordinary HTTPS. |
+| Multiple domains / CDNs | **One hostname.** `Content-Security-Policy: default-src 'self'` — the page is incapable of requesting another host. Verify in the Network tab. |
+| Web fonts, analytics | None. Zero external requests. |
 | WebRTC / UDP | Not used. |
-| Category filters ("games") | Use a neutral hostname on an eezi-owned domain rather than something obviously a game. |
+| Category filters ("games") | Prefer a neutral hostname on an eezi domain over something obviously a game. |
 
-**Ticket text for IT — DEP-5 ships this verbatim:**
+**Ticket text for IT, paste as-is:**
 
 > Please allow outbound HTTPS (TCP 443) to `game.<domain>` (`<elastic-ip>`) for the dev team.
 > It is an internally hosted tool on infrastructure we control. It uses standard HTTPS and a
@@ -51,103 +61,121 @@ Every one of these is a thing that commonly gets a game blocked, and the choice 
 
 ---
 
-## 3. Standing it up — first deployment checklist
+## 3. Hostname without a domain
 
-1. **Instance.** EC2 `t3.micro`, Amazon Linux 2023, in the region nearest the players — see §6.
-   Attach an **Elastic IP** so the address is stable for the IT allow-list.
-2. **Security group.** Inbound: 443 from `0.0.0.0/0`, 80 from `0.0.0.0/0` (redirect + ACME only),
-   22 from your IP only. Nothing else — specifically **not** 8080.
-3. **DNS.** An `A` record for `game.<domain>` → the Elastic IP. No domain available? Use
-   `<name>.duckdns.org` or `<ip>.sslip.io` — still one hostname, still free, still works with
-   Let's Encrypt.
-4. **Docker.** `dnf install -y docker && systemctl enable --now docker`.
-5. **TLS.** Certbot in standalone mode to issue the first certificate, then mount
-   `/etc/letsencrypt` into the container. A weekly renewal timer that stops the container,
-   renews, and starts it. Renewal at 03:00 Sunday — nobody is playing.
-6. **Run.** `docker compose up -d`.
-7. **Verify.** `curl https://game.<domain>/healthz` → JSON. Open the page, play a round with
-   yourself in two tabs, confirm the Network tab shows **only** your own hostname.
-8. **Survive a reboot.** `reboot` the instance and confirm the game comes back unattended.
+`sslip.io` resolves any embedded IP, so `16.28.138.34.sslip.io` → `16.28.138.34`, free, instant,
+no account. Let's Encrypt issues for it happily.
+
+```
+$ dig +short 16.28.138.34.sslip.io
+16.28.138.34
+```
+
+Swapping to a real eezi hostname later is a DNS record plus re-running `bootstrap.sh` with the
+new `HOST`. Nothing in the code knows the name.
 
 ---
 
-## 4. Configuration — all of it by environment variable
+## 4. First-time setup
+
+### On AWS (console)
+
+1. **Instance** — `t3.micro`, Amazon Linux 2023, 16–20 GB gp3, in `af-south-1`.
+2. **Elastic IP** — allocate, associate to the instance. (Since Feb 2024 every public IPv4 costs
+   $0.005/h; Free Tier covers 750 h/month for 12 months, so one is free for a year.)
+3. **Security group** — exactly three inbound rules, nothing else:
+
+   | Port | Source | Purpose |
+   |---|---|---|
+   | 443 | `0.0.0.0/0` | the game |
+   | 80 | `0.0.0.0/0` | HTTPS redirect + ACME renewal |
+   | 22 | your IP | SSH |
+
+   Specifically **not** 8080 — that is local dev only.
+
+### On the box (once, ~3 minutes)
+
+```bash
+scp -i ~/Downloads/bombs-away.pem infra/bootstrap.sh ec2-user@16.28.138.34:
+ssh -i ~/Downloads/bombs-away.pem ec2-user@16.28.138.34 \
+  'HOST=16.28.138.34.sslip.io EMAIL=you@example.com bash bootstrap.sh'
+```
+
+`bootstrap.sh` is idempotent — re-run it any time. It installs Node, creates
+`/opt/bomb-voyage` and `/var/lib/bomb-voyage`, issues the certificate, installs a deploy hook
+that copies the cert somewhere the unprivileged service can read it, and arms a weekly renewal
+timer for 03:00 Sunday.
+
+### From your laptop, every deploy after that
+
+```bash
+HOST=16.28.138.34.sslip.io npm run deploy
+```
+
+Runs the tests, rsyncs, `npm ci --omit=dev`, restarts the service, and polls `/healthz` until it
+answers. On failure it prints the last 40 journal lines. Takes a few seconds; do it between
+rounds.
+
+---
+
+## 5. Configuration — all of it by environment variable
 
 Nothing AWS-specific appears anywhere in the code. This is what makes the VPC move trivial.
+On the server these live in `/etc/bomb-voyage.env`.
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `PORT` | `8080` | Listening port. `443` in production. |
-| `TLS_CERT` / `TLS_KEY` | unset | Paths. If unset, serve plain HTTP (local dev). |
-| `PUBLIC_HOST` | `localhost` | Used only for redirects and logging. |
-| `DATA_DIR` | `./data` | Where `leaderboard.json` lives. |
+| `REDIRECT_PORT` | `80` | Plain-HTTP redirect listener. Only used when TLS is on. |
+| `TLS_CERT` / `TLS_KEY` | unset | Paths. Unset → plain HTTP, which is local dev. |
+| `PUBLIC_HOST` | `localhost` | Used for redirects and logging only. |
+| `DATA_DIR` | `./data` | Where `leaderboard.json` and the cert copies live. |
 | `MAX_PLAYERS` | `16` | |
-| `LAG` / `JITTER` | `0` | **Dev only.** Outbound delay in ms. Refuse to start if set while `TLS_CERT` is set. |
-| `LOG_LEVEL` | `info` | |
+| `LAG` / `JITTER` | `0` | **Dev only.** Outbound delay in ms. The process refuses to start if either is set while TLS is configured. |
 
 Local development needs none of them: `npm start` → `http://localhost:8080`.
 
 ---
 
-## 5. Moving into the eezi VPC later
-
-Designed-for, not done now. When the time comes:
+## 6. Moving into the eezi VPC later
 
 | Thing | Personal AWS account today | eezi VPC later |
 |---|---|---|
-| Compute | EC2 + docker compose | Same container on ECS Fargate, or an EC2 in a private subnet |
-| TLS | Let's Encrypt on the box | ACM certificate on an ALB, container drops to plain HTTP on 8080 |
-| Hostname | `game.<personal domain>` | `game.<eezi domain>`, internal Route 53 |
-| Access | Public internet | VPC + VPN, or an internal ALB — **then IT does not need to unblock anything at all** |
-| Data | `./data/leaderboard.json` | EFS mount, or S3 with the same JSON |
-| Config | `.env` | Task definition environment / SSM Parameter Store |
+| Compute | EC2 + systemd | Same, in a private subnet — or ECS with a six-line Dockerfile |
+| TLS | Let's Encrypt on the box | ACM certificate on an ALB; the app drops to plain HTTP by unsetting `TLS_CERT` |
+| Hostname | `16.28.138.34.sslip.io` | `game.<eezi domain>` in Route 53 |
+| Access | Public internet | VPC + VPN or an internal ALB — **then IT does not need to unblock anything at all** |
+| Data | `/var/lib/bomb-voyage/` | EFS mount, same path |
+| Config | `/etc/bomb-voyage.env` | Task definition env or SSM Parameter Store |
 
 Three properties make this a config change rather than a project:
 
-1. The app is a **single stateless-ish process** — the only state is one JSON file behind
-   `DATA_DIR`.
-2. It **never calls an AWS API.** No SDK, no IAM role, no region in the code.
-3. TLS is **optional in the app.** Behind an ALB it simply serves HTTP and the ALB terminates.
+1. The only state is one JSON file behind `DATA_DIR`.
+2. The app **never calls an AWS API.** No SDK, no IAM role, no region in the code.
+3. TLS is **optional in the app**, so behind an ALB it simply serves HTTP.
 
-Do **not** pre-build for this: no SDK, no abstraction layer over the filesystem, no
-Terraform. The move is a day of work when it happens, and nothing today gets easier by guessing
-at it now.
-
----
-
-## 6. Region choice
-
-The design assumes the worst case (South Africa → Europe, ~180 ms) and the netcode holds up
-there. But if everyone turns out to be in one South African office:
-
-| Region | RTT from Johannesburg | Free tier |
-|---|---|---|
-| `eu-west-1` Ireland | ~165 ms | yes |
-| `eu-central-1` Frankfurt | ~155 ms | yes |
-| `af-south-1` Cape Town | **~15 ms** | **check — not always covered** |
-
-`af-south-1` is a dramatically better game for roughly the price of a coffee a month if it is not
-free-tier eligible. **Decide this before the first real session** — it is a `terraform`-less
-rebuild of one instance and a DNS change, about 30 minutes.
+Do not pre-build for this. No SDK, no filesystem abstraction, no Terraform. It is a day's work
+when it happens and nothing today gets easier by guessing now.
 
 ---
 
 ## 7. Operations
 
-**Logs.** stdout → `docker logs`, rotated by Docker's `json-file` driver capped at 10 MB × 3.
-No log shipping. If you need to debug a Friday session, `docker logs --since 1h`.
+**Logs.** `sudo journalctl -u bomb-voyage -f`, or `--since 1h` to debug a Friday session.
+systemd rotates them. No log shipping.
 
-**Health.** `GET /healthz` → `{ ok, uptimeS, players, tickMsP50, tickMsP99, roundTick }`.
-Check it by eye before a session; that is the whole monitoring story.
+**Health.** `https://<host>/healthz` → `{ ok, players, maxPlayers, lag, uptimeS }`. Check it by
+eye before a session; that is the whole monitoring story.
 
-**Backup.** `leaderboard.json` is the only state. A daily `cp` to a dated file in `DATA_DIR`, and
-keep seven. If it is ever lost, everyone's lifetime score resets and we live.
+**Restart / reboot.** `Restart=always` plus `systemctl enable`, so a crash recovers in two
+seconds and a reboot comes back unattended. On SIGTERM the server closes sockets cleanly.
 
-**Restart.** `restart: unless-stopped` in compose. On SIGTERM the server flushes the leaderboard,
-sends `roundend`, closes sockets, and exits — so a deploy mid-round is rude but not lossy.
+**Backup.** `leaderboard.json` is the only state. A daily `cp` to a dated file, keep seven. If it
+is ever lost, everyone's lifetime score resets and we live.
 
-**Updating.** `git pull && docker compose up -d --build`. There is no build step inside the
-image beyond `npm ci --omit=dev`, so this is fast. Do it between rounds.
+**Certificates.** Renewed by `certbot-renew.timer` at 03:00 Sunday. The deploy hook copies the
+new pair into `/var/lib/bomb-voyage/certs` and restarts the service. Check with
+`systemctl list-timers certbot-renew`.
 
 ---
 
@@ -155,10 +183,22 @@ image beyond `npm ci --omit=dev`, so this is fast. Do it between rounds.
 
 | Item | Monthly |
 |---|---|
-| EC2 `t3.micro` | $0 first 12 months, then ~$8 |
-| Elastic IP (attached) | $0 |
-| Egress | ~180 MB/round; free tier 100 GB → effectively $0 |
+| EC2 `t3.micro` | $0 for 12 months, then ~$8 |
+| Public IPv4 | $0 for 12 months (750 h Free Tier), then ~$3.60 |
+| Egress | ~180 MB/round against 100 GB free → effectively $0 |
 | TLS | $0 (Let's Encrypt) |
-| Domain | ~$1/month, or $0 with DuckDNS |
+| Hostname | $0 (sslip.io) |
 
-Essentially free, and about $9/month after the free tier expires.
+Free for a year, about $12/month after.
+
+---
+
+## 9. Troubleshooting
+
+| Symptom | Cause, in order of likelihood |
+|---|---|
+| **All ports time out** (22, 80, 443) | Security group does not have the rule, *or* the Elastic IP is not associated with a running instance. A timeout means the packet was dropped; a *refused* would mean it arrived and nothing was listening. |
+| Port 22 times out, 443 works | SSH rule source is a different IP than yours now. EC2 → Security Groups → Edit inbound → set **My IP** again. Do not reopen 22 to `0.0.0.0/0`. |
+| `certbot` fails with a connection error | Port 80 not open, or DNS not yet pointing at the box. `dig +short <host>` must return the Elastic IP. |
+| Service dies on start | `journalctl -u bomb-voyage -n 50`. Usually a cert path or a port permission — check `AmbientCapabilities` survived in the unit file. |
+| Page loads, WebSocket does not | Mixed content (page on https, socket on ws). The client derives the scheme from `location.protocol`; if you hardcoded one, that is the bug. |

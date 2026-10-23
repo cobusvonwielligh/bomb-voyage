@@ -1,0 +1,97 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bomb Voyage</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center;
+         background: #0d1117; color: #e8eef7;
+         font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .panel { border: 2px solid #ffd21f66; border-radius: 4px; background: #1a2029;
+           padding: 28px 36px; min-width: 420px; }
+  h1 { color: #ffd21f; font-size: 16px; letter-spacing: .18em; text-transform: uppercase;
+       margin: 0 0 2px; }
+  .sub { color: #8b97a8; margin: 0 0 22px; font-size: 12px; }
+  dl { display: grid; grid-template-columns: 9em 1fr; gap: 6px 12px; margin: 0; }
+  dt { color: #8b97a8; }
+  dd { margin: 0; }
+  .ok { color: #5ad1a0; } .bad { color: #e8655a; } .wait { color: #ffd21f; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+         background: currentColor; margin-right: 7px; vertical-align: 1px; }
+  ul { color: #8b97a8; font-size: 12px; margin: 22px 0 0; padding-left: 18px; }
+  a { color: #ffd21f; }
+</style>
+
+<div class="panel">
+  <h1>Bomb Voyage</h1>
+  <p class="sub">deployment check &middot; no game here yet</p>
+  <dl>
+    <dt>page</dt>        <dd class="ok"><i class="dot"></i>served</dd>
+    <dt>shared module</dt><dd id="shared" class="wait"><i class="dot"></i>loading</dd>
+    <dt>websocket</dt>   <dd id="ws" class="wait"><i class="dot"></i>connecting</dd>
+    <dt>your seat</dt>   <dd id="seat">&mdash;</dd>
+    <dt>online</dt>      <dd id="online">&mdash;</dd>
+    <dt>round trip</dt>  <dd id="rtt">&mdash;</dd>
+    <dt>origin</dt>      <dd id="origin">&mdash;</dd>
+  </dl>
+  <ul>
+    <li>If every row is green, the whole path works: TLS, static files, shared modules and
+        <code>wss://</code> on one origin.</li>
+    <li>Sprite preview: <a href="/art-preview.html">/art-preview.html</a></li>
+    <li>Health JSON: <a href="/healthz">/healthz</a></li>
+  </ul>
+</div>
+
+<script type="module">
+// Importing from /shared proves the dual-mount works — the browser is loading the same file Node
+// does. If this row fails, the client can never share the simulation with the server.
+import { MAX_PLAYERS, playerColor } from '/shared/constants.js';
+
+const $ = id => document.getElementById(id);
+const set = (id, cls, text) => {
+  const el = $(id);
+  el.className = cls;
+  el.innerHTML = cls === 'ok' || cls === 'bad' || cls === 'wait' ? '<i class="dot"></i>' : '';
+  el.append(text);
+};
+
+set('shared', 'ok', `ok (max ${MAX_PLAYERS} players)`);
+$('origin').textContent = location.origin;
+
+const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+let sentAt = 0;
+
+function connect() {
+  const ws = new WebSocket(url);
+
+  ws.onopen = () => {
+    set('ws', 'ok', 'open');
+    ws.send(JSON.stringify({ t: 'hello', name: 'check', playerId: null }));
+    setInterval(() => {
+      if (ws.readyState !== 1) return;
+      sentAt = performance.now();
+      ws.send(JSON.stringify({ t: 'ping', c: Date.now() }));
+    }, 2000);
+  };
+
+  ws.onmessage = e => {
+    const m = JSON.parse(e.data);
+    if (m.t === 'welcome') {
+      $('seat').textContent = `#${m.you}`;
+      $('seat').style.color = playerColor(m.you);
+      $('online').textContent = `${m.players.length} / ${m.config.maxPlayers}`;
+    }
+    if (m.t === 'snap' && m.players) $('online').textContent = `${m.players.length} / ${MAX_PLAYERS}`;
+    if (m.t === 'pong') $('rtt').textContent = `${Math.round(performance.now() - sentAt)} ms`;
+    if (m.t === 'reject') set('ws', 'bad', `rejected: ${m.why}`);
+  };
+
+  ws.onclose = () => {
+    set('ws', 'bad', 'closed — retrying');
+    setTimeout(connect, 2000);
+  };
+  ws.onerror = () => set('ws', 'bad', 'error');
+}
+connect();
+</script>

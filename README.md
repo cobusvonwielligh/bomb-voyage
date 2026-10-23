@@ -3,8 +3,25 @@
 A lightweight 16-player browser clone of [Game of Bombs](https://gameofbombs.com), built for
 Friday-afternoon games at eezi.
 
-**Status: planning complete, no code yet.** Everything in `docs/` is the agreed spec. Start at
-[docs/PLAN.md](docs/PLAN.md).
+**Live:** https://16.28.138.34.sslip.io · **Health:** [/healthz](https://16.28.138.34.sslip.io/healthz)
+· **Sprites:** [/art-preview.html](https://16.28.138.34.sslip.io/art-preview.html)
+
+---
+
+## Status
+
+| | |
+|---|---|
+| ✅ Spec | All of `docs/`. Read [docs/PLAN.md](docs/PLAN.md) first. |
+| ✅ Deployment spine | Server, TLS, systemd, one-command deploy, smoke tests, reboot-safe. |
+| ⬜ The game | Not started. Phase 0 onward in [docs/PLAN.md](docs/PLAN.md). |
+
+What works end to end today: HTTPS on 443, `wss://` on the same origin, static serving, the
+`/shared` dual-mount, seating up to 16 players, health, certificate auto-renewal, and automatic
+recovery after a reboot (verified: back in ~50 s unattended).
+
+Measured round trip from Cape Town to the box: **62 ms min / 73 ms median**. The netcode is
+designed to survive 180 ms, so there is plenty of headroom.
 
 ---
 
@@ -16,10 +33,40 @@ Friday-afternoon games at eezi.
 - Vanilla JS + jQuery on the client, Node + `ws` on the server. No framework.
 - Art and audio are generated in code. There are no binary assets to download.
 
-## What this is not
+What it is **not**: see [docs/DESIGN.md](docs/DESIGN.md) → Non-goals. Short version: no accounts,
+no payments, no persistent world, no mobile, no matchmaking, no anti-cheat.
 
-See [docs/DESIGN.md](docs/DESIGN.md) → Non-goals. Short version: no accounts, no payments,
-no persistent world, no mobile, no matchmaking, no anti-cheat.
+---
+
+## Run it locally
+
+```bash
+npm install          # one dependency: ws
+npm start            # http://localhost:8080
+npm test             # node --test, no framework
+```
+
+Open two tabs. No database, no Docker, no env file.
+
+**Develop with the lag shim on.** This is the single highest-value habit on the project:
+
+```bash
+npm run dev          # LAG=200 JITTER=40 — what a bad connection feels like
+```
+
+If your own character ever feels delayed at that setting, that is the bug, and it outranks
+everything else. See [docs/NETCODE.md](docs/NETCODE.md) §7.
+
+## Deploy
+
+```bash
+HOST=16.28.138.34.sslip.io npm run deploy
+```
+
+Runs the tests, rsyncs, installs, restarts, and polls `/healthz` until it answers — a few
+seconds. On failure it prints the last 40 journal lines. Do it between rounds.
+
+First-time server setup and everything operational: [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ---
 
@@ -29,46 +76,21 @@ no persistent world, no mobile, no matchmaking, no anti-cheat.
 |---|---|---|
 | `docs/` | The spec. Read before writing code. | — |
 | `shared/` | Code imported by **both** server and client. Tuning constants, pure sim systems. | FOUND (frozen), MOVE, BOOM, LOOT, PLAGUE |
-| `server/` | Node process: HTTP static serving, WebSocket, authoritative sim loop, persistence. | NET, ROUND |
+| `server/` | Node process: static serving, WebSocket hub, authoritative loop, persistence. | NET, ROUND |
 | `public/` | Everything the browser downloads. Served raw, no bundler. | — |
 | `public/client/` | Game client: prediction, renderer, input, audio. | MOVE, ARENA, SHELL, ART |
 | `public/assets/` | Art and map data (code and JSON, no images). | ART, ARENA |
-| `tools/` | Dev-only helpers that never ship to players. | NET |
+| `infra/` | `bootstrap.sh` (once per box), `deploy.sh`, systemd unit. | DEPLOY |
 | `test/` | `node --test` suites. | whichever slice owns the system |
 
-Slice boundaries and the file-ownership table: [docs/PLAN.md](docs/PLAN.md) §2 and
+Slice boundaries and file ownership: [docs/PLAN.md](docs/PLAN.md) §2 and
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §5.
-
----
-
-## Running locally (target state)
-
-```bash
-git clone <this repo>
-cd bomb-voyage
-npm install            # installs exactly one dependency: ws
-npm start              # http://localhost:8080
-```
-
-Open two browser tabs at `http://localhost:8080`, enter two different names, and you are in the
-same round. No database, no Docker, no env file needed for local dev.
-
-Useful:
-
-```bash
-npm test               # node --test, no framework
-npm run bots -- 15     # spawn 15 headless bots so you can test a full lobby alone
-npm run art            # opens tools/art-preview.html in a browser
-```
-
-`npm run bots` matters — do not wait for 16 humans to find a desync. See
-[docs/PLAN.md](docs/PLAN.md) → Task NET-6.
 
 ---
 
 ## Key decisions already made
 
-These are settled. If you want to reopen one, raise it before writing code, not after.
+Settled. Reopen one before writing code, not after.
 
 | Decision | Why | Detail |
 |---|---|---|
@@ -76,8 +98,9 @@ These are settled. If you want to reopen one, raise it before writing code, not 
 | Explosions are **derived**, not pushed | Fuse is deterministic, so a 180 ms client predicts fire perfectly and nobody dies to lag | [NETCODE.md](docs/NETCODE.md) |
 | Players do not collide with each other | Deletes the entire "I'm seeing you 150 ms in the past" problem | [RULES.md](docs/RULES.md) |
 | No build step, raw ES modules | One less thing to break at 16:45 on a Friday | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| systemd, not Docker | One process, one dependency. Deploy is an rsync, not an image build. | [DEPLOY.md](docs/DEPLOY.md) §1 |
 | Art is drawn in code from shapes | No sprite sheets to version, free recolouring per player | [ART-AUDIO.md](docs/ART-AUDIO.md) |
-| One port, one hostname, TLS on 443 | Corporate IT unblocks one thing | [DEPLOY.md](docs/DEPLOY.md) |
+| One port, one hostname, TLS on 443 | Corporate IT unblocks one thing | [DEPLOY.md](docs/DEPLOY.md) §2 |
 
 ---
 

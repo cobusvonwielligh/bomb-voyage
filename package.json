@@ -1,0 +1,17 @@
+{
+  "name": "bomb-voyage",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "16-player browser Bomberman for Friday office games",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "LAG=200 JITTER=40 node server/index.js",
+    "test": "node --test",
+    "deploy": "./infra/deploy.sh"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
