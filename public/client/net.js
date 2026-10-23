@@ -69,6 +69,9 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
     ws = createTransport({
       onOpen: won => {
         kind = won;
+        // Say which pipe won, once, in the console. The only way to tell QUIC from TCP from the
+        // outside is latency under loss, which is not something you can eyeball.
+        console.info(`transport: ${won}`);
         onStatus?.('open');
         ws.send(hello);
         ping();

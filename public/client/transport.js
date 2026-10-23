@@ -13,8 +13,22 @@
 
 import { encodeFrame, createFramer, pickChannel } from '/shared/wire.js';
 
-// How long WebTransport gets to answer before WebSocket is taken instead. Long enough for a real
-// handshake on a slow link, short enough that a black-holing firewall costs nothing noticeable.
+/* How long WebTransport gets before WebSocket is taken instead.
+ *
+ * This is not a plain first-past-the-post race, and it took measuring to see why. A WebSocket
+ * open fires as soon as TCP and TLS are up, which on a warm connection is quicker than a cold
+ * QUIC handshake plus a stream — so pure "whoever answers first" meant the WebSocket won almost
+ * every time and the QUIC path, once built, was never actually used by anybody.
+ *
+ * So WebSocket waits. When it connects first it is held as a provisional winner for PREFER_MS,
+ * and if WebTransport lands inside that window it takes the connection instead. Measured from
+ * an external network, a QUIC session to this server is ready in about 50 ms, so 350 ms is a
+ * wide margin — and it only ever costs anything on a network where UDP is being dropped
+ * silently, which is exactly the case that should pay rather than everybody else.
+ *
+ * RACE_MS is the outer backstop for when both are slow.
+ */
+const PREFER_MS = 350;
 const RACE_MS = 1200;
 
 const encoder = new TextEncoder();
@@ -27,10 +41,25 @@ const encoder = new TextEncoder();
 export function createTransport({ onMessage, onOpen, onClose, onNote }) {
   let active = null;           // { kind, send, close }
   let settled = false;
+  let preferTimer = null;
   const candidates = [];
+
+  const clearPrefer = () => { if (preferTimer) { clearTimeout(preferTimer); preferTimer = null; } };
+
+  /** A WebSocket that is up, but is waiting to see whether WebTransport turns up too. */
+  const wtPending = () => candidates.some(c => c.kind === 'webtransport' && !c.dead);
 
   const win = t => {
     if (settled) { t.close(); return; }
+    // The WebSocket defers to a WebTransport attempt that is still in flight. See PREFER_MS.
+    if (t.kind === 'websocket' && wtPending() && !preferTimer) {
+      preferTimer = setTimeout(() => {
+        preferTimer = null;
+        if (!settled && !t.dead) win(t);
+      }, PREFER_MS);
+      return;
+    }
+    clearPrefer();
     settled = true;
     active = t;
     for (const other of candidates) if (other !== t) other.close();
@@ -41,6 +70,12 @@ export function createTransport({ onMessage, onOpen, onClose, onNote }) {
   const lose = (kind, why) => {
     onNote?.(`${kind} unavailable: ${why}`);
     if (settled) return;
+    // WebTransport is out: stop making the WebSocket wait for it.
+    if (kind === 'webtransport' && !wtPending()) {
+      clearPrefer();
+      const ws = candidates.find(c => c.kind === 'websocket' && !c.dead && c.ws?.readyState === 1);
+      if (ws) { win(ws); return; }
+    }
     // Only give up on the race once every candidate has failed.
     if (candidates.every(c => c.dead)) { settled = true; onClose?.(); }
   };
@@ -156,6 +191,7 @@ export function createTransport({ onMessage, onOpen, onClose, onNote }) {
     send(obj) { active?.send(JSON.stringify(obj)); },
 
     close() {
+      clearPrefer();
       settled = true;
       for (const c of candidates) c.close();
       active?.close();

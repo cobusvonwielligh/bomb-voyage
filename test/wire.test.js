@@ -3,6 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { encodeFrame, createFramer, pickChannel, DATAGRAM_SAFE_BYTES } from '../shared/wire.js';
 
 const bytes = s => new TextEncoder().encode(s);
@@ -89,4 +90,23 @@ test('a real sixteen-player snapshot is measured, not assumed', () => {
   assert.ok(size > 0);
   assert.equal(channel, size <= DATAGRAM_SAFE_BYTES ? 'datagram' : 'stream');
   console.log(`    (a full 16-player snapshot is ${size} bytes -> ${channel})`);
+});
+
+test('the websocket defers to an in-flight webtransport attempt', () => {
+  // Pure first-past-the-post was the bug: a WebSocket open fires as soon as TCP and TLS are up,
+  // which beats a cold QUIC handshake, so the transport we built was never actually used. The
+  // rule is readable straight out of the source — there is no DOM here to exercise it against.
+  const src = readFileSync(new URL('../public/client/transport.js', import.meta.url), 'utf8');
+  assert.match(src, /const PREFER_MS = \d+/, 'the preference window is gone');
+  assert.match(src, /t\.kind === 'websocket' && wtPending\(\)/,
+    'the websocket no longer waits for webtransport');
+  // And it must stop waiting the moment webtransport is out, or a UDP-blocked network pays the
+  // full window on every single reconnect.
+  assert.match(src, /kind === 'webtransport' && !wtPending\(\)/,
+    'a failed webtransport does not release the websocket early');
+
+  const prefer = Number(src.match(/const PREFER_MS = (\d+)/)[1]);
+  const race = Number(src.match(/const RACE_MS = (\d+)/)[1]);
+  assert.ok(prefer > 0 && prefer < race, `PREFER_MS ${prefer} must sit inside RACE_MS ${race}`);
+  assert.ok(prefer <= 500, `${prefer}ms is long enough to feel on the join screen`);
 });

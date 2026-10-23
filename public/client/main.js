@@ -365,7 +365,9 @@ const net = createNet({
     // thousand, and a label that almost never changes is a label nobody reads. The state still
     // goes on the title, so hovering says exactly what it is.
     $('conn').dataset.state = s;
-    $('conn').title = s;
+    // The transport rides along in the tooltip: "open · webtransport". Worth having somewhere
+    // visible, because a silent fallback to WebSocket is invisible by design.
+    $('conn').title = s === 'open' && net.transport ? `${s} \u00b7 ${net.transport}` : s;
     if (running) return;
     toast(s);
     $('play').disabled = s === 'connecting' || s === 'open';
