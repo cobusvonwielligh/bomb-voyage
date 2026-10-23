@@ -603,29 +603,88 @@ export function createRenderer(canvas, world) {
    * much darker, sea-tinted version of the same stone and at reduced opacity, so they sit at
    * about the brightness of the deep water around them: you see shapes, not objects.
    */
-  const SEA_ROCK_MIN = 2, SEA_ROCK_MAX = 3;
-  let rocksFor = null, seaRocks = [];
+  const SEA_ROCKS = 3;
+  let rocksFor = null, rocksForView = 0, seaRocks = [];
+
+  /* Placed against the VIEW, not just against the island.
+   *
+   * Dropping them a fixed distance beyond the land was simple and wrong: on a wide window they
+   * fell outside the frame entirely and nobody ever saw one, and on a narrow one they sat on
+   * top of the coast. The sea you can actually see is a band between the edge of the island and
+   * the edge of the board, and its width depends on the window and the zoom.
+   *
+   * So the band is measured and the rocks are placed inside it, with a guarantee rather than a
+   * hope: the first is positioned to be **entirely** on screen, and the other two to be **at
+   * least a fifth** on screen — those two are allowed to run off the edge, which is what stops
+   * the set looking arranged.
+   *
+   * Re-rolled when the map changes or when the window resizes enough to move the band, because
+   * a rock that was fully visible before you resized should still be.
+   */
+  const ROCK_FULLY_VISIBLE = 1;
+  const ROCK_MIN_VISIBLE = 0.2;
 
   function waterRocks() {
-    if (rocksFor === world.map) return seaRocks;
+    const viewKey = Math.round(view.w / 40) * 1000 + Math.round(view.h / 40);
+    if (rocksFor === world.map && rocksForView === viewKey) return seaRocks;
     rocksFor = world.map;
+    rocksForView = viewKey;
+
     const [lx, ly, lw, lh] = landBounds();
     const cx = (lx + lw / 2) * TILE_PX, cy = (ly + lh / 2) * TILE_PX;
+    const zoom = view.zoom || 1;
+    // Half the board, in world pixels, from the island's centre.
+    const halfView = [(view.w / zoom) / 2, (view.h / zoom) / 2];
+    const halfLand = [(lw * TILE_PX) / 2, (lh * TILE_PX) / 2];
 
-    const n = SEA_ROCK_MIN + ((Math.random() * (SEA_ROCK_MAX - SEA_ROCK_MIN + 1)) | 0);
-    // Spread the bearings over the circle rather than rolling each independently: three
-    // independent angles land on top of each other far more often than feels random.
-    const base = Math.random() * Math.PI * 2;
+    const bandOn = axis => halfView[axis] - (halfLand[axis] + TILE_PX * 1.2);
+    // The fully-visible one goes on whichever axis has the most spare sea, because it is the
+    // only one that has to fit the band twice over. The others take what is left.
+    const widest = bandOn(0) >= bandOn(1) ? 0 : 1;
+
     seaRocks = [];
-    for (let i = 0; i < n; i++) {
-      const a = base + (i / n) * Math.PI * 2 + (Math.random() - 0.5) * 0.9;
-      const out = 0.56 + Math.random() * 0.26;
-      const r = TILE_PX * (2.1 + Math.random() * 1.9);       // two to four tiles across
+    const spin = (Math.random() * 4) | 0;
+    for (let i = 0; i < SEA_ROCKS; i++) {
+      const side = i === 0
+        ? widest + (Math.random() < 0.5 ? 0 : 2)        // same axis, either end
+        : (spin + i) % 4;
+      const horizontal = side % 2 === 0;
+      const sign = side % 4 < 2 ? 1 : -1;
+      const axis = horizontal ? 0 : 1;
+
+      const inner = halfLand[axis] + TILE_PX * 1.2;     // just clear of the coast
+      const outer = halfView[axis];                      // the edge of the board
+      const band = outer - inner;
+      const full = i < ROCK_FULLY_VISIBLE;
+      // A thin band still gets a rock; it is simply a smaller one. The fully-visible rock has
+      // to fit the band twice over — once either side of its centre — so it is capped harder.
+      const want = TILE_PX * (2.1 + Math.random() * 1.9);
+      // No floor on the full one: "entirely on screen" beats "a decent size", and on a cramped
+      // band a small rock is still a rock. The others may be as big as the band allows.
+      const r = full
+        ? Math.max(TILE_PX * 0.35, Math.min(want, band / 2))
+        : Math.max(TILE_PX * 0.9, Math.min(want, band * 0.8));
+
+      // Distance from the island's centre, along the chosen axis.
+      const dist = full
+        // Entirely inside: clear of the coast on one side, clear of the board edge on the other.
+        ? (inner + r + Math.max(inner + r, outer - r)) / 2
+        // Partly outside: `visible` is how much of its width is left on screen, so the centre
+        // sits that far short of the edge plus the rest of its radius beyond it.
+        : outer + r * (1 - 2 * (ROCK_MIN_VISIBLE + Math.random() * 0.3));
+
+      // And a slide along the shore, so they are not all on the centre line of their side. The
+      // fully-visible one is clamped so the slide cannot push it off the OTHER edge, which is
+      // the easy way to lose a guarantee you only checked on one axis.
+      const spread = halfView[1 - axis];
+      const along = full
+        ? (Math.random() - 0.5) * 2 * Math.max(0, spread - r)
+        : (Math.random() - 0.5) * spread * 1.2;
+
       seaRocks.push({
-        x: cx + Math.cos(a) * (lw * TILE_PX * 0.5 * out + r * 1.3),
-        y: cy + Math.sin(a) * (lh * TILE_PX * 0.5 * out + r * 1.3),
+        x: cx + (horizontal ? sign * dist : along),
+        y: cy + (horizontal ? along : sign * dist),
         r,
-        // The lumps that make up this particular rock, rolled once so it does not boil.
         lumps: Array.from({ length: 4 }, () => ({
           dx: (Math.random() - 0.5) * r * 0.9,
           dy: (Math.random() - 0.5) * r * 0.7,
@@ -668,10 +727,13 @@ export function createRenderer(canvas, world) {
       };
       for (const l of k.lumps) lump(l, 1.06, '#071320', 0.55);        // wet shadow underneath
       for (const l of k.lumps) lump(l, 1, '#2b3038', 0.92);           // the stone
+      // The two lit layers at half strength. They were the brightest thing in the open water
+      // and the only part of a rock that caught the eye from across the board — which is the
+      // opposite of what a piece of background is for.
       for (const l of k.lumps) lump({ ...l, dx: l.dx - l.r * 0.22, dy: l.dy - l.r * 0.24 },
-        0.6, '#3c424c', 0.8);                                         // the lit shoulder
+        0.6, '#3c424c', 0.4);                                         // the lit shoulder
       for (const l of k.lumps) lump({ ...l, dx: l.dx - l.r * 0.3, dy: l.dy - l.r * 0.34 },
-        0.26, '#4b515c', 0.55);                                       // the dry cap
+        0.26, '#4b515c', 0.275);                                      // the dry cap
 
       // A wet line where it goes into the water, which is what sells "half submerged".
       ctx.globalAlpha = ROCK_ALPHA * 0.7;
