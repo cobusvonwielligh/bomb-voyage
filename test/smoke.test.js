@@ -77,7 +77,7 @@ test('deployment spine', async t => {
   await t.test('websocket seats a player and frees the seat on close', async () => {
     const ws = new WebSocket(`ws://127.0.0.1:${PORT}/ws`);
     await once(ws, 'open');
-    ws.send(JSON.stringify({ t: 'hello', name: '  smoketest  ' }));
+    ws.send(JSON.stringify({ t: 'hello', name: '  smoke\x07test  ' }));
 
     const [raw] = await once(ws, 'message');
     const welcome = JSON.parse(raw);
