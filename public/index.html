@@ -24,6 +24,10 @@
       <path d="M4 2h4v6l4 2v4H4z" fill="currentColor"/>
       <path d="M2 14h12" stroke="currentColor" stroke-width="1.4"/>
     </symbol>
+    <symbol id="i-crown" viewBox="0 0 16 16">
+      <path fill="currentColor" d="M2 12h12l1-7-3.5 2.5L8 3 4.5 7.5 1 5z"/>
+      <rect x="2" y="13" width="12" height="2" fill="currentColor"/>
+    </symbol>
     <symbol id="i-gh" viewBox="0 0 16 16">
       <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
         0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01
@@ -117,7 +121,13 @@
   </div>
 </div>
 
-<div id="streak"><span class="big"></span><span class="who"></span></div>
+<!-- Centred on the BOARD, not the window: the side panel is 340px of chrome, and an
+     announcement centred on the viewport sits visibly off to one side of the thing you are
+     looking at. -->
+<div id="centre">
+  <div id="streak"><span class="big"></span><span class="who"></span></div>
+  <div id="deadBanner"><span class="big">YOU DIED</span><span class="who"></span></div>
+</div>
 
 <div id="dead">
   <div class="card small edge">

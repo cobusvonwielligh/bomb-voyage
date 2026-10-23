@@ -28,11 +28,14 @@ const ACE_MIN_VICTIMS = 3;
 
 const newStreak = () => ({ count: 0, lastTick: -1e9, victims: new Set() });
 
-export function createRoom({ onKick, onBroadcast, maxPlayers = MAX_PLAYERS, leaderboard = null,
+export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = MAX_PLAYERS, leaderboard = null,
   // Overridable so a test can watch a seat be recycled without waiting 45 real seconds.
   graceTicks = RECONNECT_GRACE_TICKS,
 }) {
-  let mapIndex = 0;
+  // Start somewhere random rather than always on the first map. Rotation between rounds works
+  // fine, but a server that restarts — a deploy, a crash, a reboot — always came back to Arena,
+  // so in practice that is the only map anybody ever saw.
+  let mapIndex = (Math.random() * MAPS.length) | 0;
   let state = createState(MAPS[mapIndex]);
 
   // seat -> { playerId, name, mask, inputs, lastAckTick, connected, goneSince }
@@ -478,7 +481,7 @@ export function createRoom({ onKick, onBroadcast, maxPlayers = MAX_PLAYERS, lead
       const lifetime = (banked?.score ?? 0) + Math.max(0, p.score);
       ranks.push({ i, bot: !!s.isBot, ...progressFor(lifetime) });
     }
-    onBroadcast({ t: 'scores', ranks, top: leaderboard.top(5) });
+    onBroadcast({ t: 'scores', ranks, host: hostSeat(), top: leaderboard.top(5) });
   }
 
   const welcomePayloadBase = () => ({
@@ -560,6 +563,25 @@ export function createRoom({ onKick, onBroadcast, maxPlayers = MAX_PLAYERS, lead
   };
 
   // ─── bots and admin ─────────────────────────────────────────────────────────
+
+  /**
+   * Who is in charge.
+   *
+   * The named admin whenever they are connected, and otherwise the longest-standing human — the
+   * lowest occupied seat, which is the first person who joined and has not left. A room always
+   * has exactly one host while anybody is in it, and losing one promotes the next without
+   * anybody having to do anything.
+   */
+  function hostSeat() {
+    let admin = -1, first = -1;
+    for (let i = 0; i < maxPlayers; i++) {
+      const s = seats[i];
+      if (!s || s.isBot || !s.connected) continue;
+      if (first < 0) first = i;
+      if (adminName && (s.name ?? '').toLowerCase() === adminName) { admin = i; break; }
+    }
+    return admin >= 0 ? admin : first;
+  }
 
   const botCount = () => seats.filter(s => s?.isBot).length;
 
@@ -652,7 +674,7 @@ export function createRoom({ onKick, onBroadcast, maxPlayers = MAX_PLAYERS, lead
 
   return {
     start, stop, join, disconnect, input, requestRespawn, welcomeFor, roundInfo, stats,
-    setBots, botCount, restartRound, toggleGod, logout,
+    setBots, botCount, restartRound, toggleGod, logout, hostSeat,
     kickSeat, seatOfName, setMap, setGameSpeed,
     isBot: seat => !!seats[seat]?.isBot,
     maps: () => MAPS.map(m => m.id),

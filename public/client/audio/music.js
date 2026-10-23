@@ -328,7 +328,7 @@ export function createMusic() {
    */
   function crossfade(at) {
     const from = tracks[current].gain.gain;
-    current = (current + 1) % tracks.length;
+    current = nextTrack();
     const to = tracks[current].gain.gain;
     loops = 0;
     for (const [p, target] of [[from, 0], [to, 1]]) {
@@ -363,6 +363,21 @@ export function createMusic() {
     loops = 0;
     // The new track has its own step duration, and nextTime was measured in the old one.
     nextTime = Math.max(nextTime, now + 0.05);
+  }
+
+  /**
+   * The next track in the cycle, skipping anything excluded.
+   *
+   * The theme belongs to the landing page. Left in the rotation it comes back round after a few
+   * minutes and starts playing a tune with a backbeat over a firefight, which is exactly the
+   * thing moving to ambient beds was for.
+   */
+  function nextTrack() {
+    for (let i = 1; i <= tracks.length; i++) {
+      const n = (current + i) % tracks.length;
+      if (!excluded.has(tracks[n].name)) return n;
+    }
+    return current;
   }
 
   function scheduler() {
@@ -418,6 +433,18 @@ export function createMusic() {
       if (!playing || !tracks) return;
       const at = tracks.findIndex(t => t.name === name);
       if (at >= 0 && at !== current) jumpTo(at);
+    },
+
+    /**
+     * Keep a track out of the rotation, or let it back in.
+     *
+     * The theme is excluded for the whole of a round. Without this it is only skipped once: the
+     * cycle comes back round after a few minutes and starts playing a tune with a backbeat over
+     * a firefight, which is the exact thing the ambient beds exist to avoid.
+     */
+    exclude(name, off = true) {
+      if (off) excluded.add(name); else excluded.delete(name);
+      if (off && playing && tracks && tracks[current]?.name === name) jumpTo(nextTrack());
     },
 
     stop() {

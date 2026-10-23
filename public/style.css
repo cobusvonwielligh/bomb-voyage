@@ -29,6 +29,9 @@
           'Helvetica Neue', system-ui, sans-serif;
   /* Tabular figures for numbers that tick, so the timer does not shuffle sideways every second. */
   --nums: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* The crown, inline so it can be a CSS mask and take whatever colour it is used in. */
+  --crown: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 12h12l1-7-3.5 2.5L8 3 4.5 7.5 1 5z'/%3E%3Crect x='2' y='13' width='12' height='2'/%3E%3C/svg%3E");
 }
 
 * { box-sizing: border-box; }
@@ -287,12 +290,12 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * overlaps; the menu is higher still, so it does not float over the landing page.
  */
 #avatar {
-  /* Below the top bar rather than across it: at the very top he covered the leave button and the
-     volume sliders, and a decoration that eats controls is not a decoration. */
-  position: fixed; top: 58px; right: 18px;
-  width: 86px; height: 86px;
+  position: fixed; top: 2px; right: 6px;
+  width: 92px; height: 92px;
   object-fit: contain;
-  z-index: 4;
+  /* Above the bar it overlaps, below the menu. pointer-events:none is what keeps it from eating
+     the leave button and the volume sliders underneath it. */
+  z-index: 9;
   pointer-events: none;
   filter: drop-shadow(0 6px 14px #000c) drop-shadow(0 0 18px #ffd21f44);
   animation: bob 6s ease-in-out infinite;
@@ -401,6 +404,18 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 #liveRows .kd { color: var(--dim); font-family: var(--nums); font-size: 11px; }
 #liveRows .sc { font-family: var(--nums); color: var(--ink); }
 #liveRows li.me { font-weight: 700; }
+
+/* The host. Small enough to be a mark rather than an ornament: it says who can restart the
+ * round, and nothing more. Drawn as a mask so one SVG symbol can be tinted gold here. */
+#liveRows li.host .nm::after {
+  content: '';
+  display: inline-block; width: 11px; height: 11px; margin-left: 5px;
+  vertical-align: -1px;
+  background: var(--gold);
+  -webkit-mask: var(--crown) center / contain no-repeat;
+  mask: var(--crown) center / contain no-repeat;
+  opacity: .9;
+}
 #liveRows li.out .nm { opacity: .45; }
 
 #chat { display: flex; flex-direction: column; flex: 1; min-height: 0; }
@@ -436,19 +451,52 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * the one moment the game should interrupt you.
  */
 
-#streak {
-  position: fixed; top: 22%; left: 50%; transform: translateX(-50%);
-  z-index: 9; pointer-events: none; text-align: center;
+/* Anchored to the board, which is the window minus the top bar and the side panel. A banner
+ * centred on the viewport sits noticeably off to one side of the thing you are actually looking
+ * at, and the one moment it has to be read is the one moment you have no attention to spare. */
+#centre {
+  position: fixed; z-index: 9; pointer-events: none;
+  top: calc(var(--bar) + var(--gap) * 2);
+  left: var(--gap);
+  width: calc(100vw - var(--side) - var(--gap) * 3);
+  height: calc(100vh - var(--bar) - var(--gap) * 3);
+  display: grid; place-items: center;
+  align-content: center;
+}
+@media (max-width: 1080px) { #centre { width: calc(100vw - var(--gap) * 2); } }
+
+#streak, #deadBanner {
+  grid-area: 1 / 1;
+  text-align: center;
   font-family: var(--display); letter-spacing: .08em;
   opacity: 0;
 }
 #streak.show { animation: streakIn 1.9s ease-out forwards; }
-#streak .big {
-  display: block; font-size: 42px; color: var(--gold);
-  text-shadow: 0 0 24px #ffd21f, 0 4px 0 #0009;
+#streak .big, #deadBanner .big {
+  display: block; font-size: 52px; color: var(--gold);
+  text-shadow: 0 0 28px #ffd21f, 0 5px 0 #0009;
 }
-#streak .who { display: block; font-size: 15px; color: var(--ink); margin-top: 6px; opacity: .85; }
-#streak.ace .big { font-size: 60px; color: #fff; text-shadow: 0 0 36px #b36bff, 0 0 70px #b36bff; }
+#streak .who, #deadBanner .who {
+  display: block; font-size: 16px; color: var(--ink); margin-top: 8px; opacity: .85;
+  font-family: var(--text); letter-spacing: .14em; text-transform: uppercase;
+}
+/* Each rung is bigger and hotter than the last, so the escalation is visible as well as audible. */
+#streak.s2 .big { font-size: 52px; }
+#streak.s3 .big { font-size: 64px; color: #ffe98a; text-shadow: 0 0 34px #ffd21f, 0 6px 0 #0009; }
+#streak.s4 .big { font-size: 76px; color: #fff; text-shadow: 0 0 40px #ff9a3d, 0 0 80px #e8655a; }
+#streak.ace .big {
+  font-size: 88px; color: #fff;
+  text-shadow: 0 0 44px #b36bff, 0 0 90px #b36bff, 0 0 140px #7badd3;
+}
+
+#deadBanner .big { color: var(--bad); text-shadow: 0 0 30px #e8655a, 0 5px 0 #0009; }
+#deadBanner.show { animation: deadIn 1.4s ease-out forwards; }
+@keyframes deadIn {
+  0%   { opacity: 0; transform: scale(1.5); }
+  14%  { opacity: 1; transform: scale(1); }
+  70%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(.96); }
+}
 
 @keyframes streakIn {
   0%   { opacity: 0; transform: translateX(-50%) scale(.6)  rotate(-3deg); }
@@ -562,8 +610,8 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 #menuWrap { position: relative; }
 #mascot {
   position: absolute;
-  top: -58px; right: -74px;
-  width: 210px; height: 210px;
+  top: -16px; right: -58px;
+  width: 170px; height: 170px;
   z-index: 2;
   pointer-events: none;
   animation: bob 5.5s ease-in-out infinite;

@@ -19,32 +19,22 @@ import { rng } from './util/rng.js';
 //   blob   one organic island with bays and headlands
 //   atoll  a blob with a lagoon bitten out of the middle, so the map is a ring
 //   poly   an explicit polygon in normalised -1..1 coordinates, for a deliberate silhouette
+// Three maps, each a different problem to solve. Sized so the board can be drawn big: the view
+// is roughly 1.5 times wider than it is tall, so a map that is nearly square wastes the sides and
+// a map that is too large has to be scaled down to fit. Everything here is about 1.5:1 once the
+// two tiles of ocean on each side are counted in, and none of them exceeds 39x23.
+//
+//   arena   a plain rectangle, the Bomberman default: no terrain to hide behind, pure lattice
+//   cove    one organic island, all bays and headlands, where the coast makes the chokepoints
+//   twins   two round islands joined by a single causeway, so crossing is a decision
 export const MAPS = [
-  { id: 'arena', name: 'Arena', w: 31, h: 25, seed: 1337,
+  { id: 'arena', name: 'Arena', w: 33, h: 23, seed: 1337,
     shape: 'rect', density: 0.62, reinforced: 0.05, shrubs: 0.03 },
-  { id: 'catacombs', name: 'Catacombs', w: 43, h: 31, seed: 4242,
-    shape: 'blob', density: 0.74, reinforced: 0.14, shrubs: 0.02 },
-  { id: 'islands', name: 'Islands', w: 39, h: 37, seed: 777,
-    shape: 'atoll', density: 0.5, reinforced: 0.08, shrubs: 0.12 },
-  // A six-armed starfish. Long arms meeting at a hub is the most interesting shape a bomber map
-  // can have: every arm is a corridor with one way in, the hub is the only crossroads, and the
-  // sea between the arms means a blast that escapes an arm is simply gone. Nothing like it comes
-  // out of a noise function, which is why this one is written down by hand.
-  { id: 'starfish', name: 'Starfish', w: 45, h: 45, seed: 9001,
-    shape: 'poly', points: star(6, 1.0, 0.34, -Math.PI / 2),
-    density: 0.58, reinforced: 0.1, shrubs: 0.06 },
+  { id: 'cove', name: 'Cove', w: 37, h: 23, seed: 4242,
+    shape: 'blob', density: 0.7, reinforced: 0.12, shrubs: 0.04 },
+  { id: 'twins', name: 'Twins', w: 39, h: 23, seed: 777,
+    shape: 'twin', density: 0.58, reinforced: 0.09, shrubs: 0.08 },
 ];
-
-/** Alternating outer and inner radii, which is all a star is. */
-function star(arms, outer, inner, phase) {
-  const pts = [];
-  for (let i = 0; i < arms * 2; i++) {
-    const a = phase + (i * Math.PI) / arms;
-    const r = i % 2 ? inner : outer;
-    pts.push([Math.cos(a) * r, Math.sin(a) * r]);
-  }
-  return pts;
-}
 
 export const mapById = id => MAPS.find(m => m.id === id) || MAPS[0];
 
@@ -108,6 +98,29 @@ function landMask(def, next) {
   const { w, h, shape } = def;
   const land = new Uint8Array(w * h);
   if (shape === 'rect' || !shape) { land.fill(1); return land; }
+
+  if (shape === 'twin') {
+    // Two round islands joined by one causeway.
+    //
+    // The causeway is the whole map: it is the only way across, so holding it is worth something
+    // and crossing it is a decision rather than a walk. Three tiles wide, because two is a
+    // corridor one bomb seals and four is a road.
+    const cx = (w - 1) / 2, cy = (h - 1) / 2;
+    const r = Math.min(w / 4.3, h / 2.3);
+    const lobes = [[cx - w * 0.235, cy], [cx + w * 0.235, cy]];
+    // Five, not three. The shoreline ring takes the outer row on each side, so a three-wide
+    // bridge lands as a one-wide corridor that a single bomb seals forever.
+    const BRIDGE = 5;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const onLobe = lobes.some(([lx, ly]) =>
+          ((x - lx) / r) ** 2 + ((y - ly) / (r * 0.92)) ** 2 <= 1);
+        const onBridge = Math.abs(y - cy) <= (BRIDGE - 1) / 2 && x > lobes[0][0] && x < lobes[1][0];
+        land[y * w + x] = onLobe || onBridge ? 1 : 0;
+      }
+    }
+    return land;
+  }
 
   if (shape === 'poly') {
     const cx = (w - 1) / 2, cy = (h - 1) / 2;
@@ -228,6 +241,22 @@ export function buildMap(def) {
   const land = landMask(def, next);
   const isLand = (x, y) => x >= 0 && y >= 0 && x < w && y < h && land[y * w + x] === 1;
 
+  /**
+   * A one-tile-wide neck of land, which the lattice would otherwise wall off completely.
+   *
+   * The even/even pillar rule is fine on open ground and fatal on a causeway: drop a pillar in a
+   * three-wide bridge and it is a two-wide bridge with a plug in it. Anywhere the land is only a
+   * few tiles deep, the pillars are skipped.
+   */
+  const isCauseway = (x, y) => {
+    let depth = 0;
+    for (let d = 1; d <= 3; d++) {
+      if (isLand(x, y - d)) depth++;
+      if (isLand(x, y + d)) depth++;
+    }
+    return depth < 4;
+  };
+
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       let type;
@@ -239,7 +268,7 @@ export function buildMap(def) {
         // The shoreline. A ring of rock one tile thick, so the island has an edge you can take
         // cover behind instead of a blast arm flying off into the sea.
         type = BLOCK.IRON;
-      } else if (x % 2 === 0 && y % 2 === 0) {
+      } else if (x % 2 === 0 && y % 2 === 0 && !isCauseway(x, y)) {
         type = BLOCK.IRON;
       } else {
         const r = next();

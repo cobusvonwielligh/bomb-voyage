@@ -145,7 +145,6 @@ const net = createNet({
         case 'died': {
           const who = world.players[e.i];
           const by = world.players[e.by];
-          const nameOf = i => (i === world.you ? 'you' : world.players[i]?.name ?? '?');
           killFeed(e.i === e.by
             ? `${nameOf(e.i)} blew ${e.i === world.you ? 'yourself' : 'themselves'} up`
             : `${nameOf(e.by)} bombed ${nameOf(e.i)}`,
@@ -154,6 +153,7 @@ const net = createNet({
             sfx.play('ownDeath');
             renderer?.addFlash(0.8, '220,60,48');     // you, specifically, just died
             renderer?.addShake(0.7);
+            showDeadBanner(e.by === e.i ? 'you blew yourself up' : `${nameOf(e.by)} got you`);
           } else if (e.by === world.you) {
             sfx.play('kill');
             renderer?.addFlash(0.22, '255,210,31');    // a gold blink: that one was yours
@@ -187,6 +187,7 @@ const net = createNet({
     ranks.clear();
     for (const r of m.ranks || []) ranks.set(r.i, r);
     allTime = m.top || [];
+    hostSeat = m.host ?? -1;
     if (scoresOpen) renderScores();
   },
   /**
@@ -195,19 +196,28 @@ const net = createNet({
    */
   onStreak: m => {
     const el = $('streak');
-    el.querySelector('.big').textContent = m.kind;
+    // How far up the ladder, from the name the server sent. Everything scales off it: the type
+    // gets bigger, the chord gets wider, the sweep gets longer.
+    const step = m.ace ? 1
+      : m.kind.startsWith('RAMPAGE') ? 0.85
+      : m.kind.startsWith('ULTRA') ? 0.65
+      : m.kind.startsWith('TRIPLE') ? 0.35 : 0;
+    const tier = m.ace ? 'ace' : step >= 0.85 ? 's4' : step >= 0.65 ? 's4' : step >= 0.35 ? 's3' : 's2';
+
+    el.querySelector('.big').textContent = `${m.kind}!!`;
     el.querySelector('.who').textContent = m.i === world.you ? 'you' : m.name;
-    el.classList.toggle('ace', !!m.ace);
-    // Restart the animation even if one is already running — a triple kill arriving on top of a
+    el.className = tier;
+    // Restart the animation even if one is already running — a triple arriving on top of a
     // double has to replace it, not be swallowed by it.
-    el.classList.remove('show');
     void el.offsetWidth;
     el.classList.add('show');
+
+    sfx.play('streak', undefined, undefined, { step });
     if (m.i === world.you) {
-      sfx.play(m.ace ? 'fanfare' : 'kill');
-      renderer?.addFlash(m.ace ? 0.45 : 0.3, m.ace ? '179,107,255' : '255,210,31');
+      renderer?.addFlash(0.22 + step * 0.3, m.ace ? '179,107,255' : '255,210,31');
+      renderer?.addShake(0.2 + step * 0.4);
     }
-    killFeed(`${m.i === world.you ? 'you' : m.name}: ${m.kind}`,
+    killFeed(`${m.i === world.you ? 'you' : m.name}: ${m.kind}!!`,
       { youKilled: m.i === world.you });
   },
   onChat: m => {
@@ -251,6 +261,7 @@ const net = createNet({
   },
 });
 
+const nameOf = i => (i === world.you ? 'you' : world.players[i]?.name ?? '?');
 const chatHasFocus = () => document.activeElement === $('chatInput');
 // Note: no isTyping override. It defaults to typingSomewhere(), which asks whether focus is in
 // ANY text field — passing chatHasFocus here is what made WASD unusable in the name box.
@@ -264,6 +275,7 @@ let acc = 0, last = performance.now(), hudAt = 0, roundOverUntil = 0;
 let lastMask = 0;
 const fuseStage = new Map();     // bomb id -> how urgent it sounded last time
 let warnedAt = -1;
+let tickedAt = -1;
 
 /**
  * Your own bomb, the instant you press the key.
@@ -455,11 +467,15 @@ function drawHud() {
   const mm = String(Math.floor(secs / 60)).padStart(2, '0');
   const ss = String(secs % 60).padStart(2, '0');
 
-  // One minute left, then ten seconds. Nobody watches the clock while being chased.
-  for (const mark of [60, 10]) {
-    if (secs <= mark && warnedAt !== mark && secs > mark - 3) { warnedAt = mark; sfx.play('warn'); }
+  // A minute out, one warning. Then the last fifteen seconds get a tick each, climbing in pitch
+  // and loudness, so the end of a round arrives rather than simply happening.
+  if (secs <= 60 && secs > 57 && warnedAt !== 60) { warnedAt = 60; sfx.play('warn'); }
+  if (secs > 61) warnedAt = -1;             // a new round re-arms it
+  if (secs <= 15 && secs > 0 && secs !== tickedAt) {
+    tickedAt = secs;
+    sfx.play('tick', undefined, undefined, { urgency: (15 - secs) / 14 });
   }
-  if (secs > 61) warnedAt = -1;             // a new round re-arms both
+  if (secs > 15) tickedAt = -1;
 
   $('vClock').textContent = `${mm}:${ss}`;
   $('clock').classList.toggle('low', secs <= 60);
@@ -564,6 +580,15 @@ function renderRoundTable(m) {
   mine?.scrollIntoView({ block: 'nearest' });
 }
 
+/** YOU DIED, across the middle of the board. Separate from the card, which is the controls. */
+function showDeadBanner(by) {
+  const el = $('deadBanner');
+  el.querySelector('.who').textContent = by;
+  el.classList.remove('show');
+  void el.offsetWidth;
+  el.classList.add('show');
+}
+
 function showDead(dead) {
   $('dead').style.display = dead ? 'grid' : 'none';
 }
@@ -620,6 +645,9 @@ function renderLive() {
     pos.textContent = n + 1;
     nm.textContent = p.name;
     nm.style.color = playerColor(p.i);
+    // A crown on whoever can restart the round, change the map or set the speed. It passes down
+    // the moment they leave, so the room is never left without somebody who can run it.
+    li.classList.toggle('host', p.i === hostSeat);
     kd.textContent = `${p.kills}/${p.deaths}`;
     sc.textContent = p.score;
     li.classList.toggle('me', p.i === world.you);
@@ -630,6 +658,7 @@ function renderLive() {
 let scoresOpen = false;
 const ranks = new Map();        // seat -> {lifetime, rank, rankName, nextAt}
 let allTime = [];
+let hostSeat = -1;
 
 function cell(tr, text, colour, dim) {
   const td = document.createElement('td');
@@ -689,7 +718,8 @@ function leave() {
   clearTimeout(idleTimer);
   hiddenSince = 0;
   input.clear();
-  music.playFrom('theme');          // back to the landing page, back to the theme
+  music.exclude('theme', false);    // back on the landing page, so the theme is allowed again
+  music.playFrom('theme');
   $('play').disabled = false;
   $('name').focus();
 }
@@ -702,6 +732,7 @@ let menuAudioTried = false;
 function startMenuAudio() {
   if (menuAudioTried || running) return;
   menuAudioTried = true;
+  music.exclude('theme', false);
   music.start('theme').then(syncAudio);
 }
 for (const ev of ['pointerdown', 'keydown']) {
@@ -723,6 +754,8 @@ function play() {
   sfx.start().then(() => sfx.play('click'));
   // Straight to an ambient bed. The theme has a tune and a backbeat, which is right for reading
   // a menu and wrong for ten minutes of being hunted.
+  // The theme is a landing-page tune; it may not come back round mid-round.
+  music.exclude('theme');
   music.start('drift').then(syncAudio);
   world.onBoom = bomb => {
     // A blast before its own fuse ran out was set off by something else. A bomb we never even

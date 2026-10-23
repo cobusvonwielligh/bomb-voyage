@@ -26,7 +26,7 @@ const MAX_PER_FRAME = { boom: 3, blockdie: 4, blocknew: 2, status: 2, death: 3, 
 const DEFAULT_MAX_PER_FRAME = 4;
 
 // Sounds that are about you, not about a place. Never panned, never attenuated.
-const CLOSE_UP = new Set(['kill', 'ownDeath', 'ownSpawn', 'fanfare', 'click', 'warn']);
+const CLOSE_UP = new Set(['kill', 'ownDeath', 'ownSpawn', 'fanfare', 'click', 'warn', 'tick', 'streak']);
 
 // Sounds whose whole job is to say WHERE. Panned to the full width of the field rather than the
 // gentle third the general rolloff gives, because a cue you have to concentrate to place is not
@@ -350,6 +350,69 @@ export function createSfx({ listener }) {
         o.connect(g);
         o.start(t + at); o.stop(t + at + 0.45);
       }
+    },
+
+    /**
+     * The round clock, in the last fifteen seconds. One tick a second, climbing in pitch and
+     * loudness as it runs out, so the last few feel like the last few without anybody having to
+     * look at the number.
+     */
+    tick(c, out, t, level, { urgency = 0 } = {}) {
+      const g = voiceGain(c, out, t, { a: 0.001, d: 0.05 + urgency * 0.08,
+        peak: (0.06 + 0.22 * urgency * urgency) * level, send: urgency * 0.3 });
+      const o = c.createOscillator();
+      o.type = 'square';
+      o.frequency.value = 660 + 440 * urgency;
+      o.connect(g);
+      o.start(t); o.stop(t + 0.2);
+      // The last three get a body under them, so the end of a round lands rather than stops.
+      if (urgency > 0.8) {
+        const tg = voiceGain(c, out, t, { a: 0.002, d: 0.18, peak: 0.2 * level });
+        const thump = c.createOscillator();
+        thump.type = 'sine';
+        thump.frequency.setValueAtTime(160, t);
+        thump.frequency.exponentialRampToValueAtTime(60, t + 0.16);
+        thump.connect(tg);
+        thump.start(t); thump.stop(t + 0.26);
+      }
+    },
+
+    /**
+     * A kill streak, escalating. `step` is how far up the ladder this one is, 0 for a double and
+     * 1 for an ace: more voices, a wider chord, longer tails. A double should be a flourish and
+     * an ace should stop the room.
+     */
+    streak(c, out, t, level, { step = 0 } = {}) {
+      // Root, fifth, octave, then the third above it: each rung adds a note rather than just
+      // getting louder, which is what makes the escalation audible rather than merely felt.
+      const notes = [72, 79, 84, 88].slice(0, 2 + Math.round(step * 2));
+      for (const [i, n] of notes.entries()) {
+        const at = i * (0.075 - step * 0.02);
+        const d = 0.22 + step * 0.5 + i * 0.04;
+        const g = voiceGain(c, out, t + at, {
+          a: 0.004, d, peak: (0.2 + 0.16 * step) * level, send: 0.3 + 0.3 * step,
+        });
+        for (const [type, detune] of [['square', 0], ['triangle', 7], ['sawtooth', -9]]) {
+          const o = c.createOscillator();
+          o.type = type;
+          o.frequency.value = hz(n);
+          o.detune.value = detune;
+          o.connect(g);
+          o.start(t + at); o.stop(t + at + d + 0.2);
+        }
+      }
+      // A rising sweep underneath, longer and deeper the higher the streak.
+      const sg = voiceGain(c, out, t, { a: 0.01, d: 0.3 + step * 0.4, peak: 0.22 * level, send: 0.4 });
+      const sweep = c.createOscillator();
+      sweep.type = 'sawtooth';
+      sweep.frequency.setValueAtTime(70, t);
+      sweep.frequency.exponentialRampToValueAtTime(260 + 240 * step, t + 0.3 + step * 0.35);
+      const f = c.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.setValueAtTime(600, t);
+      f.frequency.exponentialRampToValueAtTime(3000 + 3000 * step, t + 0.35);
+      sweep.connect(f); f.connect(sg);
+      sweep.start(t); sweep.stop(t + 0.8 + step * 0.5);
     },
 
     /** Your invulnerability is about to run out. Two dry ticks: a warning, not a fanfare. */

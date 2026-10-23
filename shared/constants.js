@@ -18,6 +18,13 @@ export const ROUND_TICKS = 10 * 60 * TICK_HZ; // 18000
 // plus this margin fits exactly — without it an island can sit flush against the panel edge and
 // stop reading as an island.
 export const SEA_MARGIN_TILES = 2;
+
+// The board is never drawn smaller than this, whatever the window. Below about two thirds a
+// 32-pixel tile is 21 pixels and a player is a smudge; past that point a camera that follows you
+// is strictly better than a whole map you cannot read. Maps are sized so this floor is never hit
+// on a normal window — it exists for the laptop somebody opens at 1280x720 with the panel up.
+export const MIN_ZOOM = 0.68;
+export const MAX_ZOOM = 2;
 export const ROUND_INTERMISSION_MS = 20_000;
 
 export const CHUNK_TILES = 8; // renderer chunk size

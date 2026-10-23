@@ -6,7 +6,7 @@
 
 import {
   TILE_PX, CHUNK_TILES, UNITS_PER_TILE, TRACER_SAMPLES, FUSE_TICKS, FIRE_TICKS, STATUS,
-  BLOCK, BLOCK_HP, SEA_MARGIN_TILES, SPAWN_POP_TICKS, SPAWN_POP_SCALE,
+  BLOCK, BLOCK_HP, SEA_MARGIN_TILES, SPAWN_POP_TICKS, SPAWN_POP_SCALE, MIN_ZOOM, MAX_ZOOM,
 } from '/shared/constants.js';
 import { cellType, cellHp } from '/shared/maps.js';
 import {
@@ -74,12 +74,22 @@ export function createRenderer(canvas, world) {
   function recomputeZoom() {
     if (!world.map || !view.w) return;
     const m = SEA_MARGIN_TILES * 2;
+    // Fit the map PLUS its ocean margin, so there is always visible sea on every side and the
+    // island reads as an island rather than as a diagram that ran out of paper.
     const fit = Math.min(view.w / ((world.map.w + m) * TILE_PX),
                          view.h / ((world.map.h + m) * TILE_PX));
+
     // Quantised. An unrounded scale changes by a hair on every layout settle and on every DPR
     // report, and a board that resizes by one part in a thousand reads as jitter. Twentieths are
     // fine enough that nobody sees the step and coarse enough that nothing wobbles.
-    const q = Math.max(0.3, Math.round(fit * 20) / 20);
+    let q = Math.round(fit * 20) / 20;
+
+    // Floored. Below MIN_ZOOM a tile is about twenty pixels and a player is a smudge, so the
+    // board stops shrinking and the camera starts following instead — which frame() already does
+    // whenever the map does not fit. A map you cannot read is worse than a map you cannot see
+    // all of.
+    q = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, q));
+
     // Pixel art upscaled by a non-integer factor gets rows of visibly different widths, so snap
     // to halves going up and smooth on the way down, where the same artefact reads as aliasing.
     const z = q >= 1 ? Math.floor(q * 2) / 2 : q;
@@ -105,6 +115,7 @@ export function createRenderer(canvas, world) {
 
   const invalidateAll = () => {
     chunks = new Map(); shore = null; splashes.length = 0; dropsFor = null;
+    rollCurrent();          // a new island sits in a different sea
   };
   const mapChanged = () => { recomputeZoom(); };
 
@@ -224,8 +235,30 @@ export function createRenderer(canvas, world) {
   }
 
   /** The current at a point. Two crossed waves plus a constant drift. */
-  const flowX = (x, y, t) => Math.sin(y * 0.012 + t * 0.7) * 16 + 7;
-  const flowY = (x, y, t) => Math.cos(x * 0.009 - t * 0.5) * 12 + 3;
+  /**
+   * The current. Two crossed waves plus a prevailing drift, rolled fresh for each map.
+   *
+   * The drift used to run straight down the screen at a fixed speed, which reads as a conveyor
+   * belt rather than as water. The angle and the speed are now drawn from the range a real
+   * surface drift sits in, and the swell is offset thirty degrees from it — wind waves and the
+   * current beneath them are never quite aligned, and that disagreement is most of what makes a
+   * moving surface look wet.
+   */
+  const current = { angle: 0, speed: 0, swell: 0, phase: 0 };
+  function rollCurrent() {
+    current.angle = Math.random() * Math.PI * 2;
+    current.speed = 9 + Math.random() * 13;         // world px/s: a drift, not a river
+    current.swell = current.angle + (Math.PI / 6) * (Math.random() < 0.5 ? -1 : 1);
+    current.phase = Math.random() * 100;
+  }
+  rollCurrent();
+
+  const flowX = (x, y, t) =>
+    Math.sin(y * 0.012 + t * 0.55 + current.phase) * 13 * Math.cos(current.swell)
+      + Math.cos(current.angle) * current.speed;
+  const flowY = (x, y, t) =>
+    Math.cos(x * 0.009 - t * 0.45 + current.phase) * 13 * Math.sin(current.swell)
+      + Math.sin(current.angle) * current.speed;
 
   function drawDrops(vw, vh, ox, oy, dt) {
     if (dropsFor !== world.map) seedDrops();
@@ -270,8 +303,8 @@ export function createRenderer(canvas, world) {
   // Fewer, bigger, slower. Small frequent splashes read as static along the whole coast; a
   // handful of large slow swells read as a sea. Roughly one every two seconds, each living about
   // three times as long as the old ones and spreading to several tiles across.
-  const MAX_SPLASHES = 10;
-  const SPLASH_EVERY_MS = 2000;
+  const MAX_SPLASHES = 4;
+  const SPLASH_EVERY_MS = 8000;
 
   function spawnSplash() {
     const edges = shoreline();
@@ -286,7 +319,7 @@ export function createRenderer(canvas, world) {
       y: (s.ty + 0.5 + dy * 0.7) * TILE_PX,
       life: 1,
       r: 9 + Math.random() * 9,
-      rate: 0.22 + Math.random() * 0.18,       // about four seconds to fade
+      rate: 0.16 + Math.random() * 0.12,       // five to six seconds to fade
     });
   }
 
@@ -335,12 +368,12 @@ export function createRenderer(canvas, world) {
       // A spreading ring rather than a filled blob. Foam is an edge, and an outline stays
       // readable at three times the size where a disc would just be a pale smear on the sea.
       const spread = s.r * (1 + (1 - s.life) * 2.2);
-      ctx.globalAlpha = s.life * s.life * 0.3;      // squared, so it fades out early and gently
+      ctx.globalAlpha = s.life * s.life * 0.16;     // squared, so it fades out early and gently
       ctx.strokeStyle = PALETTE.foam;
       ctx.beginPath();
       ctx.arc(s.x, s.y, spread, 0, 7);
       ctx.stroke();
-      ctx.globalAlpha = s.life * s.life * 0.12;
+      ctx.globalAlpha = s.life * s.life * 0.05;
       ctx.fillStyle = PALETTE.foam;
       ctx.fill();
     }

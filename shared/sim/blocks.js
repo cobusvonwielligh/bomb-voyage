@@ -62,7 +62,8 @@ function wallFill(map) {
  */
 export function regenerate(state) {
   if (state.tick === 0 || state.tick % REGEN_EVERY_TICKS !== 0) return;
-  if (wallFill(state.map) > REGEN_MAX_FILL) return;
+  const fill = wallFill(state.map);
+  if (fill > REGEN_MAX_FILL) return;
 
   const { w, h } = state.map;
   const R = REGEN_CLEAR_RADIUS_TILES;
@@ -79,8 +80,18 @@ export function regenerate(state) {
   for (const f of state.fires) busy.push([f.tx, f.ty]);
   for (const k of state.perks) busy.push([k.tx, k.ty]);
 
+  // How much grows back depends on how bare the map already is.
+  //
+  // A flat three a cycle is wrong at both ends: too slow to give an arena that has been chewed
+  // open for eight minutes any cover back, and too fast on a map that is still mostly walls. So
+  // the rate scales with emptiness — nothing much while there is still cover, and up to three
+  // times the base rate once the place is a field. `fill` is walls over non-iron tiles, so
+  // emptiness is simply its complement.
+  const bare = 1 - fill;
+  const want = Math.max(1, Math.round(REGEN_PER_CYCLE * (0.4 + 2.6 * Math.max(0, bare - 0.45))));
+
   let placed = 0;
-  for (let attempt = 0; attempt < 60 && placed < REGEN_PER_CYCLE; attempt++) {
+  for (let attempt = 0; attempt < want * 25 && placed < want; attempt++) {
     const tx = 1 + randInt(state.next, w - 2);
     const ty = 1 + randInt(state.next, h - 2);
     if (tileAt(state.map, tx, ty) !== BLOCK.FLOOR) continue;
