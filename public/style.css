@@ -853,7 +853,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * the controls, and one too far below looks like it fell off. */
 #propBarrels {
   width: 285px; height: auto;          /* half again the old size */
-  left: -215px; bottom: -40px;         /* clear of the card, off to its left */
+  left: -268px; bottom: -40px;         /* clear of the card, off to its left */
   transform: rotate(-6deg);
   animation: propA 9s ease-in-out infinite;
 }
