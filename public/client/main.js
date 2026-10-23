@@ -71,16 +71,42 @@ $('play').addEventListener('focus', showMenuQuip);
 $('play').addEventListener('pointerleave', hideMenuQuip);
 $('play').addEventListener('blur', hideMenuQuip);
 
+/**
+ * Both volume controls, kept in step with the two audio buses.
+ *
+ * `on` is gold and means playing; `muted` greys the level bar. The level itself rides on a CSS
+ * custom property so the bar under the icon needs no second element and no layout.
+ */
 const syncAudio = () => {
-  $('musicBtn').textContent = music.playing ? '♪ on' : '♪ off';
+  const m = $('musicCtl'), f = $('sfxCtl');
   $('vol').value = Math.round(music.volume * 100);
   $('sfxVol').value = Math.round(sfx.volume * 100);
+  m.style.setProperty('--lvl', music.volume);
+  f.style.setProperty('--lvl', sfx.volume);
+  m.classList.toggle('on', music.playing && music.volume > 0);
+  m.classList.toggle('muted', !music.playing || music.volume === 0);
+  f.classList.toggle('on', sfx.volume > 0);
+  f.classList.toggle('muted', sfx.volume === 0);
+  // The speaker glyph becomes a crossed-out one at zero, because a grey bar alone is easy to
+  // miss when you are wondering why the game went quiet.
+  $('sfxBtn').firstElementChild.firstElementChild
+    .setAttribute('href', sfx.volume === 0 ? '#i-mute' : '#i-spk');
 };
 $('musicBtn').onclick = async () => { await music.toggle(); syncAudio(); };
-$('vol').oninput = e => music.setVolume(e.target.value / 100);
+$('vol').oninput = e => { music.setVolume(e.target.value / 100); syncAudio(); };
+
+// Mute toggles to zero and back to whatever it was, so it is a real toggle rather than a one-way
+// trip that makes you re-find your level by ear.
+let sfxBeforeMute = 0.75;
+$('sfxBtn').onclick = () => {
+  if (sfx.volume > 0) { sfxBeforeMute = sfx.volume; sfx.setVolume(0); }
+  else { sfx.setVolume(sfxBeforeMute || 0.75); sfx.play('click'); }
+  syncAudio();
+};
 $('sfxVol').oninput = e => {
   sfx.setVolume(e.target.value / 100);
   sfx.play('click');                     // so dragging the slider demonstrates what it does
+  syncAudio();
 };
 syncAudio();
 

@@ -281,7 +281,60 @@ button:disabled { opacity: .4; cursor: default; }
 button:disabled:hover { background: transparent; color: var(--gold); }
 
 input[type=range] { width: 64px; accent-color: var(--gold); }
-.vlabel { color: var(--dim); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
+
+/* Volume: one control, not three widgets.
+ *
+ * Music used to be a text button plus a slider, and sfx a label plus a slider — four boxes and
+ * about 200px of a bar that also has to hold a clock, a loadout and a connection state. Here the
+ * icon IS the mute toggle, the level is a bar under the glyph so it is readable while collapsed,
+ * and the slider unrolls only when you are actually reaching for it.
+ *
+ * focus-within as well as hover, so it is reachable by keyboard: tabbing to the slider opens the
+ * control, and it cannot close while the thing you are dragging is inside it. */
+.vol {
+  display: flex; align-items: center;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  transition: background .14s, border-color .14s;
+}
+.vol:hover, .vol:focus-within { background: #ffffff10; border-color: #ffffff22; }
+
+.volBtn {
+  display: grid; place-items: center;
+  width: 34px; height: 34px; padding: 0;
+  position: relative;
+  background: none; border: none; border-radius: 8px;
+  color: var(--dim);
+  transition: color .12s;
+}
+.volBtn svg { width: 18px; height: 18px; display: block; }
+.vol:hover .volBtn, .volBtn:focus-visible { color: var(--ink); }
+.vol.on .volBtn { color: var(--gold); }
+
+/* The level, as a rule under the glyph. --lvl is set from JS, 0 to 1. Collapsed, this is the
+   only thing telling you where the volume is, so it stays visible at all times. */
+.volBtn::after {
+  content: '';
+  position: absolute; left: 7px; right: 7px; bottom: 5px; height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg,
+    currentColor 0, currentColor calc(var(--lvl, .5) * 100%),
+    #ffffff1f calc(var(--lvl, .5) * 100%), #ffffff1f 100%);
+}
+.vol.muted .volBtn::after { background: #ffffff1f; }
+
+/* Width, not display: an element that is display:none cannot animate, and a slider that pops
+   into existence makes the whole bar jump sideways. */
+.vol input[type=range] {
+  width: 0; opacity: 0; margin: 0;
+  transition: width .16s ease, opacity .16s ease, margin .16s ease;
+}
+.vol:hover input[type=range], .vol:focus-within input[type=range] {
+  width: 72px; opacity: 1; margin: 0 9px 0 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vol input[type=range] { transition: none; }
+}
 
 /* Icon-only in the top bar — the GitHub mark needs no label, and the bar is crowded. Sized to a
  * comfortable click target rather than to the glyph. */

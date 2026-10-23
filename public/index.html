@@ -28,6 +28,18 @@
       <path fill="currentColor" d="M2 12h12l1-7-3.5 2.5L8 3 4.5 7.5 1 5z"/>
       <rect x="2" y="13" width="12" height="2" fill="currentColor"/>
     </symbol>
+    <symbol id="i-note" viewBox="0 0 16 16">
+      <path fill="currentColor" d="M13 2v8.2a2.6 2.6 0 10-1.6 2.4V5.6L7 6.8v5.6a2.6 2.6 0 11-1.6-2.4V4.4z"/>
+    </symbol>
+    <symbol id="i-spk" viewBox="0 0 16 16">
+      <path fill="currentColor" d="M7 2L3.6 5H1.4v6h2.2L7 14z"/>
+      <path d="M9.6 5.4a3.6 3.6 0 010 5.2M11.8 3.4a6.6 6.6 0 010 9.2" stroke="currentColor"
+            stroke-width="1.4" fill="none" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-mute" viewBox="0 0 16 16">
+      <path fill="currentColor" d="M7 2L3.6 5H1.4v6h2.2L7 14z"/>
+      <path d="M10 6l4 4M14 6l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </symbol>
     <symbol id="i-gh" viewBox="0 0 16 16">
       <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
         0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01
@@ -69,10 +81,21 @@
 
     <span class="right">
       <span id="conn" data-state="connecting">connecting</span>
-      <button id="musicBtn">&#9834; off</button>
-      <input id="vol" type="range" min="0" max="100" value="10" title="music volume">
-      <span class="vlabel">sfx</span>
-      <input id="sfxVol" type="range" min="0" max="100" value="75" title="sound effect volume">
+      <!-- Icon and level in one control: the icon is the mute toggle, the slider unrolls out of
+           it on hover or focus, and the level stays readable as a bar under the glyph while it is
+           collapsed. Four separate widgets used to take 200px of a bar that has a clock in it. -->
+      <span class="vol" id="musicCtl">
+        <button class="volBtn" id="musicBtn" title="music (click to toggle)" aria-label="music">
+          <svg><use href="#i-note"/></svg>
+        </button>
+        <input id="vol" type="range" min="0" max="100" value="10" aria-label="music volume">
+      </span>
+      <span class="vol" id="sfxCtl">
+        <button class="volBtn" id="sfxBtn" title="sound effects (click to mute)" aria-label="sound effects">
+          <svg><use href="#i-spk"/></svg>
+        </button>
+        <input id="sfxVol" type="range" min="0" max="100" value="75" aria-label="sound effect volume">
+      </span>
       <a class="iconBtn" href="https://github.com/cobusvonwielligh/bomb-voyage"
          target="_blank" rel="noopener noreferrer"
          title="Bomb Voyage on GitHub" aria-label="Bomb Voyage on GitHub">
