@@ -46,7 +46,7 @@ html, body {
  * bars and the whole island is on screen at once.
  */
 
-:root { --bar: 44px; --side: 340px; --gap: 10px; }
+:root { --bar: 52px; --side: 340px; --gap: 10px; }
 
 /* Explicit width and height, not `auto` with four insets.
  *
@@ -146,37 +146,64 @@ canvas#game {
 
 #rank { color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: .14em; }
 
-.stat { display: flex; align-items: baseline; gap: 5px; }
+/* Nothing in the top bar may move when a number changes.
+ *
+ * Two separate causes, both fixed here. Proportional digits are the obvious one — "1" is
+ * narrower than "8", so a ticking clock shuffles everything to its right. Tabular figures solve
+ * that for the monospace values. The other is the values that change LENGTH: ping goes 9ms ->
+ * 115ms, alive goes 9 -> 16, the map name changes entirely. No figure setting helps there, so
+ * each value reserves its own width and the bar simply cannot reflow.
+ *
+ * `inline-block` matters too: the bump animation scales these, and a scaled inline box
+ * contributes its unscaled size to layout only if it is a block. */
+.stat { display: flex; align-items: baseline; gap: 6px; }
 .stat .k { color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: .14em; }
-.stat .v { font-family: var(--nums); font-variant-numeric: tabular-nums; font-size: 13px; }
+.stat .v {
+  font-family: var(--nums); font-variant-numeric: tabular-nums; font-size: 13px;
+  display: inline-block; text-align: left;
+}
+#vPing { min-width: 5.2ch; }
+#vOnline { min-width: 2.2ch; }
+#vMap { min-width: 9ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* The round clock. The single most-glanced-at number on screen, so it is the biggest one. */
 #clock { display: flex; align-items: baseline; gap: 6px; }
 #clock .v {
-  font-family: var(--display); font-size: 26px; line-height: 1;
-  color: var(--ink); letter-spacing: .04em;
+  /* Monospace, not the display face: Shotling has no tabular figures, so 07:05 and 08:88 are
+     different widths and the whole bar jumps once a second. The clock is a number you read, not
+     a title, and it is the one place where legibility beats character. */
+  font-family: var(--nums); font-weight: 700;
+  font-size: 24px; line-height: 1;
+  color: var(--ink); letter-spacing: .02em;
   font-variant-numeric: tabular-nums;
+  display: inline-block; min-width: 5.2ch; text-align: left;
 }
 #clock .k { color: var(--dim); font-size: 9px; text-transform: uppercase; letter-spacing: .16em; }
 #clock.low .v { color: var(--bad); animation: tick 1s steps(2) infinite; }
 @keyframes tick { 50% { opacity: .55; } }
 
+#conn {
+  display: inline-block; min-width: 4.5em; text-align: right;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 #conn[data-state=open] { color: var(--good); }
 #conn[data-state=reconnecting], #conn[data-state=connecting] { color: var(--gold); }
 
 /* loadout */
-#gear { display: flex; gap: 12px; align-items: center; }
+#gear { display: flex; gap: 14px; align-items: center; }
 .pip {
-  display: flex; align-items: center; gap: 5px;
-  font-family: var(--nums); font-variant-numeric: tabular-nums; font-size: 13px;
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--nums); font-variant-numeric: tabular-nums; font-size: 14px;
 }
-.pip svg { width: 13px; height: 13px; display: block; }
-.pip .cap { color: var(--dim); font-size: 10px; }
+/* 1.5x. These are the only pictures in the bar and they were losing to the text beside them. */
+.pip svg { width: 20px; height: 20px; display: block; }
+.pip .n { display: inline-block; min-width: 1.2ch; text-align: right; }
+.pip .cap { color: var(--dim); font-size: 11px; }
 .pip.max .n { color: var(--gold); }
-#shields { display: flex; gap: 3px; }
+#shields { display: flex; gap: 4px; min-width: 11px; }
 #shields i {
-  width: 7px; height: 7px; border-radius: 50%; background: var(--good);
-  box-shadow: 0 0 6px #5ad1a0aa;
+  width: 10px; height: 10px; border-radius: 50%; background: var(--good);
+  box-shadow: 0 0 8px #5ad1a0aa;
 }
 
 /* The flash a value does when it changes. Colour plus a little scale: motion catches the eye in
@@ -214,14 +241,14 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * comfortable click target rather than to the glyph. */
 .iconBtn {
   display: grid; place-items: center;
-  width: 26px; height: 26px; border-radius: 6px;
+  width: 34px; height: 34px; border-radius: 8px;
   color: var(--dim); text-decoration: none;
   border: 1px solid transparent;
   transition: color .12s, border-color .12s, background .12s;
 }
 .iconBtn:hover { color: var(--ink); border-color: #ffffff2e; background: #ffffff12; }
 .iconBtn.bug:hover { color: var(--bad); border-color: #e8655a55; background: #e8655a18; }
-.iconBtn svg { width: 15px; height: 15px; display: block; }
+.iconBtn svg { width: 22px; height: 22px; display: block; }
 
 /* ─── side panel ──────────────────────────────────────────────────────────────
  * Who you are, who is winning, and the chat — in the space the board does not need. Everything
