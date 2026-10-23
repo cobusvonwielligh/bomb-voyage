@@ -487,10 +487,10 @@ export function createRenderer(canvas, world) {
       const k = rocks[(Math.random() * rocks.length) | 0];
       const a = Math.random() * Math.PI * 2;
       splashes.push({
-        x: k.x + Math.cos(a) * k.r * 1.1,
-        y: k.y + Math.sin(a) * k.r * 1.1,
+        x: k.x + Math.cos(a) * k.r * 0.95,
+        y: k.y + Math.sin(a) * k.r * 0.8,
         life: 1,
-        r: 6 + Math.random() * 6,
+        r: 8 + Math.random() * 8,
         rate: 0.18 + Math.random() * 0.14,
       });
       return;
@@ -581,25 +581,54 @@ export function createRenderer(canvas, world) {
    * shoreline foam spawns off them, so the water acknowledges they are there. A static rock in a
    * moving current is the one thing that would make the sea look fake.
    */
-  const SEA_ROCKS = 2;
+  /* Boulders out in the water: two or three, rolled fresh every time a map loads.
+   *
+   * Random rather than derived from the map, because they are weather rather than terrain —
+   * nothing in the game interacts with them, so a different arrangement each round is free
+   * variety. They are placed outside the island's bounding box and allowed to sit half off the
+   * edge of the board: a rock that is politely fully visible looks placed, one that runs off the
+   * edge looks like the island carried on under the water.
+   *
+   * Not just paint. The flow field is deflected round them (see rockFlow) and a share of the
+   * foam breaks on them, so the water acknowledges they are there. A static rock in a moving
+   * current is the one thing that would make the sea look fake.
+   *
+   * COLOUR IS THE WHOLE PROBLEM with these. At the shoreline palette they read as pieces of
+   * island that have come adrift and pull the eye straight off the board. They are drawn in a
+   * much darker, sea-tinted version of the same stone and at reduced opacity, so they sit at
+   * about the brightness of the deep water around them: you see shapes, not objects.
+   */
+  const SEA_ROCK_MIN = 2, SEA_ROCK_MAX = 3;
   let rocksFor = null, seaRocks = [];
+
   function waterRocks() {
     if (rocksFor === world.map) return seaRocks;
     rocksFor = world.map;
     const [lx, ly, lw, lh] = landBounds();
     const cx = (lx + lw / 2) * TILE_PX, cy = (ly + lh / 2) * TILE_PX;
-    // Hash the map's own numbers for the angles, so the pair differs between maps and never
-    // moves within one.
-    const seed = world.map.w * 2654435761 + world.map.h * 40503;
+
+    const n = SEA_ROCK_MIN + ((Math.random() * (SEA_ROCK_MAX - SEA_ROCK_MIN + 1)) | 0);
+    // Spread the bearings over the circle rather than rolling each independently: three
+    // independent angles land on top of each other far more often than feels random.
+    const base = Math.random() * Math.PI * 2;
     seaRocks = [];
-    for (let i = 0; i < SEA_ROCKS; i++) {
-      const a = ((seed >>> (i * 7)) % 360) * (Math.PI / 180);
-      const out = 0.52 + ((seed >>> (i * 5 + 3)) % 23) / 100;     // 0.52-0.75 of the half-span
+    for (let i = 0; i < n; i++) {
+      const a = base + (i / n) * Math.PI * 2 + (Math.random() - 0.5) * 0.9;
+      const out = 0.56 + Math.random() * 0.26;
+      const r = TILE_PX * (2.1 + Math.random() * 1.9);       // two to four tiles across
       seaRocks.push({
-        x: cx + Math.cos(a) * (lw * TILE_PX * out + 2.2 * TILE_PX),
-        y: cy + Math.sin(a) * (lh * TILE_PX * out + 2.2 * TILE_PX),
-        r: TILE_PX * (0.8 + ((seed >>> (i * 3 + 1)) % 9) / 14),
-        seed: seed + i * 977,
+        x: cx + Math.cos(a) * (lw * TILE_PX * 0.5 * out + r * 1.3),
+        y: cy + Math.sin(a) * (lh * TILE_PX * 0.5 * out + r * 1.3),
+        r,
+        // The lumps that make up this particular rock, rolled once so it does not boil.
+        lumps: Array.from({ length: 4 }, () => ({
+          dx: (Math.random() - 0.5) * r * 0.9,
+          dy: (Math.random() - 0.5) * r * 0.7,
+          r: r * (0.42 + Math.random() * 0.46),
+          squash: 0.72 + Math.random() * 0.3,
+          turn: Math.random() * Math.PI,
+        })),
+        phase: Math.random() * Math.PI * 2,
       });
     }
     return seaRocks;
@@ -610,35 +639,40 @@ export function createRenderer(canvas, world) {
       const x = ox + k.x, y = oy + k.y;
       ctx.save();
 
-      // The water piling up on the upstream side, drawn first so the rock sits in it.
-      ctx.globalAlpha = 0.18 + 0.05 * Math.sin(seaT * 1.3 + k.seed);
+      // The water piling up around it. Wide and faint — a bright collar is what made these look
+      // like islands rather than like something barely breaking the surface.
+      ctx.globalAlpha = 0.09 + 0.03 * Math.sin(seaT * 1.1 + k.phase);
       ctx.strokeStyle = PALETTE.foam;
-      ctx.lineWidth = 2.5;
-      ctx.beginPath(); ctx.ellipse(x, y, k.r * 1.9, k.r * 1.45, 0, 0, 7); ctx.stroke();
-      ctx.globalAlpha = 0.09;
-      ctx.lineWidth = 5;
-      ctx.beginPath(); ctx.ellipse(x, y, k.r * 2.6, k.r * 2, 0, 0, 7); ctx.stroke();
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.ellipse(x, y, k.r * 1.25, k.r * 1.05, 0, 0, 7); ctx.stroke();
+      ctx.globalAlpha = 0.05;
+      ctx.lineWidth = 9;
+      ctx.beginPath(); ctx.ellipse(x, y, k.r * 1.6, k.r * 1.35, 0, 0, 7); ctx.stroke();
 
-      // Three overlapping lumps, same brown-grey as the shoreline rock so the island and its
-      // outliers are obviously the same stone.
-      ctx.globalAlpha = 1;
-      const lump = (dx, dy, rr, fill) => {
-        ctx.beginPath();
-        ctx.ellipse(x + dx, y + dy, rr, rr * 0.84, 0, 0, 7);
+      // The mass itself. Every tone is mixed well down toward the deep sea, so the rock is a
+      // shape you notice rather than an object that announces itself.
+      const lump = (l, grow, fill, alpha) => {
+        ctx.globalAlpha = alpha;
         ctx.fillStyle = fill;
+        ctx.beginPath();
+        ctx.ellipse(x + l.dx, y + l.dy, l.r * grow, l.r * l.squash * grow, l.turn, 0, 7);
         ctx.fill();
       };
-      lump(2, 3, k.r * 1.05, '#000');                 // its own shadow in the water
-      lump(0, 0, k.r, PALETTE.rock);
-      lump(-k.r * 0.3, -k.r * 0.3, k.r * 0.62, PALETTE.rockLit);
-      lump(-k.r * 0.42, -k.r * 0.45, k.r * 0.3, PALETTE.rockTop);
-      lump(k.r * 0.45, k.r * 0.4, k.r * 0.4, PALETTE.rockDark);
+      for (const l of k.lumps) lump(l, 1.06, '#071320', 0.55);        // wet shadow underneath
+      for (const l of k.lumps) lump(l, 1, '#2b3038', 0.92);           // the stone
+      for (const l of k.lumps) lump({ ...l, dx: l.dx - l.r * 0.22, dy: l.dy - l.r * 0.24 },
+        0.6, '#3c424c', 0.8);                                         // the lit shoulder
+      for (const l of k.lumps) lump({ ...l, dx: l.dx - l.r * 0.3, dy: l.dy - l.r * 0.34 },
+        0.26, '#4b515c', 0.55);                                       // the dry cap
 
-      // A wet collar where it enters the water.
-      ctx.globalAlpha = 0.5;
+      // A wet line where it goes into the water, which is what sells "half submerged".
+      ctx.globalAlpha = 0.3;
       ctx.strokeStyle = PALETTE.seaLight;
       ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.ellipse(x, y + k.r * 0.2, k.r * 0.95, k.r * 0.72, 0, 0, 7); ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(x, y + k.r * 0.16, k.r * 0.86, k.r * 0.6, 0, 0, 7);
+      ctx.stroke();
+
       ctx.restore();
       ctx.globalAlpha = 1;
     }
