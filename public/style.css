@@ -268,34 +268,32 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   box-shadow: 0 6px 28px #0009;
 }
 
-#card { border-bottom: 1px solid #ffffff14; padding-bottom: 11px; position: relative; }
+#card { border-bottom: 1px solid #ffffff14; padding-bottom: 11px; padding-right: 76px; }
 
-/* The mascot's face, top right, ringed by the same moving gradient as everything else. It is the
- * only picture in the panel and it is what makes the card read as "you" rather than as a label. */
+/* The mascot's face, in the very top right corner, over everything.
+ *
+ * `object-fit: contain` and no crop: the art IS the head already, so cropping it further takes
+ * the bandana off. No disc and no ring either — the alpha is the shape, and a plate behind it
+ * would turn a character into a sticker. The z-index puts it above the bar and the panel it
+ * overlaps; the menu is higher still, so it does not float over the landing page.
+ */
 #avatar {
-  position: absolute; top: -2px; right: 0;
-  width: 52px; height: 52px; border-radius: 50%;
-  object-fit: cover; object-position: 50% 32%;      /* crop to the head, not the boots */
-  background: #0d1117;
-  padding: 2px;
-  box-shadow: 0 0 0 2px transparent, 0 4px 12px #0008;
-  border: 2px solid transparent;
-  background-image:
-    linear-gradient(#0d1117, #0d1117),
-    conic-gradient(from var(--spin) at 100% 100%,
-      #c7b057, #ce8c6e, #c4837e, #b490da, #7badd3, #78b39b, #c7b057);
-  background-origin: border-box;
-  background-clip: content-box, border-box;
-  animation: spin 7s linear infinite;
+  position: fixed; top: 2px; right: 6px;
+  width: 92px; height: 92px;
+  object-fit: contain;
+  z-index: 9;
+  pointer-events: none;
+  filter: drop-shadow(0 6px 14px #000c) drop-shadow(0 0 18px #ffd21f44);
+  animation: bob 6s ease-in-out infinite;
 }
+@media (max-width: 1080px) { #avatar { display: none; } }
 #who {
   font-family: var(--display); font-size: 17px; color: var(--gold);
   text-shadow: 0 2px 0 #0008; letter-spacing: .06em; display: block;
-  padding-right: 62px;                 /* clear of the avatar */
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 #rank {
-  display: block; color: var(--dim); font-size: 10px; padding-right: 62px;
+  display: block; color: var(--dim); font-size: 10px;
   text-transform: uppercase; letter-spacing: .2em; margin-top: 3px;
 }
 #cardStats {
