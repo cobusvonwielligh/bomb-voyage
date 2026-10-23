@@ -167,17 +167,17 @@ test('tired has hysteresis, so the speed cannot flip every tick', () => {
     `tired flipped twice only ${closest} ticks apart; the latch is not holding`);
 });
 
-test('being tired halves your pace, and lungs raise the ceiling', () => {
+test('being tired halves your pace, and stim raises the ceiling', () => {
   const fresh = createPlayer(0, 'p0');
   const tired = createPlayer(1, 'p1');
   tired.tired = true;
   assert.ok(speedOf(tired) < speedOf(fresh), 'exhaustion did not slow anybody down');
 
-  const lunged = createPlayer(2, 'p2');
-  assert.equal(staminaMaxFor(lunged), STAMINA_MAX);
-  lunged.staminaLevel = MAX_STAMINA_LEVELS;
-  assert.ok(staminaMaxFor(lunged) > STAMINA_MAX, 'lungs did nothing');
+  const stimmed = createPlayer(2, 'p2');
+  assert.equal(staminaMaxFor(stimmed), STAMINA_MAX);
+  stimmed.staminaLevel = MAX_STAMINA_LEVELS;
+  assert.ok(staminaMaxFor(stimmed) > STAMINA_MAX, 'stim did nothing');
   // And the cap holds however many are collected.
-  lunged.staminaLevel = MAX_STAMINA_LEVELS + 5;
-  assert.equal(staminaMaxFor(lunged), staminaMaxFor({ staminaLevel: MAX_STAMINA_LEVELS }));
+  stimmed.staminaLevel = MAX_STAMINA_LEVELS + 5;
+  assert.equal(staminaMaxFor(stimmed), staminaMaxFor({ staminaLevel: MAX_STAMINA_LEVELS }));
 });

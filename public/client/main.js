@@ -31,13 +31,14 @@ const $ = id => document.getElementById(id);
  * The passive upgrades that get a floating badge when you collect one.
  *
  * Only the ones that change you permanently. A bomb or a fire pickup is a number going up and
- * the pip covers it; boots, shields and lungs change how you move and how much you can take, and
+ * the pip covers it; boots, shields and stim change how you move and how much you can take,
+ * and
  * those are worth a beat of celebration.
  */
 const UPGRADES = {
   3:  { icon: '#i-boot',   text: 'boots',  colour: '#5fd8f0', of: () => MAX_SKATES },
   4:  { icon: '#i-shield', text: 'shield', colour: '#5ad1a0', of: () => MAX_SHIELDS },
-  15: { icon: '#i-bolt',   text: 'lungs',  colour: '#ffe04a', of: () => MAX_STAMINA_LEVELS },
+  15: { icon: '#i-bolt',   text: 'stim',   colour: '#ffe04a', of: () => MAX_STAMINA_LEVELS },
 };
 
 const PERK_LABEL = {
@@ -46,7 +47,7 @@ const PERK_LABEL = {
   3: { text: '+1 SPEED', colour: '#5fd8f0' },
   4: { text: 'SHIELD', colour: '#5ad1a0' },
   5: { text: 'GIFT', colour: '#ff8fd8' },
-  15: { text: '+ LUNGS', colour: '#ffe04a' },
+  15: { text: '+ STIM', colour: '#ffe04a' },
 };
 
 // The mascot is an image now, ringed by the same moving gradient as the panels. The hand-drawn
@@ -527,7 +528,7 @@ function setValue(el, text, { worse = false, calm = false } = {}) {
  *
  * `base` is what you start the round with, so a pip lights only once you have picked something
  * up: every player has one bomb from the first tick, and a bar that is lit from the start tells
- * you nothing. Speed, shields and lungs all start at zero, so for those the default is right.
+ * you nothing. Speed, shields and stim all start at zero, so for those the default is right.
  */
 /**
  * Float a badge for a passive upgrade, then throw it away.
@@ -669,7 +670,7 @@ function drawHud() {
   gearPip('pFire', me.radius, MAX_RADIUS, START_RADIUS);
   gearPip('pSpeed', me.speed, MAX_SKATES);
   gearPip('pShield', me.shields, MAX_SHIELDS);
-  gearPip('pLungs', me.staminaLevel ?? 0, MAX_STAMINA_LEVELS);
+  gearPip('pStim', me.staminaLevel ?? 0, MAX_STAMINA_LEVELS);
 
   // drawRespawn first: it is what stamps diedAtTick, and showDead reads it to hold the dialog
   // back. The other order shows the dialog a frame early on the tick you die.

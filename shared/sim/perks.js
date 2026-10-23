@@ -79,7 +79,7 @@ function apply(state, p, type) {
     case PERK.FIRE:   if (p.radius < MAX_RADIUS) { p.radius++; return true; } return false;
     case PERK.SKATE:  if (p.speed  < MAX_SKATES) { p.speed++;  return true; } return false;
     case PERK.SHIELD: if (p.shields < MAX_SHIELDS) { p.shields++; return true; } return false;
-    // A bigger pair of lungs. Tops you up as well as raising the ceiling, because a perk that
+    // A Stim. Tops you up as well as raising the ceiling, because a perk that
     // only pays off the next time you stop running does not feel like a pickup.
     case PERK.STAMINA:
       if ((p.staminaLevel ?? 0) >= MAX_STAMINA_LEVELS) return false;

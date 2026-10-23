@@ -591,7 +591,7 @@ const PERK_SKIN = {
   3: { dark: '#123f4e', mid: '#1b6076', rim: '#5fd8f0' },   // skate  — ice
   4: { dark: '#15402f', mid: '#1d6347', rim: '#5ad1a0' },   // shield — green
   5: { dark: '#4a1d42', mid: '#752d69', rim: '#ff8fd8' },   // gift   — magenta
-  15: { dark: '#4a4212', mid: '#75671d', rim: '#ffe04a' },  // lungs  — yellow
+  15: { dark: '#4a4212', mid: '#75671d', rim: '#ffe04a' },  // stim   — yellow
 };
 
 export const PERK_ART = {
