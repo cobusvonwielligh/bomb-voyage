@@ -1,0 +1,136 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Bomb Voyage — art preview</title>
+<!--
+  Slice: ART. Open with `npm start` → http://localhost:8080/art-preview.html
+  No game required. Iterate on public/assets/art.js and refresh.
+  See docs/ART-AUDIO.md §8.
+-->
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 24px 32px; background: #0d1117; color: #e8eef7;
+         font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  h1 { color: #ffd21f; font-size: 15px; letter-spacing: .12em; text-transform: uppercase; margin: 0 0 4px; }
+  h2 { color: #ffd21f; font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
+       margin: 28px 0 10px; border-bottom: 1px solid #ffd21f40; padding-bottom: 6px; }
+  p  { color: #8b97a8; margin: 0 0 18px; }
+  canvas { image-rendering: pixelated; vertical-align: top; }
+  .row { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+  .cell { text-align: center; color: #8b97a8; font-size: 10px; }
+  .cell canvas { display: block; margin-bottom: 4px; background: #0d1117; }
+  label { color: #8b97a8; margin-right: 16px; }
+  input[type=range] { vertical-align: middle; width: 160px; }
+</style>
+
+<h1>Bomb Voyage — art preview</h1>
+<p>Everything is drawn from shapes in <code>assets/art.js</code>. No image files exist.
+   Edit, save, refresh.</p>
+
+<label>damage <input id="dmg" type="range" min="0" max="100" value="0"></label>
+<label>scale
+  <select id="scale"><option>1</option><option selected>2</option><option>4</option></select>
+</label>
+<label><input id="floorbg" type="checkbox" checked> floor background</label>
+
+<h2>Blocks</h2><div class="row" id="blocks"></div>
+<h2>Players — all 16 colours, facing down</h2><div class="row" id="players"></div>
+<h2>One player, 4 directions × 2 frames</h2><div class="row" id="dirs"></div>
+<h2>Bombs — fuse phase</h2><div class="row" id="bombs"></div>
+<h2>Fire</h2><div class="row" id="fire"></div>
+<h2>Perks</h2><div class="row" id="perks"></div>
+
+<h2>Readability check — 16 tracers</h2>
+<p>If you cannot follow one player by their trail alone, the tracer needs work. It is how a
+   crowded screen stays legible (docs/ART-AUDIO.md §3).</p>
+<canvas id="tracer" width="760" height="260"></canvas>
+
+<script type="module">
+import { BLOCK, TILE_PX, TRACER_SAMPLES } from '/shared/constants.js';
+import { drawTile, drawPlayer, drawBomb, drawFire, drawPerk, playerShades, PALETTE }
+  from './assets/art.js';
+
+const $ = id => document.getElementById(id);
+const BLOCK_NAMES = Object.fromEntries(Object.entries(BLOCK).map(([k, v]) => [v, k.toLowerCase()]));
+const PERK_NAMES = { 1: 'bomb', 2: 'fire', 3: 'skate', 4: 'shield', 5: 'gift', 9: 'reserved' };
+
+function cell(parent, label, paint) {
+  const scale = +$('scale').value;
+  const wrap = document.createElement('div');
+  wrap.className = 'cell';
+  const c = document.createElement('canvas');
+  c.width = c.height = TILE_PX * scale;
+  c.style.width = c.style.height = TILE_PX * scale + 'px';
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.scale(scale, scale);
+  if ($('floorbg').checked) drawTile(ctx, BLOCK.FLOOR, 1, 1, 0);
+  paint(ctx);
+  wrap.append(c, document.createTextNode(label));
+  parent.append(wrap);
+  return ctx;
+}
+
+function render() {
+  const dmg = +$('dmg').value / 100;
+  for (const id of ['blocks', 'players', 'dirs', 'bombs', 'fire', 'perks']) $(id).textContent = '';
+
+  for (const t of Object.values(BLOCK))
+    cell($('blocks'), BLOCK_NAMES[t], c => drawTile(c, t, 3, 5, dmg));
+
+  for (let i = 0; i < 16; i++)
+    cell($('players'), i, c => drawPlayer(c, { dir: 3, frame: 0, colorIndex: i }));
+
+  for (let dir = 0; dir < 4; dir++)
+    for (let frame = 0; frame < 2; frame++)
+      cell($('dirs'), `${'RULD'[dir]}${frame}`, c => drawPlayer(c, { dir, frame, colorIndex: 4 }));
+
+  for (let p = 0; p < 8; p++)
+    cell($('bombs'), (p / 8).toFixed(2), c => drawBomb(c, { phase: p / 8, colorIndex: 4 }));
+
+  for (const kind of ['core', 'arm', 'tip'])
+    for (const rot of [0, 1])
+      cell($('fire'), `${kind} ${rot}`, c => drawFire(c, { kind, rot, age: 0 }));
+  cell($('fire'), 'core fading', c => drawFire(c, { kind: 'core', age: 0.8 }));
+
+  for (const t of [1, 2, 3, 4, 5, 9])
+    cell($('perks'), PERK_NAMES[t], c => drawPerk(c, { type: t }));
+}
+
+for (const id of ['dmg', 'scale', 'floorbg']) $(id).addEventListener('input', render);
+render();
+
+// ── tracer readability ───────────────────────────────────────────────────────
+const tc = $('tracer').getContext('2d');
+const dots = Array.from({ length: 16 }, (_, i) => ({
+  i, x: 60 + (i % 8) * 85, y: 70 + ((i / 8) | 0) * 110,
+  a: i * 0.9, trail: [],
+}));
+let t = 0;
+(function loop() {
+  t++;
+  tc.fillStyle = PALETTE.floor;
+  tc.fillRect(0, 0, 760, 260);
+  for (const d of dots) {
+    d.a += 0.04 + d.i * 0.002;
+    d.x += Math.cos(d.a) * 2.2;
+    d.y += Math.sin(d.a * 1.3) * 1.8;
+    d.x = (d.x + 760) % 760; d.y = (d.y + 260) % 260;
+    if (t % 3 === 0) {                               // TRACER_EVERY_TICKS
+      d.trail.push([d.x, d.y]);
+      if (d.trail.length > TRACER_SAMPLES) d.trail.shift();
+    }
+    const k = playerShades(d.i);
+    d.trail.forEach(([x, y], n) => {
+      const f = (n + 1) / d.trail.length;
+      tc.globalAlpha = 0.1 + f * 0.3;
+      tc.beginPath(); tc.arc(x, y, 2 + f * 3, 0, 7);
+      tc.fillStyle = k.base; tc.fill();
+    });
+    tc.globalAlpha = 1;
+    tc.beginPath(); tc.arc(d.x, d.y, 6, 0, 7);
+    tc.fillStyle = k.base; tc.fill();
+    tc.lineWidth = 2; tc.strokeStyle = PALETTE.outline; tc.stroke();
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
