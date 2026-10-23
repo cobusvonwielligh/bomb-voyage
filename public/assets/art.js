@@ -59,8 +59,11 @@ export const playerShades = i => {
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-const rr = (c, x, y, w, h, r, fill) => {
-  c.beginPath(); c.roundRect(x, y, w, h, r); c.fillStyle = fill; c.fill();
+/** Rounded rect. `fill` may be null to stroke only; `stroke` is optional and drawn on top. */
+const rr = (c, x, y, w, h, r, fill, stroke) => {
+  c.beginPath(); c.roundRect(x, y, w, h, r);
+  if (fill) { c.fillStyle = fill; c.fill(); }
+  if (stroke) { c.strokeStyle = stroke; c.lineWidth = 1; c.stroke(); }
 };
 const px = (c, x, y, w, h, fill) => { c.fillStyle = fill; c.fillRect(x, y, w, h); };
 /** Deterministic 0..1 from integers — terrain variation must not use Math.random(). */
@@ -365,22 +368,105 @@ export function drawFire(c, { kind = 'core', rot = 0, age = 0 }) {
   c.restore();
 }
 
+/**
+ * The pickups.
+ *
+ * Readability first. These are 32px squares seen at the edge of your vision while something is
+ * chasing you, so each one has to be identifiable from THREE things at once, any of which might
+ * be the one that survives the zoom level you happen to be at:
+ *
+ *   1. hue       — the plinth is tinted, so the colour alone is the answer at a distance
+ *   2. silhouette— round, flame, wedge, shield, box: all different outlines
+ *   3. detail    — only readable up close, and never the thing you depend on
+ *
+ * The old icons were all the same slate-grey plinth, which meant only the detail distinguished
+ * them, and the detail is exactly what disappears first.
+ */
+const PERK_SKIN = {
+  1: { dark: '#2b3550', mid: '#3f4e74', rim: '#7e93d6' },   // bomb   — steel blue
+  2: { dark: '#5a2416', mid: '#8c3a1f', rim: '#ff9b4a' },   // fire   — ember
+  3: { dark: '#123f4e', mid: '#1b6076', rim: '#5fd8f0' },   // skate  — ice
+  4: { dark: '#15402f', mid: '#1d6347', rim: '#5ad1a0' },   // shield — green
+  5: { dark: '#4a1d42', mid: '#752d69', rim: '#ff8fd8' },   // gift   — magenta
+};
+
 export const PERK_ART = {
-  1: (c, k) => { c.beginPath(); c.arc(16, 17, 7, 0, 7); c.fillStyle = '#1b2029'; c.fill(); px(c, 15, 7, 2, 4, '#6b7585'); },
-  2: (c, k) => { c.beginPath(); c.moveTo(16, 7); c.quadraticCurveTo(25, 17, 16, 25); c.quadraticCurveTo(7, 17, 16, 7); c.fillStyle = PALETTE.fireMid; c.fill(); },
-  3: (c, k) => { rr(c, 8, 12, 16, 6, 2, '#5b7fd4'); c.fillStyle = '#1b2029'; [11, 16, 21].forEach(x => { c.beginPath(); c.arc(x, 21, 2.5, 0, 7); c.fill(); }); },
-  4: (c, k) => { c.beginPath(); c.moveTo(16, 7); c.lineTo(25, 11); c.lineTo(25, 18); c.quadraticCurveTo(16, 26, 7, 18); c.lineTo(7, 11); c.closePath(); c.fillStyle = '#5ad1a0'; c.fill(); },
-  5: (c, k) => { rr(c, 8, 12, 16, 13, 2, '#d45b8f'); px(c, 14, 12, 4, 13, PALETTE.gold); px(c, 8, 16, 16, 3, PALETTE.gold); },
+  // A bomb: black sphere, bright specular, lit fuse.
+  1: c => {
+    c.beginPath(); c.arc(16, 18, 7.5, 0, 7); c.fillStyle = '#12161d'; c.fill();
+    c.beginPath(); c.arc(13.4, 15.4, 2.6, 0, 7); c.fillStyle = 'rgba(255,255,255,0.4)'; c.fill();
+    c.strokeStyle = '#8e9bb5'; c.lineWidth = 1.8; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(18, 11.5); c.quadraticCurveTo(22, 7, 20, 5); c.stroke();
+    c.beginPath(); c.arc(20, 4.6, 2.1, 0, 7); c.fillStyle = PALETTE.fireCore; c.fill();
+  },
+  // Fire: a teardrop flame with a hot inner core, so it reads as fire and not as a leaf.
+  2: c => {
+    c.beginPath();
+    c.moveTo(16, 4);
+    c.bezierCurveTo(25, 13, 24, 20, 16, 27);
+    c.bezierCurveTo(8, 20, 7, 13, 16, 4);
+    c.fillStyle = PALETTE.fireMid; c.fill();
+    c.beginPath();
+    c.moveTo(16, 11);
+    c.bezierCurveTo(20.5, 16, 20, 20, 16, 24);
+    c.bezierCurveTo(12, 20, 11.5, 16, 16, 11);
+    c.fillStyle = PALETTE.fireCore; c.fill();
+  },
+  // Skate: a boot in profile with a wing, which is the one shape nobody confuses with a bomb.
+  3: c => {
+    c.fillStyle = '#e8eef7';
+    c.beginPath();
+    c.moveTo(11, 7); c.lineTo(17, 7); c.lineTo(17, 17); c.lineTo(23, 20);
+    c.lineTo(23, 24); c.lineTo(11, 24); c.closePath();
+    c.fill();
+    px(c, 11, 21, 12, 3, '#9fb0c8');                     // sole
+    c.strokeStyle = '#5fd8f0'; c.lineWidth = 1.6; c.lineCap = 'round';
+    for (const [y, len] of [[10, 7], [13, 5], [16, 3]]) {   // speed lines behind the heel
+      c.beginPath(); c.moveTo(10, y); c.lineTo(10 - len, y); c.stroke();
+    }
+  },
+  // Shield: a heater shield with a boss, rather than the old flat pentagon.
+  4: c => {
+    c.beginPath();
+    c.moveTo(16, 5); c.lineTo(25, 9); c.lineTo(25, 17);
+    c.quadraticCurveTo(16, 27, 7, 17); c.lineTo(7, 9); c.closePath();
+    c.fillStyle = '#5ad1a0'; c.fill();
+    c.strokeStyle = '#0f3326'; c.lineWidth = 1.4; c.stroke();
+    px(c, 15, 8, 2, 14, 'rgba(255,255,255,0.45)');        // centre rib
+    c.beginPath(); c.arc(16, 15, 2.6, 0, 7); c.fillStyle = '#0f3326'; c.fill();
+  },
+  // Gift: a wrapped box with a ribbon and a bow — a parcel, not a flag.
+  5: c => {
+    rr(c, 7, 12, 18, 13, 2, '#e05fa8');
+    rr(c, 6, 9, 20, 4, 2, '#ff8fd8');
+    px(c, 14.5, 9, 3, 16, '#ffe9a8');                     // ribbon down the front
+    px(c, 6, 10, 20, 2, '#ffe9a8');                       // and across the lid
+    c.fillStyle = '#ffe9a8';
+    c.beginPath(); c.ellipse(13, 7.5, 3, 2.4, 0, 0, 7); c.fill();
+    c.beginPath(); c.ellipse(19, 7.5, 3, 2.4, 0, 0, 7); c.fill();
+  },
 };
 
 /** Perk icon on its tile plinth. Unknown/reserved types draw a question mark. */
 export function drawPerk(c, { type = 1, bob = 0 }) {
   const S = TILE_PX;
+  const k = PERK_SKIN[type] || { dark: '#1a2029', mid: '#2a3444', rim: '#6b7585' };
   c.save(); c.translate(0, -bob);
-  rr(c, 4, 6, S - 8, S - 10, 5, '#1a2029');
-  rr(c, 5, 7, S - 10, S - 12, 4, '#2a3444');
-  px(c, 5, 7, S - 10, 2, 'rgba(255,255,255,0.15)');
-  (PERK_ART[type] || ((cc) => {
+
+  // A soft glow in the perk's own colour, so the tile is findable before the icon is readable.
+  c.globalAlpha = 0.25;
+  c.beginPath(); c.arc(S / 2, S / 2, S * 0.46, 0, 7); c.fillStyle = k.rim; c.fill();
+  c.globalAlpha = 1;
+
+  rr(c, 3, 5, S - 6, S - 8, 6, k.dark);
+  rr(c, 4, 6, S - 8, S - 10, 5, k.mid);
+  // One bright edge along the top and one dark one along the bottom: the cheapest way to make a
+  // flat rectangle read as a solid object rather than as a sticker.
+  px(c, 4, 6, S - 8, 2, 'rgba(255,255,255,0.22)');
+  px(c, 4, S - 6, S - 8, 2, 'rgba(0,0,0,0.3)');
+  rr(c, 3, 5, S - 6, S - 8, 6, null, k.rim);
+
+  (PERK_ART[type] || (cc => {
     cc.fillStyle = PALETTE.gold; cc.font = 'bold 16px monospace';
     cc.textAlign = 'center'; cc.fillText('?', 16, 22);
   }))(c);

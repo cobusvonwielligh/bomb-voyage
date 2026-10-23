@@ -6,7 +6,7 @@
 
 import {
   TICK_MS, TICK_HZ, NAME_MAX_CHARS, UNITS_PER_TILE, IN_BOMB, playerColor,
-  MAX_BOMBS_CARRIED, MAX_RADIUS, MAX_SKATES, IDLE_DISCONNECT_MS, RESPAWN_DELAY_TICKS,
+  MAX_BOMBS_CARRIED, MAX_RADIUS, MAX_SKATES, IDLE_DISCONNECT_MS, RESPAWN_DELAY_TICKS, TILE_PX,
 } from '/shared/constants.js';
 import { createNet } from './net.js';
 import { createInput, typingSomewhere } from './input.js';
@@ -17,6 +17,21 @@ import { createSfx } from './audio/sfx.js';
 import { createQuips, MENU_QUIPS } from './quips.js';
 
 const $ = id => document.getElementById(id);
+
+/**
+ * What floats up off you when you pick something up, in the perk's own colour so the label and
+ * the icon you just walked over are obviously the same thing.
+ *
+ * Short and loud. This is read in peripheral vision in under a second, so "+1 BOMB" beats
+ * "extra bomb capacity" by a distance.
+ */
+const PERK_LABEL = {
+  1: { text: '+1 BOMB', colour: '#7e93d6' },
+  2: { text: '+1 FIRE', colour: '#ff9b4a' },
+  3: { text: '+1 SPEED', colour: '#5fd8f0' },
+  4: { text: 'SHIELD', colour: '#5ad1a0' },
+  5: { text: 'GIFT', colour: '#ff8fd8' },
+};
 
 // The mascot is an image now, ringed by the same moving gradient as the panels. The hand-drawn
 // canvas it replaced ran a requestAnimationFrame loop the whole time the menu was open, which
@@ -169,7 +184,18 @@ const net = createNet({
 
         case 'perkget': {
           const p = world.players[e.i];
-          if (p) sfx.playAtUnits('pickup', p.rx ?? p.x, p.ry ?? p.y, { perk: perkTypes.get(e.id) });
+          if (!p) break;
+          const type = perkTypes.get(e.id);
+          sfx.playAtUnits('pickup', p.rx ?? p.x, p.ry ?? p.y, { perk: type });
+          // Say what it was. Four of the five perks are a number going up somewhere in the top
+          // bar, which is the last place you are looking while somebody is chasing you.
+          const label = PERK_LABEL[type];
+          if (label) {
+            renderer?.addFloater(
+              ((p.rx ?? p.x) / UNITS_PER_TILE) * TILE_PX,
+              ((p.ry ?? p.y) / UNITS_PER_TILE) * TILE_PX - TILE_PX * 0.5,
+              label.text, label.colour);
+          }
           break;
         }
 

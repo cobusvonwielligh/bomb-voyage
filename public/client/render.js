@@ -30,6 +30,7 @@ export function createRenderer(canvas, world) {
   // Everything about the drawing surface, measured on resize and never from the frame loop.
   const view = { dpr: 1, w: 0, h: 0, zoom: 1, smooth: false };
   const splashes = [];         // shoreline foam, capped — see spawnSplash
+  const floaters = [];         // "+1 BOMB" rising off a player — see addFloater
   let seaT = 0;
 
   function ensureBaked() {
@@ -526,6 +527,8 @@ export function createRenderer(canvas, world) {
     for (const p of alive) drawTracer(ctx, p, ox, oy);
     for (const p of alive) drawOne(ctx, p, ox, oy, p.i === world.you);
 
+    drawFloaters(ox, oy, dtMs);
+
     if (flash > 0.004) {
       ctx.fillStyle = `rgba(${flashColour},${flash * 0.5})`;
       ctx.fillRect(-4, -4, vw + 8, vh + 8);
@@ -665,9 +668,50 @@ export function createRenderer(canvas, world) {
     c.fillText(p.name, px + TILE_PX / 2, py - 3);
   }
 
+  /**
+   * Rising pickup labels. Drawn last of the world layer so nothing can cover them, in map
+   * space, so they travel with the camera.
+   */
+  function drawFloaters(ox, oy, dtMs) {
+    if (!floaters.length) return;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 11px ui-monospace, monospace';
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    for (let i = floaters.length - 1; i >= 0; i--) {
+      const f = floaters[i];
+      f.life -= dtMs / 1100;
+      if (f.life <= 0) { floaters.splice(i, 1); continue; }
+      // Rises fast and then slows: the motion is what catches the eye, the hang is what makes
+      // it readable. 1 - life^2 eases out, so most of the travel is in the first third.
+      const rise = 26 * (1 - f.life * f.life);
+      // Only fades over the last 40%, or it is translucent before you have noticed it.
+      ctx.globalAlpha = Math.min(1, f.life / 0.4);
+      const x = ox + f.x, y = oy + f.y - rise;
+      ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      ctx.strokeText(f.text, x, y);
+      ctx.fillStyle = f.colour;
+      ctx.fillText(f.text, x, y);
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
   resize();
   return {
     frame, resize, invalidateAll, invalidateTile, mapChanged,
+    /**
+     * A line of text that floats up off a player and fades.
+     *
+     * Position is captured ONCE, at the moment it is added, rather than following the player.
+     * Text stuck to a moving sprite is unreadable — it is the one thing on screen that has to
+     * hold still long enough to be read, and the pickup it describes already happened here.
+     */
+    addFloater(x, y, text, colour = PALETTE.gold) {
+      floaters.push({ x, y, text, colour, life: 1 });
+      if (floaters.length > 24) floaters.shift();
+    },
     /** @param amount 0..1. Clamped and saturating: ten bombs at once must not throw the camera off. */
     addShake(amount) { shake = Math.min(1, shake + Math.max(0, amount)); },
     addFlash(amount, colour = '255,255,255') { flash = Math.min(1, flash + amount); flashColour = colour; },

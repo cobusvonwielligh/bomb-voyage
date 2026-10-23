@@ -14,6 +14,10 @@ import {
   HITBOX_UNITS, TICK_HZ, PERK_EXPIRE_TICKS, PERK_FADE_TICKS,
 } from '../shared/constants.js';
 import { MAPS } from '../shared/maps.js';
+import { PERK_WEIGHTS } from '../shared/constants.js';
+import { readFileSync } from 'node:fs';
+
+const read = rel => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8');
 
 const fresh = () => createState(MAPS[0], 99);
 
@@ -101,4 +105,28 @@ test('the wire carries `until`, which is what the fade is drawn from', () => {
   assert.ok(Number.isFinite(k.until), 'a dropped perk has no expiry');
   assert.equal(k.until, s.tick + PERK_EXPIRE_TICKS);
   assert.ok(PERK_FADE_TICKS < PERK_EXPIRE_TICKS, 'a perk would be fading from the moment it lands');
+});
+
+test('every perk that can drop has its own colour, silhouette and floating label', () => {
+  // Three independent channels, because each one fails at a different distance: hue survives
+  // the zoom floor, the silhouette survives a dark tile, the detail only works up close. If two
+  // perks ever shared a skin they would be indistinguishable in exactly the situation that
+  // matters — glancing at the floor mid-chase.
+  // art.js is read as text, not imported: it uses the browser's /shared/... absolute specifier,
+  // which Node cannot resolve.
+  const art = read('public/assets/art.js');
+  const main = read('public/client/main.js');
+  const droppable = Object.entries(PERK_WEIGHTS).filter(([, w]) => w > 0).map(([t]) => +t);
+  assert.ok(droppable.length >= 5);
+
+  const skins = new Set();
+  for (const t of droppable) {
+    assert.match(art, new RegExp(`\\n  ${t}: c =>`), `perk ${t} has no icon`);
+    assert.match(art, new RegExp(`\\n  ${t}: \\{ dark:`), `perk ${t} has no plinth skin`);
+    const label = main.match(new RegExp(t + ": \\{ text: '([^']+)', colour: '([^']+)' \\}"));
+    assert.ok(label, `perk ${t} has no floating label in main.js`);
+    assert.ok(label[1].length <= 9, `"${label[1]}" is too long to read in passing`);
+    skins.add(label[2]);
+  }
+  assert.equal(skins.size, droppable.length, 'two perks share a colour');
 });
