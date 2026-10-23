@@ -15,23 +15,28 @@
 
 :root {
   color-scheme: dark;
-  /* The accent. A light tint of the mascot's bandana, sampled off `mascot.png` (#b81020) and
-   * lifted to lightness 77% so it is readable as small text on a dark panel.
+  /* The accent: the mascot's bandana.
+   *
+   * Sampled off `mascot.png` — the dominant cloth pixel is #b81020, hsl(354 84% 39%). The one
+   * used here keeps the hue and the saturation and lifts only the lightness, to hsl(356 85% 62%),
+   * because #b81020 against `--panel` is 2.4:1 and a clock nobody can read is not a clock. Hue
+   * and saturation are what the eye matches on; lightness is what legibility needs. So this is
+   * the bandana, turned up.
+   *
+   * `--gold-deep` is very nearly the sampled colour itself, which means the bottom of every
+   * filled button genuinely is the bandana.
    *
    * It has been gold and it has been baby blue. Gold fought the fire, blue sat in the same
-   * family as the sea and read as scenery. The bandana is the one warm red already on screen
-   * that nothing in the world competes with: fire is orange, blood is not a thing here, and
-   * the mascot is the brand. Named `--gold` throughout for historical reasons.
+   * family as the sea and read as scenery. Named `--gold` throughout for historical reasons.
+   * Treasure gold still exists for actual treasure: the pirate's tooth, the keg hoops.
    *
-   * Treasure gold still exists for actual treasure: the pirate's tooth, the keg hoops. It is
-   * just not the interface any more.
-   *
-   * It is deliberately far lighter and pinker than `--bad` (#e8655a), which is darker, more
-   * orange and only ever appears on a filled button or an error line. */
-  --gold: #ff8a97;
-  --gold-lit: #ffc2ca;      /* the top of a filled button */
-  --gold-deep: #cb4659;     /* the bottom of one */
-  --gold-shadow: #7a1e2d;   /* and the hard shadow under it */
+   * CAREFUL: this is within 1.2:1 of `--bad`. Anything that needs to read as an alarm NEXT to
+   * the accent cannot do it with hue — see `#clock.low` and `#conn`, which both use brightness
+   * or a different hue entirely for exactly that reason. */
+  --gold: #f04a56;
+  --gold-lit: #ff8793;      /* the top of a filled button */
+  --gold-deep: #b01f2c;     /* the bottom of one */
+  --gold-shadow: #6e1119;   /* and the hard shadow under it */
   --on-gold: #2e0710;       /* text that sits on a filled accent */
   --panel: #1a2029;
   --ink: #e8eef7;
@@ -152,7 +157,7 @@ canvas#game {
  * place to land. Safari below 16.4 is the realistic case. */
 @supports not (background: conic-gradient(from 0deg, red, blue)) {
   .edge {
-    border-color: #ff8a9766;
+    border-color: #f04a5666;
     background: var(--weave) padding-box,
       linear-gradient(var(--panel-fill, #11161ee6), var(--panel-fill, #11161ee6)) padding-box;
   }
@@ -294,14 +299,14 @@ body.observing #who { color: var(--dim); }
 /* Carrying at least one. The glow is the part that reads without being looked at; the number is
    there for when you do look. */
 .pip.on { color: var(--gold); }
-.pip.on svg { filter: drop-shadow(0 0 6px #ff8a9788); }
+.pip.on svg { filter: drop-shadow(0 0 6px #f04a5688); }
 .pip:not(.on) { opacity: .5; }
 
 /* The flash a value does when it changes. Colour plus a little scale: motion catches the eye in
  * peripheral vision in a way a colour change alone does not. */
 @keyframes bump {
-  0%   { transform: scale(1);    color: var(--gold); text-shadow: 0 0 10px #ff8a97; }
-  35%  { transform: scale(1.45); color: #fff;        text-shadow: 0 0 16px #ff8a97; }
+  0%   { transform: scale(1);    color: var(--gold); text-shadow: 0 0 10px #f04a56; }
+  35%  { transform: scale(1.45); color: #fff;        text-shadow: 0 0 16px #f04a56; }
   100% { transform: scale(1);    color: inherit;     text-shadow: none; }
 }
 .bump { display: inline-block; animation: bump .45s cubic-bezier(.2,1.4,.4,1); }
@@ -349,7 +354,7 @@ body.observing #who { color: var(--dim); }
 
 button {
   font: inherit; font-size: 12px; color: var(--gold); background: transparent;
-  border: 1px solid #ff8a9777; border-radius: 5px; padding: 5px 12px; cursor: pointer;
+  border: 1px solid #f04a5677; border-radius: 5px; padding: 5px 12px; cursor: pointer;
   letter-spacing: .1em; text-transform: uppercase;
   transition: background .12s, color .12s;
 }
@@ -461,7 +466,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
      the leave button and the volume sliders underneath it. */
   z-index: 9;
   pointer-events: none;
-  filter: drop-shadow(0 6px 14px #000c) drop-shadow(0 0 18px #ff8a9744);
+  filter: drop-shadow(0 6px 14px #000c) drop-shadow(0 0 18px #f04a5644);
   animation: bob 6s ease-in-out infinite;
 }
 @media (max-width: 1080px) { #avatar { display: none; } }
@@ -479,7 +484,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   padding: 9px 14px;
   border-radius: 12px;
   background: #11161ef2;
-  border: 1.5px solid #ff8a9766;
+  border: 1.5px solid #f04a5666;
   box-shadow: 0 10px 28px #000b;
   color: var(--ink); font-size: 14px; line-height: 1.35;
   text-wrap: balance;
@@ -496,7 +501,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   position: absolute; right: -7px; top: 50%;
   width: 12px; height: 12px;
   background: #11161ef2;
-  border-right: 1.5px solid #ff8a9766; border-top: 1.5px solid #ff8a9766;
+  border-right: 1.5px solid #f04a5666; border-top: 1.5px solid #f04a5666;
   transform: translateY(-50%) rotate(45deg);
 }
 #say.show { visibility: visible; animation: sayIn .9s cubic-bezier(.2, 1.5, .4, 1) forwards; }
@@ -713,8 +718,8 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 
 /* Anything that is about you, picked out of a log that never stops scrolling. */
 #chatList li.feed { color: var(--dim); }
-#chatList li.mine { background: #ff8a9712; box-shadow: inset 2px 0 0 var(--gold); padding-left: 6px; }
-#chatList li.mention { background: #ff8a970d; }
+#chatList li.mine { background: #f04a5612; box-shadow: inset 2px 0 0 var(--gold); padding-left: 6px; }
+#chatList li.mention { background: #f04a560d; }
 #chatList li.feed.kill {
   color: var(--gold); font-weight: 600;
   box-shadow: inset 2px 0 0 var(--gold); padding-left: 6px;
@@ -759,7 +764,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 #streak.show { animation: streakIn 1.9s ease-out forwards; }
 #streak .big, #deadBanner .big {
   display: block; font-size: 52px; color: var(--gold);
-  text-shadow: 0 0 28px #ff8a97, 0 5px 0 #0009;
+  text-shadow: 0 0 28px #f04a56, 0 5px 0 #0009;
 }
 #streak .who, #deadBanner .who {
   display: block; font-size: 16px; color: var(--ink); margin-top: 8px; opacity: .85;
@@ -767,7 +772,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 }
 /* Each rung is bigger and hotter than the last, so the escalation is visible as well as audible. */
 #streak.s2 .big { font-size: 52px; }
-#streak.s3 .big { font-size: 64px; color: #ffe98a; text-shadow: 0 0 34px #ff8a97, 0 6px 0 #0009; }
+#streak.s3 .big { font-size: 64px; color: #ffe98a; text-shadow: 0 0 34px #f04a56, 0 6px 0 #0009; }
 #streak.s4 .big { font-size: 76px; color: #fff; text-shadow: 0 0 40px #ff9a3d, 0 0 80px #e8655a; }
 #streak.ace .big {
   font-size: 88px; color: #fff;
@@ -800,7 +805,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 
 #toast {
   position: fixed; top: 54px; left: 50%; transform: translateX(-50%); z-index: 20;
-  background: #1a2029ee; border: 1px solid #ff8a9766; border-radius: 6px;
+  background: #1a2029ee; border: 1px solid #f04a5666; border-radius: 6px;
   padding: 7px 16px; color: var(--gold); opacity: 0; transition: opacity .25s;
   pointer-events: none; font-size: 12px; letter-spacing: .08em;
 }
@@ -880,13 +885,13 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   color: var(--on-gold);
   background: linear-gradient(180deg, var(--gold-lit), var(--gold) 55%, var(--gold-deep));
   border: none; border-radius: 10px;
-  box-shadow: 0 4px 0 var(--gold-shadow), 0 10px 26px #ff8a9733;
+  box-shadow: 0 4px 0 var(--gold-shadow), 0 10px 26px #f04a5633;
   text-shadow: 0 1px 0 #fff6;
   transition: filter .12s, box-shadow .12s, opacity .12s;
 }
 #respawn:hover:not(:disabled) {
   filter: brightness(1.08);
-  box-shadow: 0 4px 0 var(--gold-shadow), 0 12px 34px #ff8a9755;
+  box-shadow: 0 4px 0 var(--gold-shadow), 0 12px 34px #f04a5655;
 }
 /* Counting down: dimmed and flat, so it reads as "not yet" rather than as "broken". */
 #respawn:disabled {
@@ -908,7 +913,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 #roundTable th {
   color: var(--dim); font-weight: normal; text-align: left; font-size: 9.5px;
   text-transform: uppercase; letter-spacing: .16em;
-  padding-bottom: 6px; border-bottom: 1px solid #ff8a9733;
+  padding-bottom: 6px; border-bottom: 1px solid #f04a5633;
 }
 #roundTable td { padding: 4px 10px 4px 0; white-space: nowrap; }
 #roundTable td.dimcell { color: var(--dim); }
@@ -918,7 +923,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 /* Your row. Gold rule down the left and a lift off the background — on a sixteen-row table the
    only question anyone is asking is "where am I". */
 #roundTable tr.me {
-  background: #ff8a9714; font-weight: 700;
+  background: #f04a5614; font-weight: 700;
   box-shadow: inset 3px 0 0 var(--gold);
 }
 #roundTable tr.me td:first-child { padding-left: 8px; }
@@ -933,14 +938,14 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 #scores table { width: 100%; border-collapse: collapse; font-size: 13px; }
 #scores th {
   color: var(--dim); font-weight: normal; text-align: left; padding-bottom: 7px;
-  border-bottom: 1px solid #ff8a9733; font-size: 10px;
+  border-bottom: 1px solid #f04a5633; font-size: 10px;
   text-transform: uppercase; letter-spacing: .14em;
 }
 #scores td { padding: 4px 12px 4px 0; white-space: nowrap; }
 #scores td.dimcell { color: var(--dim); }
 #scores td.num { font-family: var(--nums); font-variant-numeric: tabular-nums; }
 #scores .sub { margin: 14px 0 0; text-align: center; }
-#allTime { display: none; margin-top: 18px; padding-top: 14px; border-top: 1px solid #ff8a9733; }
+#allTime { display: none; margin-top: 18px; padding-top: 14px; border-top: 1px solid #f04a5633; }
 #allTime h2 {
   margin: 0 0 8px; font-size: 11px; font-weight: normal; color: var(--gold);
   letter-spacing: .2em; text-transform: uppercase; font-family: var(--display);
@@ -1011,7 +1016,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   content: '';
   position: absolute; inset: 0;
   background: conic-gradient(from var(--spin) at 100% 100%,
-    #ff8a97, #ff9a5c, #ff7a9a, #b78bff, #5cc6ff, #5ce0b0, #ff8a97);
+    #f04a56, #ff9a5c, #ff7a9a, #b78bff, #5cc6ff, #5ce0b0, #f04a56);
   -webkit-mask-image: url('/assets/bomb-barrels.png');
   mask-image: url('/assets/bomb-barrels.png');
   -webkit-mask-size: contain; mask-size: contain;
@@ -1058,7 +1063,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   content: '';
   position: absolute; inset: 0;
   background: conic-gradient(from var(--spin) at 100% 100%,
-    #ff8a97, #ff9a5c, #ff7a9a, #b78bff, #5cc6ff, #5ce0b0, #ff8a97);
+    #f04a56, #ff9a5c, #ff7a9a, #b78bff, #5cc6ff, #5ce0b0, #f04a56);
   -webkit-mask-image: url('/assets/mascot.png');
   mask-image: url('/assets/mascot.png');
   -webkit-mask-size: contain; mask-size: contain;
@@ -1123,7 +1128,7 @@ h1 {
   color: var(--gold); line-height: 1; letter-spacing: .05em;
   text-transform: uppercase;
   margin: 0 0 10px;
-  text-shadow: var(--rim), 0 4px 0 #0009, 0 0 34px #ff8a9755;
+  text-shadow: var(--rim), 0 4px 0 #0009, 0 0 34px #f04a5655;
 }
 
 /* The title on the landing page: one line, never wrapped, and always flowing.
@@ -1142,7 +1147,7 @@ h1 {
   margin-inline: auto;
   white-space: nowrap;
   background: conic-gradient(from var(--spin) at 100% 100%,
-    #ff8a97, #ffb45c, #ff9a7a, #c79bf0, #7fc6ff, #6fe0b8, #ff8a97);
+    #f04a56, #ffb45c, #ff9a7a, #c79bf0, #7fc6ff, #6fe0b8, #f04a56);
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; color: transparent;
   text-shadow: none;
@@ -1159,7 +1164,7 @@ h1 {
     drop-shadow(0 1.5px 0 #000) drop-shadow(0 -1.5px 0 #000)
     drop-shadow(0 0 10px #000c)
     drop-shadow(0 4px 0 #000a)
-    drop-shadow(0 0 26px #ff8a9744);
+    drop-shadow(0 0 26px #f04a5644);
 }
 
 .sub { color: var(--dim); margin: 0 0 24px; font-size: 14.5px; letter-spacing: .04em; }
@@ -1180,7 +1185,7 @@ input[type=text] {
 input[type=text]::placeholder { color: #5c6a7d; }
 input[type=text]:focus {
   outline: none; border-color: var(--gold);
-  box-shadow: 0 0 0 3px #ff8a971f;
+  box-shadow: 0 0 0 3px #f04a561f;
 }
 
 /* PLAY is the only thing on this page anyone needs to find, so it is the only filled control. */
@@ -1193,11 +1198,11 @@ input[type=text]:focus {
   text-shadow: 0 1px 0 #fff6, 0 0 2px #0006, 0 2px 5px #0004;
   background: linear-gradient(180deg, var(--gold-lit), var(--gold) 55%, var(--gold-deep));
   border: none; border-radius: 10px;
-  box-shadow: 0 4px 0 var(--gold-shadow), 0 10px 26px #ff8a9733;
+  box-shadow: 0 4px 0 var(--gold-shadow), 0 10px 26px #f04a5633;
   transition: transform .08s, box-shadow .12s, filter .12s;
 }
-#play:hover { filter: brightness(1.08); box-shadow: 0 4px 0 var(--gold-shadow), 0 12px 34px #ff8a9755; }
-#play:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--gold-shadow), 0 5px 16px #ff8a9733; }
+#play:hover { filter: brightness(1.08); box-shadow: 0 4px 0 var(--gold-shadow), 0 12px 34px #f04a5655; }
+#play:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--gold-shadow), 0 5px 16px #f04a5633; }
 #play:disabled { filter: grayscale(.7) brightness(.8); box-shadow: none; transform: none; }
 
 label { margin-bottom: 9px; }
@@ -1245,7 +1250,7 @@ label { margin-bottom: 9px; }
 .keys .or { color: #5c6a7d; font-size: 11px; margin: 0 2px; }
 .keys code {
   font-family: var(--nums); font-size: 12.5px; color: var(--gold);
-  background: #ff8a9714; padding: 1px 5px; border-radius: 4px;
+  background: #f04a5614; padding: 1px 5px; border-radius: 4px;
 }
 
 kbd {

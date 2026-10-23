@@ -19,9 +19,10 @@ export const PALETTE = {
   iron: '#262c38', column: '#59627a', shrub: '#3f6b46',
   outline: '#161b24',
   fireCore: '#fff4c2', fireMid: '#ff9b3d', fireEdge: '#e63f27',
-  // The interface accent, matching --gold in style.css. A light tint of the mascot's bandana,
-  // so the HUD is the same red as the character. Actual treasure keeps its own yellow below.
-  gold: '#ff8a97', treasure: '#ffd21f', text: '#e8eef7',
+  // The interface accent, matching --gold in style.css: the mascot's bandana (#b81020) at its
+  // own hue and saturation, lifted in lightness until it is readable on a dark panel. The HUD
+  // is the same red as the character. Actual treasure keeps its own yellow below.
+  gold: '#f04a56', treasure: '#ffd21f', text: '#e8eef7',
   // The pirate. Taken off the mascot so the sprites and the artwork are the same character: red
   // bandana, cream sash, dark boots. Every one of these is a neutral against all sixteen player
   // hues, which is what lets the costume stay constant while the coat carries the identity.
