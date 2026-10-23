@@ -41,12 +41,17 @@ no payments, no persistent world, no mobile, no matchmaking, no anti-cheat.
 ## Run it locally
 
 ```bash
-npm install          # one dependency: ws
-npm start            # http://localhost:8080
-npm test             # node --test, no framework
+npm install                        # one dependency: ws
+cp config.example.ini config.ini   # optional — defaults work without it
+npm start                          # http://localhost:8080
+npm test                           # node --test, no framework
 ```
 
-Open two tabs. No database, no Docker, no env file.
+Open two tabs. No database, no Docker.
+
+**`config.ini` is gitignored** and holds every setting and secret; `config.example.ini` is the
+committed template. Environment variables override it, so `LAG=200 npm start` works without
+editing anything. Full table: [docs/DEPLOY.md](docs/DEPLOY.md) §5.
 
 **Develop with the lag shim on.** This is the single highest-value habit on the project:
 
@@ -59,14 +64,18 @@ everything else. See [docs/NETCODE.md](docs/NETCODE.md) §7.
 
 ## Deploy
 
+**Push to `main`.** GitHub Actions runs the tests, then pokes `POST /deploy` on the server,
+which pulls from git and restarts itself. Deployment is pull-based so GitHub never holds an SSH
+key and port 22 stays locked to one IP. [docs/DEPLOY.md](docs/DEPLOY.md) §6.
+
+For iterating on uncommitted work, push your working tree straight up:
+
 ```bash
-HOST=16.28.138.34.sslip.io npm run deploy
+npm run deploy      # reads [deploy] from config.ini
 ```
 
-Runs the tests, rsyncs, installs, restarts, and polls `/healthz` until it answers — a few
-seconds. On failure it prints the last 40 journal lines. Do it between rounds.
-
-First-time server setup and everything operational: [docs/DEPLOY.md](docs/DEPLOY.md).
+First-time server setup, the domain switch, and operations:
+[docs/DEPLOY.md](docs/DEPLOY.md).
 
 ---
 

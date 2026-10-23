@@ -1,0 +1,72 @@
+name: ci
+
+# Tests on every push and PR. Deploy only from main, and only after the tests pass.
+#
+# Deployment is pull-based: this workflow pokes POST /deploy on the server, and the server
+# updates itself from git. GitHub never holds an SSH key, and port 22 stays locked to one IP.
+# See docs/DEPLOY.md §5.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Never let two deploys overlap. Queue the newer one and cancel nothing — a half-applied
+# deploy is worse than a slow one.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger self-update
+        env:
+          DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DEPLOY_URL:-}" ]; then
+            echo "DEPLOY_URL secret is not set — skipping deploy."
+            echo "Set DEPLOY_URL and DEPLOY_TOKEN in Settings > Secrets and variables > Actions."
+            exit 0
+          fi
+          code=$(curl -sS -o body.txt -w '%{http_code}' --max-time 20 \
+                   -X POST "$DEPLOY_URL" -H "X-Deploy-Token: $DEPLOY_TOKEN")
+          echo "response $code: $(cat body.txt)"
+          # 404 is what an unauthenticated caller gets on purpose, so it means a bad token here.
+          [ "$code" = "202" ] || { echo "::error::deploy was not accepted ($code)"; exit 1; }
+
+      - name: Wait for the new commit to be live
+        env:
+          DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
+        run: |
+          set -uo pipefail
+          [ -n "${DEPLOY_URL:-}" ] || exit 0
+          want=$(echo "${{ github.sha }}" | cut -c1-7)
+          host="${DEPLOY_URL%/deploy}"
+          echo "waiting for version $want at $host/healthz"
+          for i in $(seq 1 40); do
+            body=$(curl -sfk --max-time 5 "$host/healthz" || true)
+            case "$body" in
+              *"\"version\":\"$want\""*) echo "live: $body"; exit 0 ;;
+            esac
+            sleep 3
+          done
+          echo "::error::$want never became live. Last response: ${body:-none}"
+          exit 1

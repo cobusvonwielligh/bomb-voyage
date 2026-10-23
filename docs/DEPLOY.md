@@ -118,26 +118,129 @@ rounds.
 
 ---
 
-## 5. Configuration — all of it by environment variable
+## 5. Configuration — `config.ini`
 
-Nothing AWS-specific appears anywhere in the code. This is what makes the VPC move trivial.
-On the server these live in `/etc/bomb-voyage.env`.
+All settings and secrets live in **`config.ini`**, which is gitignored and never rsynced, so a
+deploy can never clobber it and a secret can never reach GitHub. `config.example.ini` is the
+committed template. On the server the real file is `/opt/bomb-voyage/config.ini`, written by
+`bootstrap.sh`.
 
-| Variable | Default | Meaning |
-|---|---|---|
-| `PORT` | `8080` | Listening port. `443` in production. |
-| `REDIRECT_PORT` | `80` | Plain-HTTP redirect listener. Only used when TLS is on. |
-| `TLS_CERT` / `TLS_KEY` | unset | Paths. Unset → plain HTTP, which is local dev. |
-| `PUBLIC_HOST` | `localhost` | Used for redirects and logging only. |
-| `DATA_DIR` | `./data` | Where `leaderboard.json` and the cert copies live. |
-| `MAX_PLAYERS` | `16` | |
-| `LAG` / `JITTER` | `0` | **Dev only.** Outbound delay in ms. The process refuses to start if either is set while TLS is configured. |
+Precedence is **environment variable > `config.ini` > built-in default**, so a one-off like
+`LAG=200 npm start` never needs a file edit, and CI can override anything.
 
-Local development needs none of them: `npm start` → `http://localhost:8080`.
+| Section | Key | Env | Default | Meaning |
+|---|---|---|---|---|
+| `server` | `port` | `PORT` | `8080` | `443` in production. |
+| | `redirect_port` | `REDIRECT_PORT` | `80` | Plain-HTTP redirect. Only used when TLS is on. |
+| | `public_host` | `PUBLIC_HOST` | `localhost` | Redirect targets and logging. |
+| | `tls_cert` / `tls_key` | `TLS_CERT` / `TLS_KEY` | blank | Blank → plain HTTP, which is local dev. |
+| | `data_dir` | `DATA_DIR` | `./data` | Leaderboard and certificate copies. |
+| | `max_players` | `MAX_PLAYERS` | `16` | |
+| `deploy` | `token` | `DEPLOY_TOKEN` | blank | Secret for `POST /deploy`. **Blank disables the endpoint entirely** — correct on a laptop. |
+| | `ssh_host` / `ssh_user` / `ssh_key` | same | — | Used by `infra/deploy.sh`. |
+| `dev` | `lag` / `jitter` | `LAG` / `JITTER` | `0` | Outbound delay in ms. The process **refuses to start** if either is non-zero while TLS is configured. |
+
+Local development needs no file at all: `npm start` → `http://localhost:8080`.
+
+Nothing AWS-specific appears anywhere in the code. That, plus the single JSON state file, is
+what makes the VPC move a config change.
 
 ---
 
-## 6. Moving into the eezi VPC later
+## 6. CI/CD
+
+```
+push to main ─► GitHub Actions ─► npm ci && npm test
+                                      │ pass
+                                      ▼
+                            POST https://host/deploy
+                            X-Deploy-Token: <secret>
+                                      │ 202
+                                      ▼
+                     server runs infra/self-update.sh:
+                     git reset --hard origin/main
+                     npm ci --omit=dev
+                     systemctl restart bomb-voyage
+                                      │
+                      Actions polls /healthz until
+                      "version" equals the pushed sha
+```
+
+**Deployment is pull-based, and that is the point.** Port 22 is locked to one IP, and GitHub
+runners have dynamic addresses. The alternatives were opening SSH to the world or chasing
+GitHub's IP ranges; instead the box updates *itself* over its own outbound HTTPS. GitHub never
+holds an SSH key.
+
+The endpoint is deliberately unhelpful to strangers:
+
+- Missing, wrong, or wrong-length token → **404**, not 401. An unauthenticated caller learns
+  nothing about whether the endpoint exists.
+- Comparison is `crypto.timingSafeEqual` on equal-length buffers.
+- 10-second cooldown, so a stuck workflow cannot restart the box in a loop.
+- No token configured → the route does not exist at all. That is the default everywhere except
+  the server.
+
+### Secrets to set once
+
+GitHub → Settings → Secrets and variables → Actions → New repository secret:
+
+| Secret | Value |
+|---|---|
+| `DEPLOY_URL` | `https://<host>/deploy` |
+| `DEPLOY_TOKEN` | printed at the end of `bootstrap.sh`, and stored in `config.ini` under `[deploy] token` |
+
+Until they are set the deploy job logs a skip and goes green — tests still gate every push.
+
+### Deploying from a laptop
+
+`npm run deploy` rsyncs your working tree, including uncommitted work. It is the fast path for
+iterating. A later CI deploy overwrites whatever it pushed, which is correct: git is the source
+of truth.
+
+---
+
+## 7. Moving to `bombvoyage.co.za`
+
+Everything is already parameterised. The whole switch:
+
+1. **Buy the domain**, then at the registrar create two records pointing at the Elastic IP:
+
+   | Type | Name | Value |
+   |---|---|---|
+   | A | `@` | `16.28.138.34` |
+   | A | `www` | `16.28.138.34` |
+
+2. **Wait for DNS**, and confirm before going further — certbot fails loudly if the name does
+   not resolve to the box yet:
+
+   ```bash
+   dig +short bombvoyage.co.za      # must print 16.28.138.34
+   ```
+
+3. **Re-run bootstrap** with the new names. It is idempotent, `--expand` adds them to the
+   existing certificate, and the existing deploy token is preserved:
+
+   ```bash
+   scp -i ~/Downloads/bombs-away.pem infra/bootstrap.sh ec2-user@16.28.138.34:/tmp/
+   ssh -i ~/Downloads/bombs-away.pem ec2-user@16.28.138.34 \
+     'HOST=bombvoyage.co.za ALT_HOSTS=www.bombvoyage.co.za EMAIL=you@example.com bash /tmp/bootstrap.sh'
+   ```
+
+4. **Update the GitHub secret** `DEPLOY_URL` to `https://bombvoyage.co.za/deploy`.
+
+5. **Update your local `config.ini`** `[deploy] ssh_host` if you want to SSH by name.
+
+6. **Send IT the ticket** in §2 with the real hostname.
+
+The old `*.sslip.io` name keeps working — it stays on the certificate — so there is no cutover
+moment and nothing to coordinate.
+
+*Why `.co.za` is worth it beyond looking right: corporate filters classify unknown
+`sslip.io`-style hostnames far more aggressively than a registered company domain.*
+
+---
+
+## 8. Moving into the eezi VPC later
 
 | Thing | Personal AWS account today | eezi VPC later |
 |---|---|---|
@@ -159,7 +262,7 @@ when it happens and nothing today gets easier by guessing now.
 
 ---
 
-## 7. Operations
+## 9. Operations
 
 **Logs.** `sudo journalctl -u bomb-voyage -f`, or `--since 1h` to debug a Friday session.
 systemd rotates them. No log shipping.
@@ -179,7 +282,7 @@ new pair into `/var/lib/bomb-voyage/certs` and restarts the service. Check with
 
 ---
 
-## 8. Cost
+## 10. Cost
 
 | Item | Monthly |
 |---|---|
@@ -193,10 +296,15 @@ Free for a year, about $12/month after.
 
 ---
 
-## 9. Troubleshooting
+## 11. Troubleshooting
 
 | Symptom | Cause, in order of likelihood |
 |---|---|
+| **CI deploy returns 404** | Wrong `DEPLOY_TOKEN`, or `config.ini` on the server has no `[deploy] token`. The endpoint answers 404 to anything it does not like, on purpose. |
+| **CI deploy returns 429** | Two deploys within 10 s. The workflow `concurrency` group should prevent it; check for a manual `curl`. |
+| **Deploy accepted but version never changes** | `sudo journalctl -u bomb-voyage` plus `/var/lib/bomb-voyage/self-update.log`. Usually the sudoers drop-in is missing — re-run `bootstrap.sh`. |
+| **Server came up on 8080 without TLS** | `config.ini` is missing or has blank `tls_cert`. The service reads only that file now; `/etc/bomb-voyage.env` is no longer used. |
+| **No music in the browser** | Autoplay is blocked until a gesture. The page arms a one-shot click/keypress listener; if it still fails, check the console for an AudioContext error. |
 | **All ports time out** (22, 80, 443) | Security group does not have the rule, *or* the Elastic IP is not associated with a running instance. A timeout means the packet was dropped; a *refused* would mean it arrived and nothing was listening. |
 | Port 22 times out, 443 works | SSH rule source is a different IP than yours now. EC2 → Security Groups → Edit inbound → set **My IP** again. Do not reopen 22 to `0.0.0.0/0`. |
 | `certbot` fails with a connection error | Port 80 not open, or DNS not yet pointing at the box. `dig +short <host>` must return the Elastic IP. |

@@ -1,6 +1,11 @@
 node_modules/
 data/
+
+# Real configuration and secrets. config.example.ini is the committed template.
+config.ini
+
 *.pem
+*.key
 *.log
 .DS_Store
 .env

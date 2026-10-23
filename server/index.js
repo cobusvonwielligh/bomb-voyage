@@ -1,30 +1,18 @@
-// Bomb Voyage — process bootstrap: config, static files, health, TLS.
+// Bomb Voyage — process bootstrap: config, static files, health, TLS, self-update webhook.
 // The WebSocket hub lives in net.js. See docs/ARCHITECTURE.md §7.
 
 import http from 'node:http';
 import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import crypto from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { attachHub } from './net.js';
-
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-
-export const config = {
-  port: +(process.env.PORT || 8080),
-  tlsCert: process.env.TLS_CERT || '',
-  tlsKey: process.env.TLS_KEY || '',
-  publicHost: process.env.PUBLIC_HOST || 'localhost',
-  dataDir: process.env.DATA_DIR || path.join(ROOT, 'data'),
-  maxPlayers: +(process.env.MAX_PLAYERS || 16),
-  lag: +(process.env.LAG || 0),
-  jitter: +(process.env.JITTER || 0),
-  redirectPort: +(process.env.REDIRECT_PORT || 80),
-};
+import { config, usingTls, ROOT } from './config.js';
 
 // The lag shim exists to make development honest, and would silently ruin a real session.
-if (config.lag && config.tlsCert) {
-  console.error('refusing to start: LAG is set while TLS is configured. That combination is a bug.');
+if (config.lag && usingTls) {
+  console.error('refusing to start: lag is set while TLS is configured. That combination is a bug.');
   process.exit(1);
 }
 
@@ -75,6 +63,53 @@ function resolveFile(urlPath) {
   return null;
 }
 
+// ─── self-update webhook ──────────────────────────────────────────────────────
+// GitHub Actions cannot SSH in — port 22 is restricted to one IP on purpose, and runners have
+// dynamic addresses. So CD is pull-based: Actions proves the tests pass, then pokes this, and
+// the box updates itself over its own outbound HTTPS. No inbound SSH, no private key in GitHub.
+
+let lastDeploy = 0;
+const DEPLOY_COOLDOWN_MS = 10_000;
+
+function handleDeploy(req, res) {
+  // No token configured (any laptop) means the endpoint does not exist at all.
+  if (!config.deployToken) return false;
+
+  const given = req.headers['x-deploy-token'];
+  const want = config.deployToken;
+  const a = Buffer.from(String(given ?? ''));
+  const b = Buffer.from(want);
+  const ok = a.length === b.length && crypto.timingSafeEqual(a, b);
+
+  const who = req.socket.remoteAddress;
+  if (req.method !== 'POST' || !ok) {
+    // Deliberately a 404, not a 401: an unauthenticated caller learns nothing about the endpoint.
+    console.warn(`deploy: rejected from ${who}`);
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('not found');
+    return true;
+  }
+  if (Date.now() - lastDeploy < DEPLOY_COOLDOWN_MS) {
+    res.writeHead(429, { 'Content-Type': 'text/plain' });
+    res.end('too soon');
+    return true;
+  }
+  lastDeploy = Date.now();
+
+  console.log(`deploy: accepted from ${who}, self-update starting`);
+  // Detached, because the script restarts this very process. Answer first, then die.
+  const child = spawn('bash', [config.deployScript], {
+    cwd: ROOT, detached: true, stdio: 'ignore',
+  });
+  child.unref();
+
+  res.writeHead(202, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ ok: true, updating: true }));
+  return true;
+}
+
+// ─── request handling ─────────────────────────────────────────────────────────
+
 const started = Date.now();
 
 function handle(req, res) {
@@ -82,8 +117,15 @@ function handle(req, res) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
 
-  if (req.url === '/healthz') {
-    const body = JSON.stringify(hub.health({ uptimeS: Math.round((Date.now() - started) / 1000) }));
+  const url = req.url.split('?')[0];
+
+  if (url === '/deploy' && handleDeploy(req, res)) return;
+
+  if (url === '/healthz') {
+    const body = JSON.stringify(hub.health({
+      uptimeS: Math.round((Date.now() - started) / 1000),
+      version: version(),
+    }));
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     return res.end(body);
   }
@@ -102,23 +144,37 @@ function handle(req, res) {
   fs.createReadStream(file).pipe(res);
 }
 
+/** Short git sha when deployed from a clone, so /healthz says what is actually running. */
+let cachedVersion;
+function version() {
+  if (cachedVersion !== undefined) return cachedVersion;
+  try {
+    const head = fs.readFileSync(path.join(ROOT, '.git/HEAD'), 'utf8').trim();
+    const ref = head.startsWith('ref: ') ? head.slice(5) : null;
+    const sha = ref ? fs.readFileSync(path.join(ROOT, '.git', ref), 'utf8').trim() : head;
+    cachedVersion = sha.slice(0, 7);
+  } catch { cachedVersion = null; }
+  return cachedVersion;
+}
+
 // ─── server ───────────────────────────────────────────────────────────────────
 
-const useTls = Boolean(config.tlsCert && config.tlsKey);
-const server = useTls
-  ? https.createServer({ cert: fs.readFileSync(config.tlsCert), key: fs.readFileSync(config.tlsKey) }, handle)
+const server = usingTls
+  ? https.createServer(
+      { cert: fs.readFileSync(config.tlsCert), key: fs.readFileSync(config.tlsKey) }, handle)
   : http.createServer(handle);
 
 const hub = attachHub(server, config);
 
 server.listen(config.port, () => {
-  const scheme = useTls ? 'https' : 'http';
-  console.log(`bomb-voyage listening on ${scheme}://${config.publicHost}:${config.port}`);
-  if (config.lag) console.log(`LAG SHIM ACTIVE: ${config.lag}ms ±${config.jitter}ms`);
+  console.log(`bomb-voyage listening on ${usingTls ? 'https' : 'http'}://${config.publicHost}:${config.port}`);
+  console.log(`config: ${config.iniPath || 'defaults + environment only'}`);
+  if (config.lag) console.log(`LAG SHIM ACTIVE: ${config.lag}ms +/-${config.jitter}ms`);
+  if (config.deployToken) console.log('self-update webhook enabled at POST /deploy');
 });
 
 // Plain HTTP exists only to bounce people to HTTPS and to answer ACME challenges.
-if (useTls && config.redirectPort) {
+if (usingTls && config.redirectPort) {
   http.createServer((req, res) => {
     res.writeHead(301, { Location: `https://${config.publicHost}${req.url}` });
     res.end();

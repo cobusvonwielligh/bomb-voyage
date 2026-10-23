@@ -15,10 +15,19 @@ const base = `http://127.0.0.1:${PORT}`;
 
 let server;
 
+const DEPLOY_TOKEN = 'test-token-not-a-real-secret';
+
 const startServer = () => new Promise((resolve, reject) => {
   server = spawn(process.execPath, ['server/index.js'], {
     cwd: ROOT,
-    env: { ...process.env, PORT: String(PORT), LAG: '0' },
+    env: {
+      ...process.env,
+      PORT: String(PORT),
+      LAG: '0',
+      DEPLOY_TOKEN,
+      // Never let a test actually redeploy anything.
+      DEPLOY_SCRIPT: '/dev/null',
+    },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   const bail = setTimeout(() => reject(new Error('server did not come up in 10s')), 10_000);
@@ -83,6 +92,30 @@ test('deployment spine', async t => {
     await once(ws, 'close');
     await new Promise(r => setTimeout(r, 50));
     assert.equal((await (await fetch(base + '/healthz')).json()).players, 0);
+  });
+
+  await t.test('deploy webhook rejects everything but a correct POST', async () => {
+    const post = (headers = {}) => fetch(base + '/deploy', { method: 'POST', headers });
+
+    assert.equal((await post()).status, 404, 'no token');
+    assert.equal((await post({ 'x-deploy-token': 'wrong' })).status, 404, 'wrong token');
+    assert.equal((await post({ 'x-deploy-token': DEPLOY_TOKEN + 'x' })).status, 404,
+      'right prefix, wrong length');
+    assert.equal(
+      (await fetch(base + '/deploy', { headers: { 'x-deploy-token': DEPLOY_TOKEN } })).status,
+      404, 'GET with a valid token is still a 404');
+
+    const ok = await post({ 'x-deploy-token': DEPLOY_TOKEN });
+    assert.equal(ok.status, 202);
+    assert.equal((await ok.json()).updating, true);
+
+    // Cooldown stops a stuck workflow from restarting the box in a loop.
+    assert.equal((await post({ 'x-deploy-token': DEPLOY_TOKEN })).status, 429);
+  });
+
+  await t.test('health reports the running version', async () => {
+    const h = await (await fetch(base + '/healthz')).json();
+    assert.ok('version' in h, 'CI compares this against the commit it pushed');
   });
 
   await t.test('ignores junk instead of dying', async () => {

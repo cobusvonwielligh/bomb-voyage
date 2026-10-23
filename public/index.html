@@ -6,10 +6,10 @@
 <style>
   :root { color-scheme: dark; }
   body { margin: 0; min-height: 100vh; display: grid; place-items: center;
-         background: #0d1117; color: #e8eef7;
-         font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
-  .panel { border: 2px solid #ffd21f66; border-radius: 4px; background: #1a2029;
-           padding: 28px 36px; min-width: 420px; }
+         background: radial-gradient(120% 90% at 50% 0%, #1b1430 0%, #0d1117 60%);
+         color: #e8eef7; font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .panel { border: 2px solid #ffd21f66; border-radius: 4px; background: #1a2029ee;
+           padding: 28px 36px; min-width: 430px; box-shadow: 0 0 60px #6b21a855; }
   h1 { color: #ffd21f; font-size: 16px; letter-spacing: .18em; text-transform: uppercase;
        margin: 0 0 2px; }
   .sub { color: #8b97a8; margin: 0 0 22px; font-size: 12px; }
@@ -19,27 +19,40 @@
   .ok { color: #5ad1a0; } .bad { color: #e8655a; } .wait { color: #ffd21f; }
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
          background: currentColor; margin-right: 7px; vertical-align: 1px; }
-  ul { color: #8b97a8; font-size: 12px; margin: 22px 0 0; padding-left: 18px; }
+  ul { color: #8b97a8; font-size: 12px; margin: 20px 0 0; padding-left: 18px; }
   a { color: #ffd21f; }
+  .audio { margin-top: 22px; padding-top: 16px; border-top: 1px solid #ffd21f33;
+           display: flex; align-items: center; gap: 12px; font-size: 12px; color: #8b97a8; }
+  button { font: inherit; color: #ffd21f; background: transparent; border: 1px solid #ffd21f66;
+           border-radius: 3px; padding: 4px 12px; cursor: pointer; }
+  button:hover { background: #ffd21f; color: #1a2029; }
+  input[type=range] { width: 120px; accent-color: #ffd21f; }
 </style>
 
 <div class="panel">
   <h1>Bomb Voyage</h1>
   <p class="sub">deployment check &middot; no game here yet</p>
   <dl>
-    <dt>page</dt>        <dd class="ok"><i class="dot"></i>served</dd>
+    <dt>page</dt>         <dd class="ok"><i class="dot"></i>served</dd>
     <dt>shared module</dt><dd id="shared" class="wait"><i class="dot"></i>loading</dd>
-    <dt>websocket</dt>   <dd id="ws" class="wait"><i class="dot"></i>connecting</dd>
-    <dt>your seat</dt>   <dd id="seat">&mdash;</dd>
-    <dt>online</dt>      <dd id="online">&mdash;</dd>
-    <dt>round trip</dt>  <dd id="rtt">&mdash;</dd>
-    <dt>origin</dt>      <dd id="origin">&mdash;</dd>
+    <dt>websocket</dt>    <dd id="ws" class="wait"><i class="dot"></i>connecting</dd>
+    <dt>your seat</dt>    <dd id="seat">&mdash;</dd>
+    <dt>online</dt>       <dd id="online">&mdash;</dd>
+    <dt>round trip</dt>   <dd id="rtt">&mdash;</dd>
+    <dt>version</dt>      <dd id="ver">&mdash;</dd>
   </dl>
+
+  <div class="audio">
+    <button id="music">&#9834; play music</button>
+    <input id="vol" type="range" min="0" max="100" value="25" title="music volume">
+    <span id="volLabel">25%</span>
+  </div>
+
   <ul>
-    <li>If every row is green, the whole path works: TLS, static files, shared modules and
+    <li>Every row green means the whole path works: TLS, static files, shared modules and
         <code>wss://</code> on one origin.</li>
-    <li>Sprite preview: <a href="/art-preview.html">/art-preview.html</a></li>
-    <li>Health JSON: <a href="/healthz">/healthz</a></li>
+    <li>Sprites: <a href="/art-preview.html">/art-preview.html</a>
+        &middot; Health: <a href="/healthz">/healthz</a></li>
   </ul>
 </div>
 
@@ -47,20 +60,55 @@
 // Importing from /shared proves the dual-mount works — the browser is loading the same file Node
 // does. If this row fails, the client can never share the simulation with the server.
 import { MAX_PLAYERS, playerColor } from '/shared/constants.js';
+import { createMusic } from '/client/audio/music.js';
 
 const $ = id => document.getElementById(id);
 const set = (id, cls, text) => {
   const el = $(id);
   el.className = cls;
-  el.innerHTML = cls === 'ok' || cls === 'bad' || cls === 'wait' ? '<i class="dot"></i>' : '';
+  el.innerHTML = '<i class="dot"></i>';
   el.append(text);
 };
 
 set('shared', 'ok', `ok (max ${MAX_PLAYERS} players)`);
-$('origin').textContent = location.origin;
+
+// ─── music ────────────────────────────────────────────────────────────────────
+// Browsers block audio until the user interacts, so try immediately, and if that is refused
+// arm a one-shot listener that starts it on the first click or keypress.
+
+const music = createMusic();
+const btn = $('music');
+const vol = $('vol');
+
+const syncUi = () => {
+  btn.innerHTML = music.playing ? '&#9834; pause music' : '&#9834; play music';
+  vol.value = Math.round(music.volume * 100);
+  $('volLabel').textContent = `${vol.value}%`;
+};
+
+btn.onclick = async () => { await music.toggle(); syncUi(); };
+vol.oninput = () => { music.setVolume(vol.value / 100); $('volLabel').textContent = `${vol.value}%`; };
+syncUi();
+
+(async () => {
+  if (await music.start()) return syncUi();
+  const unlock = async () => {
+    document.removeEventListener('pointerdown', unlock);
+    document.removeEventListener('keydown', unlock);
+    await music.start();
+    syncUi();
+  };
+  document.addEventListener('pointerdown', unlock);
+  document.addEventListener('keydown', unlock);
+  syncUi();
+})();
+
+// ─── connection check ─────────────────────────────────────────────────────────
+
+fetch('/healthz').then(r => r.json()).then(h => { $('ver').textContent = h.version || 'dev'; });
 
 const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
-let sentAt = 0;
+const pending = new Map();
 
 function connect() {
   const ws = new WebSocket(url);
@@ -70,8 +118,9 @@ function connect() {
     ws.send(JSON.stringify({ t: 'hello', name: 'check', playerId: null }));
     setInterval(() => {
       if (ws.readyState !== 1) return;
-      sentAt = performance.now();
-      ws.send(JSON.stringify({ t: 'ping', c: Date.now() }));
+      const c = Date.now();
+      pending.set(c, performance.now());
+      ws.send(JSON.stringify({ t: 'ping', c }));
     }, 2000);
   };
 
@@ -83,14 +132,15 @@ function connect() {
       $('online').textContent = `${m.players.length} / ${m.config.maxPlayers}`;
     }
     if (m.t === 'snap' && m.players) $('online').textContent = `${m.players.length} / ${MAX_PLAYERS}`;
-    if (m.t === 'pong') $('rtt').textContent = `${Math.round(performance.now() - sentAt)} ms`;
+    // Match the pong to its own ping — a broadcast arriving first would otherwise read as 0 ms.
+    if (m.t === 'pong' && pending.has(m.c)) {
+      $('rtt').textContent = `${Math.round(performance.now() - pending.get(m.c))} ms`;
+      pending.delete(m.c);
+    }
     if (m.t === 'reject') set('ws', 'bad', `rejected: ${m.why}`);
   };
 
-  ws.onclose = () => {
-    set('ws', 'bad', 'closed — retrying');
-    setTimeout(connect, 2000);
-  };
+  ws.onclose = () => { set('ws', 'bad', 'closed — retrying'); setTimeout(connect, 2000); };
   ws.onerror = () => set('ws', 'bad', 'error');
 }
 connect();
