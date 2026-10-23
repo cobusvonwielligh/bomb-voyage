@@ -224,6 +224,14 @@ canvas#game {
 
 /* Connectivity, as a dot. Red by default, because every state that is not "open" is one you
    want to notice, including ones added later that this stylesheet has never heard of. */
+/* Watching: the parts of the HUD that describe a player you do not have. */
+body.observing #gear,
+body.observing #xp,
+body.observing #cardStats,
+body.observing #avatar,
+body.observing #say { display: none; }
+body.observing #who { color: var(--dim); }
+
 #conn {
   width: 9px; height: 9px; border-radius: 50%;
   flex: 0 0 auto;
@@ -770,11 +778,30 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 .card.small { width: 340px; text-align: center; }
 /* Sitting lower in the card now that the instruction line under it is gone: the countdown button
    is the only other thing here, and the two were crowding the top edge together. */
+/* Only the round-over card has a heading now. The death card leads with the respawn button,
+   because the banner on the board has already said what happened and a second announcement
+   just pushes the one control you want further down the screen. */
 #deadTitle {
-  font-family: var(--display); color: var(--bad); font-size: 30px;
-  margin: 14px 0 16px;
+  font-family: var(--display); color: var(--gold); font-size: 30px;
+  margin: 4px 0 16px;
   text-shadow: var(--rim);
+  display: none;
 }
+.card.round #deadTitle { display: block; }
+
+/* The two quieter choices under it: outlined, not filled, so the respawn button stays the one
+   thing the eye lands on. */
+.ghost {
+  width: 100%; margin-top: 8px; padding: 10px;
+  font-family: var(--nums); font-size: 12.5px; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase;
+  color: var(--dim);
+  background: transparent;
+  border: 1px solid #ffffff1f; border-radius: 9px;
+  transition: color .12s, border-color .12s, background .12s;
+}
+.ghost:hover { color: var(--ink); border-color: #ffffff38; background: #ffffff0f; }
+.card.round .ghost { display: none; }
 /* The countdown gets its own face. The display font is for titles you read once, and this is a
  * number that changes every second a few inches from your eyes. */
 #respawn {

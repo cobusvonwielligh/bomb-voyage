@@ -171,10 +171,18 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
   setInterval(ping, PING_EVERY_MS);
 
   return {
-    connect(name) {
-      hello = { t: 'hello', name, playerId: localStorage.getItem('bv.playerId') || null };
+    /**
+     * @param observe true to watch without taking a seat. A spectator still sends a name and an
+     *   id, so a reconnect lands back in the same mode rather than silently claiming a seat.
+     */
+    connect(name, observe = false) {
+      hello = {
+        t: 'hello', name, observe,
+        playerId: localStorage.getItem('bv.playerId') || null,
+      };
       open();
     },
+    get observing() { return !!hello?.observe; },
     send(msg) { if (ws?.open) ws.send(msg); },
 
     /** Leave on purpose. Must suppress the reconnect, or we would immediately rejoin. */

@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocket } from 'ws';
 import { IN_RIGHT, IN_DOWN } from '../shared/constants.js';
+import { createRoom } from '../server/room.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8097;
@@ -158,4 +159,32 @@ test('room end to end', async t => {
   });
 
   b.ws.close();
+});
+
+test('spectators take no seat, and a full server still lets them in', async () => {
+  // The whole point: watching costs nobody a place. If a spectator consumed a seat it would be
+  // indistinguishable from playing badly on purpose.
+  const sent = [];
+  const room = createRoom({ onBroadcast: m => sent.push(typeof m === 'function' ? m(-1) : m) });
+  try {
+    room.setBots(15);
+    const before = room.state.players.filter(Boolean).length;
+
+    // The server builds a spectator's welcome for seat -1; it must not throw and must not seat.
+    const welcome = room.welcomeFor(-1);
+    assert.equal(welcome.t, 'welcome');
+    assert.ok(Array.isArray(welcome.players), 'a spectator needs the player list');
+    assert.ok(welcome.map, 'a spectator needs the map');
+    assert.equal(room.state.players.filter(Boolean).length, before, 'spectating seated somebody');
+
+    // And the per-seat snapshot builder has to tolerate -1, because that is what a spectator
+    // is handed. An ack of undefined would be sent as JSON null and confuse the clock.
+    room.start();
+    await new Promise(r => setTimeout(r, 120));
+    const snap = sent.filter(m => m.t === 'snap').at(-1);
+    assert.ok(snap, 'no snapshot was broadcast');
+    assert.equal(typeof snap.ack, 'number', `ack for a spectator was ${snap.ack}`);
+  } finally {
+    room.stop();
+  }
 });

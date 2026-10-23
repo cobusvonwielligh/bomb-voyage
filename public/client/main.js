@@ -486,6 +486,10 @@ function loop(now) {
   while (acc >= TICK_MS && steps++ < 5) {
     acc -= TICK_MS;
     const tick = net.advanceTick();
+    // A spectator still advances the clock — the interpolator is driven from it — but has
+    // nothing to predict and nothing to send. The server ignores input from a watcher anyway;
+    // not sending it is the difference between ignored and never asked.
+    if (observing) continue;
     const mask = input.mask;
     localBombFeedback(mask);
     world.predict(tick, mask);
@@ -666,7 +670,17 @@ function drawHud() {
   $('vOnline').textContent = world.players.filter(Boolean).length;
   $('vMap').textContent = world.map?.id ?? '';
 
-  if (!me) return;
+  if (!me) {
+    // Watching. Everything that is about YOU is meaningless, so it is emptied rather than left
+    // showing the last player who happened to be in the slot.
+    if (observing) {
+      $('who').textContent = 'spectating';
+      setValue($('rank'), '');
+      $('dead').style.display = 'none';
+      renderLive();
+    }
+    return;
+  }
 
   const mine = ranks.get(world.you);
   $('who').textContent = me.name;
@@ -939,12 +953,19 @@ const nameInput = $('name');
 nameInput.maxLength = NAME_MAX_CHARS;
 nameInput.value = localStorage.getItem('bv.name') || '';
 
-function play() {
+/**
+ * @param observe watch instead of play. A spectator takes no seat, so this is also the way in
+ *   when the server is full — which is the whole reason the feature exists.
+ */
+function play(observe = false) {
   $('signedOut').style.display = 'none';
   const name = nameInput.value.trim();
-  if (!name) { nameInput.focus(); return; }
+  // A spectator still needs a name for the chat, but not a chosen one.
+  if (!name && !observe) { nameInput.focus(); return; }
   if ($('play').disabled) return;          // double-click would otherwise open a second socket
   $('play').disabled = true;
+  observing = observe;
+  document.body.classList.toggle('observing', observe);
   localStorage.setItem('bv.name', name);
   renderer = createRenderer($('game'), world);
   sfx.start().then(() => sfx.play('click'));
@@ -969,11 +990,26 @@ function play() {
     const mine = (bomb.o ?? bomb.owner) === world.you;
     renderer?.addShake((mine ? 0.75 : 0.5) * (1 - d / 8));
   };
-  net.connect(name);
+  net.connect(name || 'watcher', observe);
 }
 
-$('play').onclick = play;
-nameInput.onkeydown = e => { if (e.key === 'Enter') play(); };
+/** True while this tab is watching rather than playing. Read by the HUD and the input loop. */
+let observing = false;
+
+$('play').onclick = () => play(false);
+$('watch').onclick = () => play(true);
+nameInput.onkeydown = e => { if (e.key === 'Enter') play(false); };
+
+// Switching to spectating from the death screen. A fresh connection rather than a mode flag on
+// the open one: the server frees the seat on disconnect, which is the point — somebody waiting
+// gets it, and that is a better outcome than a seat held by a person who has stopped playing.
+$('spectate').onclick = createTap()(() => {
+  $('dead').style.display = 'none';
+  net.close();
+  $('play').disabled = false;
+  play(true);
+});
+$('deadLeave').onclick = createTap()(leave);
 
 // ─── chat ─────────────────────────────────────────────────────────────────────
 

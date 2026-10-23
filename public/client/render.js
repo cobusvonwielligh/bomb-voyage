@@ -528,7 +528,9 @@ export function createRenderer(canvas, world) {
    */
   const SHIP_SCALE = 2;
   const SHIP_ALPHA = 0.42;
-  const ROCK_ALPHA = 0.42;      // the same knock-back, so the two read as one layer of scenery
+  // Half again what the ship gets. A boulder is a shape in the water, not an object on it:
+  // once you can make out its edges clearly it stops being distance and starts being clutter.
+  const ROCK_ALPHA = 0.21;
   // Her centre sits this far outside the island's bounding box. The visible ocean margin is two
   // or three tiles, so at two and a half she is half in frame and half past the edge of the
   // board — present, cut off, and obviously not something you can interact with.

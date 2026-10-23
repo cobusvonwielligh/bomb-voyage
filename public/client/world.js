@@ -33,7 +33,12 @@ export function createWorld() {
       w.map = { id: m.map.id, w: m.map.w, h: m.map.h, cells: decodeCells(m.map.cells), spawns: m.map.spawns };
     }
     if (m.mapOnly) return;
+    // -1 means spectating: there is no local player, so prediction and reconciliation have
+    // nothing to act on and every player in the snapshot is a remote one. Nothing else in here
+    // needs to know — `w.players[-1]` is undefined, which is exactly the right answer to
+    // "where am I" when the answer is "nowhere".
     w.you = m.you;
+    w.observing = !!m.observing;
     w.roundEndsAtTick = m.roundEndsAtTick ?? w.roundEndsAtTick;
     w.tick = m.tick;
     w.players = [];
