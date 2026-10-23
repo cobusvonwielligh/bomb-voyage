@@ -213,6 +213,16 @@ export const CHAT_MIN_INTERVAL_MS = 1000;
 export const CHAT_HISTORY = 50;
 export const NAME_MAX_CHARS = 20;
 
+// A backgrounded tab stops being a player. Browsers throttle rAF in hidden tabs to about once a
+// second, so a background tab cannot play — it can only hold a seat other people want and drift
+// its clock. Input is cut the moment it hides; the socket goes after this.
+export const IDLE_DISCONNECT_MS = 45_000;
+
+// The server's own version, for the cases the client cannot report: a slept laptop, a killed
+// renderer process, a tab the browser froze outright. A seat that has sent no input at all for
+// this long is not being played and is given back.
+export const IDLE_KICK_TICKS = 90 * TICK_HZ; // 90 s
+
 // ─── Presentation ─────────────────────────────────────────────────────────────
 // Here rather than in art.js because the sim's tracer sampling rate must match the renderer's.
 

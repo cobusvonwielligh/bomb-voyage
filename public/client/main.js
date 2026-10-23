@@ -6,7 +6,7 @@
 
 import {
   TICK_MS, TICK_HZ, NAME_MAX_CHARS, UNITS_PER_TILE, IN_BOMB, playerColor,
-  MAX_BOMBS_CARRIED, MAX_RADIUS, MAX_SKATES,
+  MAX_BOMBS_CARRIED, MAX_RADIUS, MAX_SKATES, IDLE_DISCONNECT_MS,
 } from '/shared/constants.js';
 import { createNet } from './net.js';
 import { createInput, typingSomewhere } from './input.js';
@@ -313,6 +313,11 @@ function loop(now) {
   // every input from here lands in the server's past until a 1-tick-per-second crawl catches up.
   if (raw > 250) net.resync();
 
+  // A hidden tab is not playing. Keep the loop alive so the clock and the socket survive, but
+  // stop simulating and stop sending: a throttled tab stepping five ticks per second produces
+  // nothing but corrections.
+  if (document.hidden) { acc = 0; return; }
+
   sfx.frame();                              // resets the per-frame sound budget
 
   // Exactly one simulation step per TICK_MS of real time, never more than a handful at once.
@@ -417,6 +422,43 @@ function drawHud() {
   if (!roundOverUntil) showDead(!me.alive);
   if (scoresOpen) renderScores();
 }
+
+// ─── backgrounded tabs ────────────────────────────────────────────────────────
+//
+// Only the tab you are looking at plays. Open the game twice and the one behind freezes: browsers
+// throttle requestAnimationFrame in a hidden tab to roughly once a second, so it cannot play
+// anyway — all it can do is hold a seat somebody else wants and let its clock drift far enough
+// that every input it sends on return lands in the server's past.
+//
+// So hiding cuts the keys immediately, and staying hidden gives the seat back. Coming back to a
+// live tab resyncs the clock, because a throttled tab has been accumulating drift the whole time.
+
+let hiddenSince = 0;
+let idleTimer = null;
+
+function onVisibility() {
+  if (!running) return;
+  if (document.hidden) {
+    hiddenSince = performance.now();
+    input.clear();                    // never leave a key stranded down in a frozen tab
+    music.duck(true);
+    net.send({ t: 'input', tick: net.clientTick, m: 0 });
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      if (!document.hidden || !running) return;
+      leave();
+      toast('left for being idle in a background tab');
+    }, IDLE_DISCONNECT_MS);
+  } else {
+    clearTimeout(idleTimer);
+    music.duck(chatHasFocus());
+    // However long it was away, the frame loop discarded that time. Re-tie the clock, or every
+    // input lands in the server's past until a one-tick-per-second crawl catches up.
+    if (hiddenSince) { net.resync(); last = performance.now(); acc = 0; }
+    hiddenSince = 0;
+  }
+}
+document.addEventListener('visibilitychange', onVisibility);
 
 // ─── death, scoreboard, leaving ───────────────────────────────────────────────
 
@@ -570,6 +612,8 @@ function leave() {
   $('scores').style.display = 'none';
   scoresOpen = false;
   roundOverUntil = 0;
+  clearTimeout(idleTimer);
+  hiddenSince = 0;
   input.clear();
   music.playFrom('theme');          // back to the landing page, back to the theme
   $('play').disabled = false;

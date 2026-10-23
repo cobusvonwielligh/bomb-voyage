@@ -8,7 +8,7 @@ import {
   TILE_PX, UNITS_PER_TILE, FUSE_TICKS, FIRE_TICKS, playerColor, SCORE, ROUND_INTERMISSION_MS,
   RANK_NAMES, RANK_THRESHOLDS, rankForScore,
   STREAK_WINDOW_TICKS, STREAK_NAMES, STREAK_ACE, GAMESPEED_MIN, GAMESPEED_MAX,
-  SPAWN_CANDIDATES,
+  SPAWN_CANDIDATES, IDLE_KICK_TICKS,
 } from '../shared/constants.js';
 import { MAPS, encodeCells } from '../shared/maps.js';
 import { createState, createPlayer, expireStatuses, applyStatus, tileCentre } from '../shared/sim/state.js';
@@ -28,8 +28,7 @@ const ACE_MIN_VICTIMS = 3;
 
 const newStreak = () => ({ count: 0, lastTick: -1e9, victims: new Set() });
 
-export function createRoom({
-  onBroadcast, maxPlayers = MAX_PLAYERS, leaderboard = null,
+export function createRoom({ onKick, onBroadcast, maxPlayers = MAX_PLAYERS, leaderboard = null,
   // Overridable so a test can watch a seat be recycled without waiting 45 real seconds.
   graceTicks = RECONNECT_GRACE_TICKS,
 }) {
@@ -94,6 +93,7 @@ export function createRoom({
     if (existing >= 0 && !seats[existing].connected) {
       seats[existing].connected = true;
       seats[existing].goneSince = 0;
+      seats[existing].lastInputAt = state.tick;
       seats[existing].name = name || seats[existing].name;
       state.players[existing].name = seats[existing].name;
       return { seat: existing, resumed: true, playerId };
@@ -116,7 +116,7 @@ export function createRoom({
     const id = playerId || `p_${seat}_${Date.now().toString(36)}_${(Math.random() * 1e6) | 0}`;
     seats[seat] = {
       playerId: id, name, mask: 0, inputs: new Map(), lastAckTick: 0,
-      connected: true, goneSince: 0,
+      connected: true, goneSince: 0, lastInputAt: state.tick,
     };
     streaks[seat] = newStreak();
     const p = createPlayer(seat, name);
@@ -162,6 +162,7 @@ export function createRoom({
     const s = seats[seat];
     if (!s) return;
     if (tick <= s.lastAckTick) return;                 // already simulated; too late to matter
+    s.lastInputAt = state.tick;
     s.inputs.set(tick, mask & 0x1f);
     if (s.inputs.size > INPUT_BUFFER_TICKS) {
       // Drop the oldest rather than growing without bound if a client floods us.
@@ -306,6 +307,17 @@ export function createRoom({
       inputs[i] = s.mask;
 
       if (!s.connected && state.tick - s.goneSince > graceTicks) release(i);
+
+      // Connected but silent. A playing client sends an input every tick, including a mask of
+      // zero while standing still, so silence means the tab is backgrounded, frozen or on a
+      // sleeping laptop — not that somebody is thinking. Give the seat back: sixteen is a hard
+      // cap, and a seat held by a closed lid is a person who cannot join.
+      else if (s.connected && !s.isBot &&
+               state.tick - (s.lastInputAt ?? state.tick) > IDLE_KICK_TICKS) {
+        onBroadcast({ t: 'chat', i: -1, name: 'SERVER', msg: `${s.name} left (idle)` });
+        onKick?.(i, 'idle');
+        release(i);
+      }
     }
 
     // Where the new events start, so the streak scan reads only this tick's deaths. Events linger
@@ -396,7 +408,7 @@ export function createRoom({
     cancelIntermission();
     mapIndex = index;
     const carried = seats.map(s =>
-      (s ? { ...s, inputs: new Map(), mask: 0, goneSince: 0, lastAckTick: 0 } : null));
+      (s ? { ...s, inputs: new Map(), mask: 0, goneSince: 0, lastAckTick: 0, lastInputAt: 0 } : null));
     state = createState(MAPS[mapIndex]);
     for (let i = 0; i < maxPlayers; i++) {
       seats[i] = carried[i];
