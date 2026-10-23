@@ -11,10 +11,20 @@
 import { BLOCK, BLOCK_HP } from './constants.js';
 import { rng } from './util/rng.js';
 
+// `shape` decides what the arena is cut out of. A rectangle is the Bomberman default and Arena
+// keeps it; the others are islands, which is both prettier and better level design — a coast
+// gives you dead ends and choke points that a rectangle has to spend soft walls to create.
+//
+//   rect   the whole bounding box is playable, walled with iron
+//   blob   one organic island with bays and headlands
+//   atoll  a blob with a lagoon bitten out of the middle, so the map is a ring
 export const MAPS = [
-  { id: 'arena', name: 'Arena', w: 31, h: 25, seed: 1337, density: 0.62, reinforced: 0.05, shrubs: 0.03 },
-  { id: 'catacombs', name: 'Catacombs', w: 41, h: 29, seed: 4242, density: 0.74, reinforced: 0.14, shrubs: 0.02 },
-  { id: 'islands', name: 'Islands', w: 35, h: 35, seed: 777, density: 0.5, reinforced: 0.08, shrubs: 0.12 },
+  { id: 'arena', name: 'Arena', w: 31, h: 25, seed: 1337,
+    shape: 'rect', density: 0.62, reinforced: 0.05, shrubs: 0.03 },
+  { id: 'catacombs', name: 'Catacombs', w: 43, h: 31, seed: 4242,
+    shape: 'blob', density: 0.74, reinforced: 0.14, shrubs: 0.02 },
+  { id: 'islands', name: 'Islands', w: 39, h: 37, seed: 777,
+    shape: 'atoll', density: 0.5, reinforced: 0.08, shrubs: 0.12 },
 ];
 
 export const mapById = id => MAPS.find(m => m.id === id) || MAPS[0];
@@ -24,26 +34,137 @@ export const packCell = (type, hp = BLOCK_HP[type] || 0) => (type & 0x0f) | ((hp
 export const cellType = b => b & 0x0f;
 export const cellHp = b => (b >> 4) & 0x0f;
 
+// ─── island shapes ────────────────────────────────────────────────────────────
+// All of this runs exactly once, on the server, when a round starts. The result goes out as
+// base64 cells and no client ever re-derives it, so floating point here cannot desync anything —
+// which is why these are the only trigonometry in the project.
+
+const SECTORS = 24;
+
 /**
- * Sixteen spawn points spread around the ring of the map, as far apart as the perimeter allows.
- * Corners first, so a two-player game starts at opposite ends.
+ * A coastline as a radius per sector of the compass, smoothed twice.
+ *
+ * Smoothing is the whole trick. Raw per-sector noise gives a sawtooth coast that reads as
+ * corruption rather than as geography; two passes of a 1-2-1 kernel turn the same numbers into
+ * bays and headlands.
  */
-function spawnPoints(w, h) {
-  const inset = 1;
-  const x0 = inset, y0 = inset, x1 = w - 1 - inset, y1 = h - 1 - inset;
-  const corners = [[x0, y0], [x1, y1], [x1, y0], [x0, y1]];
-  const mids = [
-    [(w >> 1) | 0, y0], [(w >> 1) | 0, y1], [x0, (h >> 1) | 0], [x1, (h >> 1) | 0],
-  ];
-  const quarters = [];
-  for (const fx of [0.25, 0.75]) for (const fy of [0, 1]) {
-    quarters.push([Math.round(w * fx) | 1, fy ? y1 : y0]);
-    quarters.push([fy ? x1 : x0, Math.round(h * fx) | 1]);
+function coastline(next, low, high) {
+  const r = [];
+  for (let i = 0; i < SECTORS; i++) r.push(low + next() * (high - low));
+  for (let pass = 0; pass < 2; pass++) {
+    const prev = r.slice();
+    for (let i = 0; i < SECTORS; i++) {
+      r[i] = (prev[(i - 1 + SECTORS) % SECTORS] + prev[i] * 2 + prev[(i + 1) % SECTORS]) / 4;
+    }
   }
-  // Odd coordinates only: even/even is where the indestructible pillars live.
-  return [...corners, ...mids, ...quarters]
-    .map(([x, y]) => [Math.max(1, Math.min(w - 2, x | 1)), Math.max(1, Math.min(h - 2, y | 1))])
-    .slice(0, 16);
+  return r;
+}
+
+/** Interpolated radius at an angle, so the coast has no visible 24 facets. */
+function radiusAt(r, ang) {
+  const t = ((ang + Math.PI) / (2 * Math.PI)) * SECTORS;
+  const i0 = ((Math.floor(t) % SECTORS) + SECTORS) % SECTORS;
+  const f = t - Math.floor(t);
+  return r[i0] * (1 - f) + r[(i0 + 1) % SECTORS] * f;
+}
+
+/**
+ * Which tiles are land. 1 = land, 0 = sea.
+ *
+ * The distance test is a superellipse rather than a circle: exponent 2.4 keeps an island fat in
+ * the corners instead of tapering to a diamond, which matters because the corners are where the
+ * spawns want to be.
+ */
+function landMask(def, next) {
+  const { w, h, shape } = def;
+  const land = new Uint8Array(w * h);
+  if (shape === 'rect' || !shape) { land.fill(1); return land; }
+
+  const cx = (w - 1) / 2, cy = (h - 1) / 2;
+  const outer = coastline(next, 0.74, 1.0);
+  const inner = shape === 'atoll' ? coastline(next, 0.2, 0.34) : null;
+  const P = 2.4;
+  const dist = (dx, dy) => Math.pow(Math.abs(dx), P) + Math.pow(Math.abs(dy), P);
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      // Normalised, with a one-tile margin so the sea always has somewhere to be drawn.
+      const dx = (x - cx) / (cx - 1), dy = (y - cy) / (cy - 1);
+      const d = dist(dx, dy);
+      const ang = Math.atan2(dy, dx);
+      let on = d <= Math.pow(radiusAt(outer, ang), P);
+      if (on && inner && d <= Math.pow(radiusAt(inner, ang), P)) on = false;   // the lagoon
+      land[y * w + x] = on ? 1 : 0;
+    }
+  }
+  return land;
+}
+
+/** Every tile reachable on foot from `start`, as a Set of indices. */
+function reachable(cells, w, h, start) {
+  const seen = new Set([start]);
+  const queue = [start];
+  while (queue.length) {
+    const i = queue.pop();
+    const x = i % w, y = (i / w) | 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      const j = ny * w + nx;
+      if (seen.has(j)) continue;
+      // Soft walls count as reachable: they are what the game is for.
+      const t = cellType(cells[j]);
+      if (t === BLOCK.IRON || t === BLOCK.WATER || t === BLOCK.COLUMN) continue;
+      seen.add(j);
+      queue.push(j);
+    }
+  }
+  return seen;
+}
+
+/**
+ * Sixteen spawn points, chosen from tiles that actually exist.
+ *
+ * Farthest-point sampling over the real floor: take the tile furthest from everything chosen so
+ * far, sixteen times. On a rectangle that lands on the corners and edges, which is what the old
+ * hand-computed ring did — but it also works on an island with a bay in it, where the geometric
+ * version happily put a spawn point in the sea.
+ *
+ * Distance is Manhattan over coordinates rather than path length. A path-length version would be
+ * more correct and needs sixteen more flood fills; the island is convex enough that it would pick
+ * the same tiles.
+ */
+function spawnPoints(cells, w, h) {
+  const open = [];
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      if (cellType(cells[y * w + x]) === BLOCK.FLOOR) open.push([x, y]);
+    }
+  }
+  if (!open.length) return [[1, 1]];
+
+  // Start from the tile closest to the middle, so the set is stable rather than wherever the
+  // scan happened to begin.
+  const cx = (w - 1) / 2, cy = (h - 1) / 2;
+  let best = 0;
+  for (let i = 1; i < open.length; i++) {
+    const a = open[i], b = open[best];
+    if (Math.abs(a[0] - cx) + Math.abs(a[1] - cy) < Math.abs(b[0] - cx) + Math.abs(b[1] - cy)) best = i;
+  }
+
+  const chosen = [open[best]];
+  const far = open.map(([x, y]) => Math.abs(x - chosen[0][0]) + Math.abs(y - chosen[0][1]));
+  while (chosen.length < 16 && chosen.length < open.length) {
+    let pick = 0;
+    for (let i = 1; i < open.length; i++) if (far[i] > far[pick]) pick = i;
+    chosen.push(open[pick]);
+    const [px0, py0] = open[pick];
+    for (let i = 0; i < open.length; i++) {
+      far[i] = Math.min(far[i], Math.abs(open[i][0] - px0) + Math.abs(open[i][1] - py0));
+    }
+  }
+  // Drop the centre seed if we found plenty: it is the one point that is near everybody.
+  return chosen.length > 8 ? chosen.slice(1).concat([chosen[0]]) : chosen;
 }
 
 export function buildMap(def) {
@@ -59,16 +180,27 @@ export function buildMap(def) {
       const t = legend[def.rows[y]?.[x]] ?? BLOCK.FLOOR;
       cells[at(x, y)] = packCell(t);
     }
-    return { ...def, cells, spawns: spawnPoints(w, h) };
+    return { ...def, cells, spawns: spawnPoints(cells, w, h) };
   }
 
   const next = rng(def.seed);
+  const land = landMask(def, next);
+  const isLand = (x, y) => x >= 0 && y >= 0 && x < w && y < h && land[y * w + x] === 1;
+
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       let type;
-      if (x === 0 || y === 0 || x === w - 1 || y === h - 1) type = BLOCK.IRON;
-      else if (x % 2 === 0 && y % 2 === 0) type = BLOCK.IRON;
-      else {
+      if (!isLand(x, y)) {
+        type = BLOCK.WATER;
+      } else if (x === 0 || y === 0 || x === w - 1 || y === h - 1) {
+        type = BLOCK.IRON;
+      } else if (!isLand(x - 1, y) || !isLand(x + 1, y) || !isLand(x, y - 1) || !isLand(x, y + 1)) {
+        // The shoreline. A ring of rock one tile thick, so the island has an edge you can take
+        // cover behind instead of a blast arm flying off into the sea.
+        type = BLOCK.IRON;
+      } else if (x % 2 === 0 && y % 2 === 0) {
+        type = BLOCK.IRON;
+      } else {
         const r = next();
         if (r > def.density) type = BLOCK.FLOOR;
         else if (r < def.density * def.shrubs) type = BLOCK.SHRUB_WALK;
@@ -79,14 +211,29 @@ export function buildMap(def) {
     }
   }
 
+  // Anything the coastline cut off from the main body is a sandbar nobody can reach. Drown it,
+  // rather than leaving an island with a perk on it that no player can ever collect.
+  let seed = -1;
+  for (let i = 0; i < cells.length && seed < 0; i++) if (cellType(cells[i]) === BLOCK.FLOOR) seed = i;
+  if (seed >= 0) {
+    const main = reachable(cells, w, h, seed);
+    for (let i = 0; i < cells.length; i++) {
+      const t = cellType(cells[i]);
+      if (t === BLOCK.IRON || t === BLOCK.WATER) continue;
+      if (!main.has(i)) cells[i] = packCell(BLOCK.WATER);
+    }
+  }
+
   // Clear a plus-shape around every spawn. Without this you can start boxed in, which on a
-  // 16-minute round is a genuinely bad first thirty seconds.
-  const spawns = spawnPoints(w, h);
+  // 16-minute round is a genuinely bad first thirty seconds. Spawns are picked from real floor,
+  // so this only ever clears soft walls — it can never punch a hole in the shoreline.
+  const spawns = spawnPoints(cells, w, h);
   for (const [sx, sy] of spawns) {
     for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [-2, 0], [0, 2], [0, -2]]) {
       const x = sx + dx, y = sy + dy;
       if (x < 1 || y < 1 || x > w - 2 || y > h - 2) continue;
-      if (cellType(cells[at(x, y)]) === BLOCK.IRON) continue;
+      const t = cellType(cells[at(x, y)]);
+      if (t === BLOCK.IRON || t === BLOCK.WATER) continue;
       cells[at(x, y)] = packCell(BLOCK.FLOOR);
     }
   }

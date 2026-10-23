@@ -1,44 +1,88 @@
-// Bomb Voyage — the soundtrack. Synthesised, no audio files anywhere in this project.
+// Bomb Voyage — the music. Synthesised, no audio files anywhere in this project.
 //
-// Eight bars at 77 BPM, built on I–V–vi–IV and its brighter cousin: major, open, and more
-// pleased with itself than the minor loop this started as. Two halves that differ, a lead that
-// only shows up in the second half, and a fill before the loop comes round, so sixteen minutes
-// of it does not drill a hole in anyone.
+// This module owns everything that counts as "the music": the main theme below, the three ambient
+// beds in ./ambient.js, and the cycling between them. They all sit behind one public surface, so
+// main.js still only ever says start / stop / toggle / setVolume / duck and never learns that
+// there is more than one track.
+//
+// The theme is eight bars at 116 BPM in two halves that do not sound alike.
+//
+// Bars 1-4 are a relaxed four-on-the-floor funk vamp: Am7 Cmaj7 Em7 D9 — a vi-I-iii-II shape —
+// over a bass that walks down A G E D, with a muted guitar chank on the offbeats and dry disco
+// hats. The major II at the end wants to go somewhere and the loop goes back to the Am7 instead,
+// which is what lets four bars repeat without ever sounding finished. There is no lead here and
+// no arpeggio: in funk the guitar is the movement, and anything else on top of it is clutter.
+//
+// Bars 5-8 are the older half, unchanged — C G F G, the three-octave arpeggio and the only
+// singable line in the project. Holding both back until bar 5 is what makes the melody an event
+// rather than something that was always there.
 //
 // Scheduling uses the standard look-ahead pattern — a timer that only ever queues notes a little
 // way into the future, with the AudioContext clock doing the actual timing. setTimeout per note
 // drifts audibly within seconds.
 
 import { VOLUME_MUSIC_DEFAULT } from '/shared/constants.js';
-import { audioContext, unlock, noiseSource } from './engine.js';
+import {
+  audioContext, createDelayLine, createMusicBus, envelope, hz, noiseSource, unlock,
+} from './engine.js';
+import { createAmbient } from './ambient.js';
 
-const BPM = 77;
+// 116 BPM, not the 77 this started at. The Get Lucky pocket only exists around here: a
+// four-on-the-floor at 77 is a funeral march, and putting the kick on the eighths instead makes
+// it 154, which is drum and bass. The back half is the same notes as before, just livelier.
+const BPM = 116;
+const SECONDS_PER_BEAT = 60 / BPM;
+const STEP_DUR = SECONDS_PER_BEAT / 4;
 const STEPS_PER_BAR = 16;          // sixteenth notes
 const BARS = 8;
 const TOTAL_STEPS = STEPS_PER_BAR * BARS;
+
 const LOOKAHEAD_S = 0.12;
 const TIMER_MS = 25;
 
-// C G Am F | C G F G. Major, and the last bar leans on the dominant so the loop pulls round
-// again instead of simply stopping and restarting.
+// Long enough to be a change of scene rather than a seam, short enough that nobody sits through
+// a track they cannot hear yet.
+const XFADE_S = 2.5;
+
+// `notes` is the pad and arpeggio voicing, `chank` the guitar cluster, and `bass` the root the
+// walking pattern is measured from. Sevenths and ninths rather than triads throughout the first
+// half: the maj7/min7 colour is most of what makes this read as funk instead of as rock.
 const CHORDS = [
-  { bass: 48, notes: [60, 64, 67] },   // C
-  { bass: 43, notes: [59, 62, 67] },   // G
-  { bass: 45, notes: [60, 64, 69] },   // Am
-  { bass: 41, notes: [60, 65, 69] },   // F
+  { bass: 45, notes: [60, 64, 67], chank: [64, 67, 72] },   // Am7
+  { bass: 43, notes: [64, 67, 71], chank: [64, 67, 71] },   // Cmaj7
+  { bass: 40, notes: [62, 67, 71], chank: [62, 67, 71] },   // Em7
+  { bass: 38, notes: [66, 69, 76], chank: [64, 66, 69] },   // D9
   { bass: 48, notes: [60, 64, 67] },   // C
   { bass: 43, notes: [59, 62, 67] },   // G
   { bass: 41, notes: [60, 65, 69] },   // F
   { bass: 43, notes: [62, 67, 71] },   // G, voiced high to lift into the repeat
 ];
 
-// A full arpeggio runs the chord across three octaves rather than noodling on three notes.
-// Pattern A climbs; pattern B climbs and comes back down, so the two halves of the loop move
-// differently without needing different harmony.
-const ARP_UP = [0, 1, 2, 3, 4, 5, 6, 7, 8, 7, 6, 5, 4, 3, 2, 1];
+// Semitones above the bar's root; null is a rest. The root lands on the downbeat and then the
+// line leaves it alone — a disco bass that sits on the root turns the groove into a march. The
+// last bar climbs 9-7-5-4 so the loop is pulled back round to the Am7 rather than stopping.
+const FUNK_BASS = [
+  [0, null, null, 0, null, null, 12, null, null, 7, null, null, 10, null, 0, null],
+  [0, null, null, 0, null, 12, null, null, 7, null, null, 4, null, null, 0, null],
+  [0, null, null, 0, null, null, 12, null, null, 10, null, 7, null, null, 0, null],
+  [0, null, null, 0, null, 12, null, null, 9, null, null, 7, null, 5, null, 4],
+];
+
+// Where the guitar chank lands. Never on a downbeat — step 0, 4, 8 and 12 belong to the kick, and
+// a chank on top of one stops being an offbeat and becomes a chord stab. The gaps carry this
+// pattern more than the hits do; filling them in is what turns funk into strumming.
+const CHANK = [
+  [0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 1, 0],
+  [0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 1, 0],
+  [0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 0],
+  [0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0, 1],
+];
+
+// Back half only. A full arpeggio runs the chord across three octaves rather than noodling on
+// three notes; this one climbs and comes back down.
 const ARP_ROLL = [0, 2, 4, 6, 8, 6, 7, 5, 3, 1, 2, 4, 6, 4, 2, 1];
 
-// A simple singable line over the back half. Nulls are rests — a melody needs to breathe.
+// Back half only. Nulls are rests — a melody needs to breathe.
 const LEAD = [
   76, null, 74, null, 72, null, null, 74,
   76, null, 79, null, 76, null, null, null,
@@ -46,13 +90,198 @@ const LEAD = [
   74, null, 72, null, 67, null, null, null,
 ];
 
-const hz = midi => 440 * Math.pow(2, (midi - 69) / 12);
+/**
+ * The main theme as a track: same shape as an ambient bed, so one sequencer drives either.
+ */
+function createTheme({ bus }) {
+  const ctx = audioContext();
+
+  const gain = ctx.createGain();
+  gain.gain.value = 0;
+  gain.connect(bus);
+
+  const delay = createDelayLine(SECONDS_PER_BEAT * 0.75, gain);
+
+  function bass(t, note, dur) {
+    const o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.value = hz(note);
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(900, t);
+    f.frequency.exponentialRampToValueAtTime(260, t + dur);
+    f.Q.value = 6;
+    envelope(g, t, { a: 0.006, d: 0.08, s: 0.7, hold: dur * 0.5, r: 0.09, peak: 0.26 });
+    o.connect(f);
+    f.connect(g);
+    g.connect(gain);
+    o.start(t);
+    o.stop(t + dur + 0.25);
+  }
+
+  function pad(t, notes, dur) {
+    const f = ctx.createBiquadFilter(), g = ctx.createGain();
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(800, t);
+    f.frequency.linearRampToValueAtTime(1700, t + dur * 0.6);
+    f.frequency.linearRampToValueAtTime(800, t + dur);
+    f.Q.value = 2;
+    envelope(g, t, { a: dur * 0.3, d: 0.1, s: 0.9, hold: dur * 0.4, r: dur * 0.4, peak: 0.07 });
+    for (const n of notes) {
+      for (const detune of [-7, 7]) {
+        const o = ctx.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.value = hz(n);
+        o.detune.value = detune;
+        o.connect(f);
+        o.start(t);
+        o.stop(t + dur + 0.6);
+      }
+    }
+    f.connect(g);
+    g.connect(gain);
+  }
+
+  /**
+   * The muted funk guitar — the "chank". Three things make it, and all three are load-bearing:
+   * a 40 ms gate, a high-Q band around 1.9 kHz, and no body underneath. Lengthen the envelope and
+   * it becomes a pad; drop the Q and it becomes a synth stab; keep the low end and it fights the
+   * bass. It deliberately does not feed the delay, because a dotted-eighth echo on a sixteenth
+   * note pattern this dense is mud.
+   */
+  function chank(t, notes) {
+    const f = ctx.createBiquadFilter(), g = ctx.createGain();
+    f.type = 'bandpass';
+    f.frequency.value = 1900;
+    f.Q.value = 5;
+    envelope(g, t, { a: 0.004, d: 0.042, peak: 0.1 });
+    for (const [i, n] of notes.entries()) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = hz(n);
+      // A few cents apart so the cluster sounds plucked rather than pressed by a machine.
+      o.detune.value = (i - 1) * 7;
+      o.connect(f);
+      o.start(t);
+      o.stop(t + 0.09);
+    }
+    f.connect(g);
+    g.connect(gain);
+  }
+
+  function arp(t, note, level = 0.045) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'square';
+    o.frequency.value = hz(note);
+    envelope(g, t, { a: 0.003, d: 0.14, peak: level });
+    o.connect(g);
+    g.connect(gain);
+    g.connect(delay);
+    o.start(t);
+    o.stop(t + 0.25);
+  }
+
+  function lead(t, note) {
+    const o = ctx.createOscillator(), o2 = ctx.createOscillator();
+    const f = ctx.createBiquadFilter(), g = ctx.createGain();
+    o.type = 'triangle';
+    o2.type = 'sawtooth';
+    o.frequency.value = hz(note);
+    o2.frequency.value = hz(note);
+    o2.detune.value = 8;
+    f.type = 'lowpass';
+    f.frequency.value = 2600;
+    envelope(g, t, { a: 0.02, d: 0.1, s: 0.8, hold: 0.18, r: 0.22, peak: 0.075 });
+    o.connect(f);
+    o2.connect(f);
+    f.connect(g);
+    g.connect(gain);
+    g.connect(delay);
+    o.start(t);
+    o2.start(t);
+    o.stop(t + 0.7);
+    o2.stop(t + 0.7);
+  }
+
+  function kick(t) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(130, t);
+    o.frequency.exponentialRampToValueAtTime(42, t + 0.11);
+    envelope(g, t, { a: 0.002, d: 0.18, peak: 0.42 });
+    o.connect(g);
+    g.connect(gain);
+    o.start(t);
+    o.stop(t + 0.3);
+  }
+
+  function snare(t, level = 0.12) {
+    const s = noiseSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    f.type = 'bandpass';
+    f.frequency.value = 1900;
+    f.Q.value = 0.9;
+    envelope(g, t, { a: 0.002, d: 0.16, peak: level });
+    s.connect(f);
+    f.connect(g);
+    g.connect(gain);
+    s.start(t);
+    s.stop(t + 0.3);
+  }
+
+  function hat(t, open) {
+    const s = noiseSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    f.type = 'highpass';
+    f.frequency.value = 7000;
+    envelope(g, t, { a: 0.001, d: open ? 0.1 : 0.03, peak: 0.035 });
+    s.connect(f);
+    f.connect(g);
+    g.connect(gain);
+    s.start(t);
+    s.stop(t + 0.2);
+  }
+
+  function schedule(s, t) {
+    const bar = Math.floor(s / STEPS_PER_BAR);
+    const n = s % STEPS_PER_BAR;
+    const chord = CHORDS[bar];
+    const funk = bar < 4;
+
+    if (n === 0) pad(t, chord.notes, STEP_DUR * STEPS_PER_BAR);
+
+    // Four on the floor through the whole loop. It is the one thing both halves share, which is
+    // what keeps a funk vamp and a synthwave arpeggio sounding like the same piece of music.
+    if (n % 4 === 0) kick(t);
+    if (n === 4 || n === 12) snare(t, funk ? 0.085 : 0.12);
+
+    if (funk) {
+      // Closed hats on the eighths, open on the "and" of 4. In disco the hats are the clock, so
+      // they stay dry and quiet; the open one is the only thing in the bar that says "turnaround".
+      if (n % 2 === 0) hat(t, n === 14);
+      const walk = FUNK_BASS[bar][n];
+      if (walk !== null) bass(t, chord.bass + walk, STEP_DUR * 1.4);
+      if (CHANK[bar][n]) chank(t, chord.chank);
+    } else {
+      if (n % 2 === 1) hat(t, n === 7 || n === 15);
+      if (n % 2 === 0) bass(t, chord.bass + (n === 6 || n === 14 ? 12 : 0), STEP_DUR * 1.6);
+      const idx = ARP_ROLL[n];
+      arp(t, chord.notes[idx % 3] + Math.floor(idx / 3) * 12);
+      const note = LEAD[(bar - 4) * 8 + (n >> 1)];
+      if (note && n % 2 === 0) lead(t, note);
+    }
+
+    // A fill at the end of each half, so the loop has a shape instead of a seam.
+    if ((bar === 3 || bar === 7) && n >= 12) snare(t, 0.05 + (n - 12) * 0.03);
+  }
+
+  // Four times through is about seventy seconds, which is long enough to be the track you
+  // remember and short enough that the beds get most of the round.
+  return { name: 'theme', steps: TOTAL_STEPS, stepDur: STEP_DUR, repeats: 4, gain, schedule };
+}
 
 export function createMusic() {
-  let ctx = null, timer = null, step = 0, nextTime = 0;
-  let master, musicGain, comp, delay, delayFb, delayMix;
+  let ctx = null, timer = null, tracks = null, musicGain = null;
+  let step = 0, loops = 0, current = 0, nextTime = 0;
   let volume = readVolume();
-  let playing = false;
+  let playing = false, ducked = false;
 
   function readVolume() {
     const v = parseFloat(localStorage.getItem('bv.music'));
@@ -63,184 +292,71 @@ export function createMusic() {
     // Shared with the sound effects. One context, so one user gesture unlocks both and turning
     // the music off cannot take the sound effects down with it.
     ctx = audioContext();
-
-    // A gentle limiter on the end of the chain. Five voices plus a delay stack up, and clipping
-    // is the fastest way to make a soft loop sound nasty.
-    comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -12;
-    comp.ratio.value = 6;
-    comp.attack.value = 0.004;
-    comp.release.value = 0.25;
-
-    master = ctx.createGain();
-    master.gain.value = 1;
-    musicGain = ctx.createGain();
-    musicGain.gain.value = volume;
-
-    musicGain.connect(comp);
-    comp.connect(master);
-    master.connect(ctx.destination);
-
-    // Dotted-eighth feedback delay: the sound that makes an arpeggio feel like synthwave.
-    delay = ctx.createDelay(1);
-    delay.delayTime.value = (60 / BPM) * 0.75;
-    delayFb = ctx.createGain();
-    delayFb.gain.value = 0.34;
-    delayMix = ctx.createGain();
-    delayMix.gain.value = 0.5;
-    delay.connect(delayFb);
-    delayFb.connect(delay);
-    delay.connect(delayMix);
-    delayMix.connect(musicGain);
+    musicGain = createMusicBus(volume);
+    // The theme is first because start() always comes back to the top, and the track somebody
+    // turned off is the one they expect back when they turn it on again.
+    tracks = [createTheme({ bus: musicGain }), ...createAmbient({ bus: musicGain })];
   }
 
-  // ─── voices ─────────────────────────────────────────────────────────────────
+  /**
+   * The one place the music bus gain is ever written.
+   *
+   * It used to be three places, and they did not agree. stop() ramped to zero, start() never put
+   * it back, and setVolume and duck were both gated on `playing` so neither rescued it: toggling
+   * the music off and on gave you a button that said "on" and silence for the rest of the
+   * session, because a setTargetAtTime whose startTime is already in the past keeps decaying
+   * until some later automation event replaces it. Routing every writer through here also means
+   * `ducked` survives a restart, instead of coming back at full volume while the chat box still
+   * has focus.
+   */
+  function applyGain(tc = 0.05) {
+    if (!musicGain) return;
+    // Silence while stopped is deliberate, not a fallthrough. Each track's delay line rings for
+    // about two seconds after its last note, and moving the slider must not un-mute that tail
+    // once the user has explicitly turned the music off.
+    const target = playing ? volume * (ducked ? 0.4 : 1) : 0;
+    musicGain.gain.setTargetAtTime(target, ctx.currentTime, tc);
+  }
 
-  function env(node, t, { a = 0.005, d = 0.1, s = 0, r = 0.1, peak = 1, hold = 0 }) {
-    const g = node.gain;
-    g.setValueAtTime(0.0001, t);
-    g.exponentialRampToValueAtTime(peak, t + a);
-    if (s > 0) {
-      g.exponentialRampToValueAtTime(Math.max(0.0001, peak * s), t + a + d);
-      g.setValueAtTime(Math.max(0.0001, peak * s), t + a + d + hold);
-      g.exponentialRampToValueAtTime(0.0001, t + a + d + hold + r);
-    } else {
-      g.exponentialRampToValueAtTime(0.0001, t + a + d);
+  /**
+   * Crossfade rather than cut. The outgoing track stops scheduling at the boundary but its pad
+   * releases and its delay tail keep sounding through its own fader, which is the overlap — so a
+   * track change is a change of scene and not an edit.
+   */
+  function crossfade(at) {
+    const from = tracks[current].gain.gain;
+    current = (current + 1) % tracks.length;
+    const to = tracks[current].gain.gain;
+    loops = 0;
+    for (const [p, target] of [[from, 0], [to, 1]]) {
+      // Anchored at `at` rather than at currentTime: the fade belongs to the loop boundary, and
+      // the boundary is up to LOOKAHEAD_S in the future when we get here.
+      p.setValueAtTime(p.value, at);
+      p.linearRampToValueAtTime(target, at + XFADE_S);
     }
   }
 
-  function bass(t, note, dur) {
-    const o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
-    o.type = 'sawtooth';
-    o.frequency.value = hz(note);
-    f.type = 'lowpass';
-    f.frequency.setValueAtTime(900, t);
-    f.frequency.exponentialRampToValueAtTime(260, t + dur);
-    f.Q.value = 6;
-    env(g, t, { a: 0.006, d: 0.08, s: 0.7, hold: dur * 0.5, r: 0.09, peak: 0.26 });
-    o.connect(f); f.connect(g); g.connect(musicGain);
-    o.start(t); o.stop(t + dur + 0.25);
-  }
-
-  function pad(t, notes, dur) {
-    const f = ctx.createBiquadFilter(), g = ctx.createGain();
-    f.type = 'lowpass';
-    f.frequency.setValueAtTime(800, t);
-    f.frequency.linearRampToValueAtTime(1700, t + dur * 0.6);
-    f.frequency.linearRampToValueAtTime(800, t + dur);
-    f.Q.value = 2;
-    env(g, t, { a: dur * 0.3, d: 0.1, s: 0.9, hold: dur * 0.4, r: dur * 0.4, peak: 0.07 });
-    for (const n of notes) {
-      for (const detune of [-7, 7]) {
-        const o = ctx.createOscillator();
-        o.type = 'sawtooth';
-        o.frequency.value = hz(n);
-        o.detune.value = detune;
-        o.connect(f);
-        o.start(t); o.stop(t + dur + 0.6);
-      }
-    }
-    f.connect(g); g.connect(musicGain);
-  }
-
-  function arp(t, note, gain = 0.055) {
-    const o = ctx.createOscillator(), g = ctx.createGain();
-    o.type = 'square';
-    o.frequency.value = hz(note);
-    env(g, t, { a: 0.003, d: 0.14, peak: gain });
-    o.connect(g);
-    g.connect(musicGain);
-    g.connect(delay);
-    o.start(t); o.stop(t + 0.25);
-  }
-
-  function lead(t, note) {
-    const o = ctx.createOscillator(), o2 = ctx.createOscillator();
-    const f = ctx.createBiquadFilter(), g = ctx.createGain();
-    o.type = 'triangle'; o2.type = 'sawtooth';
-    o.frequency.value = hz(note);
-    o2.frequency.value = hz(note);
-    o2.detune.value = 8;
-    f.type = 'lowpass'; f.frequency.value = 2600;
-    env(g, t, { a: 0.02, d: 0.1, s: 0.8, hold: 0.18, r: 0.22, peak: 0.075 });
-    o.connect(f); o2.connect(f); f.connect(g);
-    g.connect(musicGain); g.connect(delay);
-    o.start(t); o2.start(t);
-    o.stop(t + 0.7); o2.stop(t + 0.7);
-  }
-
-  function kick(t) {
-    const o = ctx.createOscillator(), g = ctx.createGain();
-    o.type = 'sine';
-    o.frequency.setValueAtTime(130, t);
-    o.frequency.exponentialRampToValueAtTime(42, t + 0.11);
-    env(g, t, { a: 0.002, d: 0.18, peak: 0.42 });
-    o.connect(g); g.connect(musicGain);
-    o.start(t); o.stop(t + 0.3);
-  }
-
-  const noise = noiseSource;   // engine.js owns the buffer; the sfx bus shares it
-
-  function snare(t, gain = 0.12) {
-    const s = noise(), f = ctx.createBiquadFilter(), g = ctx.createGain();
-    f.type = 'bandpass'; f.frequency.value = 1900; f.Q.value = 0.9;
-    env(g, t, { a: 0.002, d: 0.16, peak: gain });
-    s.connect(f); f.connect(g); g.connect(musicGain);
-    s.start(t); s.stop(t + 0.3);
-  }
-
-  function hat(t, open) {
-    const s = noise(), f = ctx.createBiquadFilter(), g = ctx.createGain();
-    f.type = 'highpass'; f.frequency.value = 7000;
-    env(g, t, { a: 0.001, d: open ? 0.1 : 0.03, peak: 0.035 });
-    s.connect(f); f.connect(g); g.connect(musicGain);
-    s.start(t); s.stop(t + 0.2);
-  }
-
-  // ─── sequencer ──────────────────────────────────────────────────────────────
-
-  const stepDur = () => 60 / BPM / 4;
-
-  function playStep(s, t) {
-    const bar = Math.floor(s / STEPS_PER_BAR);
-    const n = s % STEPS_PER_BAR;
-    const chord = CHORDS[bar];
-    const d = stepDur();
-    const secondHalf = bar >= 4;
-
-    if (n === 0) pad(t, chord.notes, d * STEPS_PER_BAR);
-
-    if (n % 4 === 0) kick(t);
-    if (n === 4 || n === 12) snare(t);
-    if (n % 2 === 1) hat(t, n === 7 || n === 15);
-
-    // A fill at the end of each half, so the loop has a shape instead of a seam.
-    if ((bar === 3 || bar === 7) && n >= 12) snare(t, 0.05 + (n - 12) * 0.03);
-
-    if (n % 2 === 0) {
-      const up = n === 6 || n === 14;
-      bass(t, chord.bass + (up ? 12 : 0), d * 1.6);
-    }
-
-    // The arpeggio walks the chord across three octaves. Pattern changes at the halfway point.
-    const pattern = secondHalf ? ARP_ROLL : ARP_UP;
-    const idx = pattern[n];
-    if (idx !== undefined) {
-      const octave = Math.floor(idx / 3);
-      arp(t, chord.notes[idx % 3] + octave * 12, secondHalf ? 0.045 : 0.055);
-    }
-
-    if (secondHalf) {
-      const note = LEAD[(bar - 4) * 8 + (n >> 1)];
-      if (note && n % 2 === 0) lead(t, note);
+  /** Back to the theme, at full, with the other faders down and no pending ramps left over. */
+  function resetFaders() {
+    current = 0;
+    for (const [i, track] of tracks.entries()) {
+      const p = track.gain.gain;
+      p.cancelScheduledValues(ctx.currentTime);
+      p.setValueAtTime(i === 0 ? 1 : 0, ctx.currentTime);
     }
   }
 
   function scheduler() {
+    // tracks[current] is read fresh every iteration because crossfade() changes it mid-loop, and
+    // the step duration of the track we are moving to is not the one we came from.
     while (nextTime < ctx.currentTime + LOOKAHEAD_S) {
-      playStep(step, nextTime);
-      nextTime += stepDur();
-      step = (step + 1) % TOTAL_STEPS;
+      const track = tracks[current];
+      track.schedule(step, nextTime);
+      nextTime += track.stepDur;
+      if (++step >= track.steps) {
+        step = 0;
+        if (++loops >= track.repeats) crossfade(nextTime);
+      }
     }
   }
 
@@ -250,15 +366,21 @@ export function createMusic() {
     get playing() { return playing; },
     get volume() { return volume; },
 
+    /** Which of the four tracks is current. Diagnostics only; nothing in the game reads it. */
+    get track() { return tracks ? tracks[current].name : null; },
+
     /** Must be called from a user gesture the first time — browsers block audio otherwise. */
     async start() {
       if (playing) return true;
       if (!ctx) build();
       if (!await unlock()) return false;
+      playing = true;
+      applyGain();
       step = 0;
+      loops = 0;
+      resetFaders();
       nextTime = ctx.currentTime + 0.08;
       timer = setInterval(scheduler, TIMER_MS);
-      playing = true;
       return true;
     },
 
@@ -266,21 +388,23 @@ export function createMusic() {
       clearInterval(timer);
       timer = null;
       playing = false;
-      if (musicGain) musicGain.gain.setTargetAtTime(0, ctx.currentTime, 0.05);
+      applyGain();
     },
 
     async toggle() { return playing ? (this.stop(), false) : this.start(); },
 
     setVolume(v) {
+      // An empty slider reads as NaN, and NaN in an AudioParam throws and takes the chain down.
+      if (!Number.isFinite(v)) return;
       volume = Math.min(1, Math.max(0, v));
       localStorage.setItem('bv.music', String(volume));
-      if (musicGain && playing) musicGain.gain.setTargetAtTime(volume, ctx.currentTime, 0.05);
+      applyGain();
     },
 
     /** Ducked while chat is focused, per docs/ART-AUDIO.md §6. */
     duck(on) {
-      if (!musicGain || !playing) return;
-      musicGain.gain.setTargetAtTime(volume * (on ? 0.4 : 1), ctx.currentTime, 0.08);
+      ducked = !!on;
+      applyGain(0.08);
     },
   };
 }

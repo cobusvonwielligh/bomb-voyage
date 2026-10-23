@@ -8,14 +8,9 @@
  */
 
 @font-face {
-  font-family: 'Pixel Game';
-  src: url('/assets/pixel-game.otf') format('opentype');
+  font-family: 'Shotling';
+  src: url('/assets/shotling.ttf') format('truetype');
   font-display: block;        /* no flash of fallback on the title; it is the first thing seen */
-}
-@font-face {
-  font-family: 'Pixel Game Extrude';
-  src: url('/assets/pixel-game-extrude.otf') format('opentype');
-  font-display: block;
 }
 
 :root {
@@ -28,7 +23,7 @@
   --good: #5ad1a0;
 
   /* The display face, for large type only. */
-  --display: 'Pixel Game', 'Pixel Game Extrude', ui-monospace, monospace;
+  --display: 'Shotling', ui-monospace, monospace;
   /* Condensed humanist sans for anything you read mid-round. Falls back the whole way down. */
   --text: 'Bahnschrift', 'DIN Alternate', 'Avenir Next Condensed', 'Segoe UI Semibold',
           'Helvetica Neue', system-ui, sans-serif;
@@ -45,15 +40,39 @@ html, body {
   letter-spacing: .02em;
 }
 
+/* ─── layout ──────────────────────────────────────────────────────────────────
+ * Three fixed regions: a banner across the top, the board, and a side panel. The board gets
+ * whatever is left, and the renderer scales the map to fit it exactly — so there are no black
+ * bars and the whole island is on screen at once.
+ */
+
+:root { --bar: 44px; --side: 340px; --gap: 10px; }
+
 canvas#game {
-  position: fixed; inset: 0; width: 100%; height: 100%; display: block;
+  position: fixed;
+  top: calc(var(--bar) + var(--gap) * 2);
+  left: var(--gap);
+  right: calc(var(--side) + var(--gap) * 2);
+  bottom: var(--gap);
+  width: auto; height: auto; display: block;
   image-rendering: pixelated;
+  border-radius: 8px;
+}
+
+/* Below this the side panel costs more than it gives: drop it, and let the board have the lot. */
+@media (max-width: 1080px) {
+  :root { --side: 0px; }
+  #side { display: none; }
+  canvas#game { right: var(--gap); }
 }
 
 /* ─── the moving gradient ─────────────────────────────────────────────────────
  * One animated conic gradient, reused by every panel that wants a live border and by the hovered
  * menu text. Implemented as a padding-box/border-box mask rather than a pseudo-element, so the
  * border follows the border-radius exactly and costs one compositor layer instead of two.
+ *
+ * The stops are the palette's hues at half saturation. At full saturation a rainbow border is
+ * the brightest thing on screen, and the brightest thing on screen should be a player or a fire.
  */
 
 @property --spin { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
@@ -66,7 +85,7 @@ canvas#game {
   background:
     linear-gradient(var(--panel-fill, #11161ee6), var(--panel-fill, #11161ee6)) padding-box,
     conic-gradient(from var(--spin),
-      #ffd21f, #ff7a3d, #e8655a, #b36bff, #4fb3ff, #5ad1a0, #ffd21f) border-box;
+      #c7b057, #ce8c6e, #c4837e, #b490da, #7badd3, #78b39b, #c7b057) border-box;
   animation: spin 7s linear infinite;
 }
 
@@ -85,15 +104,16 @@ canvas#game {
  * the screen under the chat where nobody looked at it.
  */
 
-#hud {
-  position: fixed; inset: 0; display: none; pointer-events: none; z-index: 5;
-  flex-direction: column; justify-content: space-between;
-}
+#hud { display: none; }
+#hud.on { display: block; }
 
 #topbar {
   --panel-fill: #0d1117d9;
-  pointer-events: auto;
-  margin: 8px 10px 0;
+  position: fixed;
+  top: var(--gap); left: var(--gap);
+  right: calc(var(--side) + var(--gap) * 2);
+  height: var(--bar);
+  z-index: 5;
   border-radius: 10px;
   backdrop-filter: blur(10px) saturate(1.3);
   -webkit-backdrop-filter: blur(10px) saturate(1.3);
@@ -184,20 +204,63 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 .iconBtn.bug:hover { color: var(--bad); border-color: #e8655a55; background: #e8655a18; }
 .iconBtn svg { width: 15px; height: 15px; display: block; }
 
-/* ─── chat ────────────────────────────────────────────────────────────────────── */
+/* ─── side panel ──────────────────────────────────────────────────────────────
+ * Who you are, who is winning, and the chat — in the space the board does not need. Everything
+ * here is glanceable between bombs, which is why the live standings live here rather than behind
+ * a key you have to hold down.
+ */
 
-#chat {
-  --panel-fill: #0d1117c4;
-  pointer-events: auto;
-  width: 360px; margin: 0 0 10px 10px;
-  border-radius: 10px; padding: 8px;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  box-shadow: 0 6px 24px #0008;
+#side {
+  --panel-fill: #0d1117d4;
+  position: fixed; z-index: 5;
+  top: var(--gap); right: var(--gap); bottom: var(--gap);
+  width: var(--side);
+  border-radius: 10px; padding: 12px;
+  display: flex; flex-direction: column; gap: 12px;
+  backdrop-filter: blur(10px) saturate(1.2);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  box-shadow: 0 6px 28px #0009;
 }
+
+#card { border-bottom: 1px solid #ffffff14; padding-bottom: 11px; }
+#who {
+  font-family: var(--display); font-size: 17px; color: var(--gold);
+  text-shadow: 0 2px 0 #0008; letter-spacing: .06em; display: block;
+}
+#rank {
+  display: block; color: var(--dim); font-size: 10px;
+  text-transform: uppercase; letter-spacing: .2em; margin-top: 3px;
+}
+#cardStats {
+  display: flex; gap: 16px; margin-top: 9px;
+  font-family: var(--nums); font-variant-numeric: tabular-nums; font-size: 13px;
+}
+#cardStats .k {
+  color: var(--dim); font-size: 9px; text-transform: uppercase;
+  letter-spacing: .14em; font-family: var(--text); margin-right: 4px;
+}
+
+.panelHead {
+  margin: 0 0 7px; font-size: 9.5px; font-weight: normal; color: var(--dim);
+  text-transform: uppercase; letter-spacing: .22em;
+}
+
+#liveRows { list-style: none; margin: 0; padding: 0; font-size: 12.5px; }
+#liveRows li {
+  display: flex; align-items: baseline; gap: 7px; padding: 2px 0;
+  font-variant-numeric: tabular-nums;
+}
+#liveRows .pos { color: var(--dim); width: 1.2em; font-family: var(--nums); font-size: 11px; }
+#liveRows .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#liveRows .kd { color: var(--dim); font-family: var(--nums); font-size: 11px; }
+#liveRows .sc { font-family: var(--nums); color: var(--ink); }
+#liveRows li.me { font-weight: 700; }
+#liveRows li.out .nm { opacity: .45; }
+
+#chat { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 #chatList {
-  list-style: none; margin: 0 0 6px; padding: 0 2px;
-  max-height: 168px; overflow-y: auto; font-size: 12.5px;
+  list-style: none; margin: 0 0 7px; padding: 0 2px;
+  flex: 1; min-height: 0; overflow-y: auto; font-size: 12.5px;
   scrollbar-width: thin;
 }
 #chatList li { padding: 1px 0; }
@@ -260,7 +323,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 
 .card {
   --panel-fill: #141b24f2;
-  border-radius: 12px; padding: 28px 34px; width: 430px; position: relative;
+  border-radius: 14px; padding: 36px 42px; width: 520px; position: relative;
   box-shadow: 0 0 70px #6b21a844, 0 18px 50px #000a;
 }
 .card.small { width: 340px; text-align: center; }
@@ -297,22 +360,25 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   background: radial-gradient(120% 90% at 50% 0%, #1b1430 0%, #0d1117 60%);
 }
 
-/* The mascot sits clear to the right of the card rather than on top of it — he was standing on
- * the title. At narrow widths he is dropped entirely; he is decoration. */
-#menuWrap { display: flex; align-items: center; gap: 4px; }
+/* The mascot leans on the top-right corner of the card: lifted so his feet just break the edge,
+ * and clear of the title, which he used to stand on. At narrow widths he is dropped entirely —
+ * he is decoration, and the card is not. */
+#menuWrap { display: flex; align-items: flex-start; }
 #mascot {
-  width: 192px; height: 192px; image-rendering: pixelated;
-  pointer-events: none; filter: drop-shadow(0 10px 20px #000b);
-  margin-left: -12px;
+  width: 240px; height: 240px; image-rendering: pixelated;
+  pointer-events: none; filter: drop-shadow(0 12px 22px #000c);
+  margin: -56px 0 0 -54px;
+  position: relative; z-index: 1;
 }
-@media (max-width: 820px) { #mascot { display: none; } }
+@media (max-width: 920px) { #mascot { display: none; } }
 
 h1 {
   font-family: var(--display);
-  color: var(--gold); font-size: 34px; letter-spacing: .1em; text-transform: uppercase;
-  margin: 0 0 6px; text-shadow: 0 3px 0 #0009, 0 0 30px #ffd21f55;
+  color: var(--gold); font-size: 46px; line-height: 1.05; letter-spacing: .06em;
+  text-transform: uppercase;
+  margin: 0 0 10px; text-shadow: 0 4px 0 #0009, 0 0 34px #ffd21f55;
 }
-.sub { color: var(--dim); margin: 0 0 24px; font-size: 12.5px; letter-spacing: .06em; }
+.sub { color: var(--dim); margin: 0 0 26px; font-size: 13px; letter-spacing: .06em; }
 
 label {
   display: block; color: var(--dim); font-size: 10px; letter-spacing: .18em;
@@ -326,8 +392,8 @@ input[type=text] {
 input[type=text]:focus { outline: none; border-color: var(--gold); }
 
 #play {
-  width: 100%; margin-top: 18px; padding: 13px; font-size: 15px; letter-spacing: .22em;
-  font-family: var(--display);
+  width: 100%; margin-top: 22px; padding: 16px; font-size: 30px; letter-spacing: .18em;
+  font-family: var(--display); line-height: 1;
 }
 
 /* Hovering runs the same conic gradient through the glyphs themselves: the text is painted by the
@@ -337,7 +403,7 @@ input[type=text]:focus { outline: none; border-color: var(--gold); }
  * it gives up its solid fill and becomes outlined gradient type instead. */
 .hoverFlow:hover, .hoverFlow:focus-visible {
   background: conic-gradient(from var(--spin),
-    #ffd21f, #ff7a3d, #e8655a, #b36bff, #4fb3ff, #5ad1a0, #ffd21f);
+    #c7b057, #ce8c6e, #c4837e, #b490da, #7badd3, #78b39b, #c7b057);
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; color: transparent;
   text-shadow: none;

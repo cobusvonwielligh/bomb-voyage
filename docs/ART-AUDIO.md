@@ -171,6 +171,16 @@ All synthesised with WebAudio. No files.
 `public/client/audio/engine.js`. Two contexts means the second never unlocks, and hanging the
 effects off the music's context means muting the music mutes the game.
 
+**`VOLUME_MASTER` (`0.5`) is a trim node, not a default.** It is applied in `engine.js`, in both
+`createBus` and `createMusicBus`, on a gain node of its own *after* the limiter and *downstream of
+the slider*. Three reasons it has to be there and nowhere else:
+
+- A **default** only ever reaches somebody with no stored slider value. Everybody who has already
+  played has one in `localStorage`, so halving the defaults would do nothing for them.
+- Downstream of the volume node means **no slider can scale back past it**.
+- After the limiter, because trimming *before* it lets peaks that used to be squashed through
+  untouched — the mix then gets quieter by rather less than the trim claims.
+
 ### SFX
 
 Implemented in `public/client/audio/sfx.js`. Each voice is a function that schedules itself; the
@@ -220,14 +230,92 @@ refused — dead, pacifist, out of bombs, tile occupied — so it is honest rath
 
 ### Music
 
-Three loops, one per map, 8–16 bars, ~100 BPM, four voices max: bass pulse, arpeggio, lead,
-noise percussion. Build them as a note array plus a scheduler that queues ~200 ms ahead — never
-`setTimeout` per note.
+**Four tracks, one module, one public surface.** `createMusic()` in
+`public/client/audio/music.js` owns the main theme, the three ambient beds in
+`public/client/audio/ambient.js`, and the cycling between them. `main.js` only ever says
+`start` / `stop` / `toggle` / `setVolume` / `duck` and never learns that more than one track
+exists — adding a fifth track must not touch anything outside `audio/`.
 
-Keep them *soft and repetitive by design*. The real acceptance test is listening to one for a
-full 16-minute round without wanting to mute it. If you would mute it, it is too busy.
+Every track is the same shape — `{ name, steps, stepDur, repeats, gain, schedule(step, time) }` —
+so one sequencer drives all four. Scheduling is the standard look-ahead pattern: a 25 ms timer
+that only ever queues notes ~120 ms into the future, with the AudioContext clock doing the real
+timing. **Never `setTimeout` per note** — it drifts audibly within seconds.
 
-Duck music to 40 % while chat is focused.
+#### The main theme — 8 bars, 116 BPM, two halves that do not sound alike
+
+| | Bars 1–4 | Bars 5–8 |
+|---|---|---|
+| Feel | relaxed four-on-the-floor funk | synthwave |
+| Harmony | Am7 Cmaj7 Em7 D9 (vi–I–iii–II) | C G F G |
+| Bass | walks down A–G–E–D, syncopated, root only on the downbeat | eighths, octave up on the "and" |
+| Top | muted guitar chank on the offbeats | three-octave arpeggio |
+| Hats | closed on the eighths, open on the "and" of 4 | offbeat sixteenths |
+| Lead | none | the only singable line in the project |
+
+The **major II** at the end of bar 4 wants to resolve and the loop goes back to the Am7 instead.
+That is what lets four bars repeat without ever sounding finished. The arpeggio *and* the lead are
+both held back until bar 5, so the melody arriving is an event rather than something that was
+always there.
+
+The **chank** is the one voice worth being careful with: a band-passed sawtooth cluster, 40 ms
+gate, Q of 5 around 1.9 kHz, no body underneath, and no send to the delay. Lengthen the envelope
+and it becomes a pad; drop the Q and it becomes a synth stab; keep the low end and it fights the
+bass.
+
+116 BPM, not the 77 this started at, because the pocket only exists around there — a
+four-on-the-floor at 77 is a funeral march, and putting the kick on the eighths instead makes it
+154, which is drum and bass. The **dotted-eighth delay time is derived from `BPM`**; if you change
+the tempo it has to follow or the echo desyncs.
+
+#### The three ambient beds — in-game atmosphere
+
+Each is 12–16 bars, 50–64 BPM, and audibly its own thing:
+
+| Bed | Key / character | Why it is different |
+|---|---|---|
+| `drift` | C major, airy — Cmaj9 Fmaj7 Am9 G6 | triangle waves, 3.2 kHz cutoff, sits well above the gameplay |
+| `suspend` | A/D/E **sus**, unresolved — not one third in it | sine, 12 bars so it is off the others' grid, 2.4 s release |
+| `undertow` | D minor with a flat second, modal and dark | lowpassed sawtooth an octave down, the only bed with a pulse |
+
+**No kit.** The theme has the drums; `undertow` gets one soft sub thump on the bar and that is the
+whole percussion budget. Six or seven arpeggio notes a bar, not sixteen.
+
+What makes a bed atmosphere rather than music is the **overlap**: every note has a 1.5–2.5 s
+release and feeds a dotted-eighth delay at its own tempo, so by the third note you are hearing a
+chord instead of a line and there is nothing to follow. The arpeggio index is also **rotated by
+the bar within the chord**, so four bars on one chord are four different contours — and because
+every note in a voicing is a chord tone, no rotation can turn into a tune.
+
+#### Cycling
+
+`theme` ×4 → `drift` ×2 → `suspend` ×2 → `undertow` ×2 → repeat. That is roughly a 7-minute
+cycle, so a 16-minute round hears the theme two or three times and never the same eight bars sixty
+times over. Each track has its own fader into the music bus and track changes **crossfade over
+2.5 s** at the loop boundary: the outgoing track stops scheduling but its pad releases and delay
+tail keep sounding through its own fader, which is the overlap. `start()` always comes back to the
+theme — the track somebody turned off is the one they expect back.
+
+The theme leads because `main.js` starts the music on the PLAY click, so there is no menu to play
+it over; joining the game is the moment it gets.
+
+#### Volume, ducking, and the one bug that cost a session of silence
+
+Keep it all *soft and repetitive by design*. The real acceptance test is listening for a full
+16-minute round without wanting to mute it. **If you would mute it, it is too busy.**
+
+Duck to 40 % while chat is focused.
+
+`applyGain()` is the **only** writer of the music bus gain, and it must stay that way. It used to
+be three writers that did not agree: `stop()` ramped to zero, `start()` never put it back, and
+`setVolume` and `duck` were both gated on `playing` so neither rescued it. Toggling the music off
+and on gave you a button saying "♪ on" and silence for the rest of the session, because a
+`setTargetAtTime` whose `startTime` is already in the past keeps decaying until some later
+automation event replaces it — and `cancelScheduledValues(currentTime)` does *not* remove it.
+Routing every writer through one place also means the ducked flag survives a restart, instead of
+coming back at full volume while the chat box still has focus.
+
+Silence while stopped is deliberate, not a fallthrough: the delay lines ring for about two seconds
+after the last note, and moving the slider must not un-mute that tail once the music is off.
 
 ---
 

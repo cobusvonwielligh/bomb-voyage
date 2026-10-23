@@ -9,6 +9,7 @@ import { decodeCells, packCell, cellType } from '/shared/maps.js';
 import { BLOCK, BLOCK_HP } from '/shared/constants.js';
 import { step, blocked } from '/shared/sim/movement.js';
 import { spread } from '/shared/sim/fire.js';
+import { pickPair } from '/shared/util/interp.js';
 
 export function createWorld() {
   const w = {
@@ -104,6 +105,9 @@ export function createWorld() {
   };
 
   w.applySnap = snap => {
+    // A snapshot older than one already applied is not news. TCP cannot reorder, but the dev lag
+    // shim can, and a rewound tick would unburst bombs and walk the interpolation backwards.
+    if (snap.tick < w.tick) return;
     w.tick = snap.tick;
     w.perks = snap.perks || [];
 
@@ -121,9 +125,11 @@ export function createWorld() {
         continue;
       }
       const p = existing ? hydrate(wire, existing) : (w.players[wire.i] = hydrate(wire));
-      // Keep two snapshots so we can interpolate between them instead of teleporting.
+      // Snapshots arrive every 2 ticks and remotes are drawn INTERP_DELAY_TICKS behind, so the
+      // pair that brackets the render time can be three entries back. Keeping only three meant
+      // the right pair had usually already been shifted out.
       p.buf.push({ tick: snap.tick, x: wire.x, y: wire.y });
-      if (p.buf.length > 3) p.buf.shift();
+      if (p.buf.length > 6) p.buf.shift();
     }
 
     // Anyone absent from the snapshot has left.
@@ -206,7 +212,12 @@ export function createWorld() {
           else { p.rx = nx; p.ry = ny; }
         }
       } else if (p.buf.length >= 2) {
-        const [a, b] = p.buf.slice(-2);
+        // The pair that BRACKETS the time being drawn, not the two newest — see pickPair. Taking
+        // the newest two pinned every remote player to one snapshot until the next arrived, which
+        // is a teleport fifteen times a second and the single biggest source of "the movement is
+        // laggy". It was never the transport.
+        const pair = pickPair(p.buf, renderTick);
+        const { a, b, f } = pair;
         const dx = b.x - a.x, dy = b.y - a.y;
 
         // Further than anyone can walk in one snapshot means a respawn, not a walk. Interpolating
@@ -214,8 +225,6 @@ export function createWorld() {
         if (Math.abs(dx) > 512 || Math.abs(dy) > 512) {
           teleport(p);                    // p.x is already b.x — hydrate ran before this
         } else {
-          const span = b.tick - a.tick || 1;
-          const f = Math.max(0, Math.min(1, (renderTick - a.tick) / span));
           // Movement is axis-locked: step() only ever moves on one axis per tick. So interpolate
           // along an L rather than along the diagonal — a straight lerp between two snapshots
           // that turned a corner cuts through the corner block, which is the "players walk
@@ -229,6 +238,9 @@ export function createWorld() {
           const pv = a[xFirst ? 'y' : 'x'] + Math.sign(v) * Math.max(0, Math.min(Math.abs(v), t - Math.abs(u)));
           p.rx = xFirst ? pu : pv;
           p.ry = xFirst ? pv : pu;
+          // Walking is whether the drawn position is actually changing. The wire has no `moving`
+          // flag, and without this every remote player slid around in their standing frame.
+          p.moving = Math.abs(dx) + Math.abs(dy) > 2 && f < 1;
         }
       }
 

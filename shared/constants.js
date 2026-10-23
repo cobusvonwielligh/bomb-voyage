@@ -74,6 +74,10 @@ export const BLOCK = {
   COLUMN: 5,
   SHRUB_WALK: 6,
   SHRUB_SOLID: 7,
+  // Everything outside the island. Behaves exactly like IRON to the simulation — not walkable,
+  // not destructible, stops fire — and exists only so the renderer can tell "the sea" from "a
+  // wall" and so a map can be any shape it likes inside its bounding rectangle.
+  WATER: 8,
 };
 
 export const BLOCK_HP = {
@@ -85,6 +89,7 @@ export const BLOCK_HP = {
   [BLOCK.COLUMN]: 0,
   [BLOCK.SHRUB_WALK]: 0,
   [BLOCK.SHRUB_SOLID]: 0,
+  [BLOCK.WATER]: 0,
 };
 
 export const BLOCK_DESTRUCTIBLE = b => BLOCK_HP[b] > 0;
@@ -92,6 +97,10 @@ export const BLOCK_FIRE_PASSES = b =>
   b === BLOCK.FLOOR || b === BLOCK.COLUMN || b === BLOCK.SHRUB_WALK || b === BLOCK.SHRUB_SOLID;
 export const BLOCK_WALKABLE = (b, reduced) =>
   b === BLOCK.FLOOR || b === BLOCK.SHRUB_WALK || (reduced && b === BLOCK.COLUMN);
+
+// The two the renderer treats as scenery rather than as level: it draws the sea under them and
+// a rock on top. Both are indestructible, so a cached chunk never has to redraw because of one.
+export const BLOCK_IS_EDGE = b => b === BLOCK.WATER || b === BLOCK.IRON;
 
 export const REGEN_EVERY_TICKS = 20 * TICK_HZ; // 600
 export const REGEN_PER_CYCLE = 3;
@@ -140,9 +149,17 @@ export const STATUS_TICKS = {
 
 export const INVULN_TICKS_SHIELD = 60; // 2 s after a shield breaks
 
-// Shortest possible stay on the death screen. Zero meant that anyone holding the bomb key — which
-// is everyone, all the time — respawned on the same tick they died and never saw it happen.
-export const RESPAWN_DELAY_TICKS = 30; // 1 s
+// How long you sit on the death screen before SPACE will do anything.
+//
+// It started at zero, which meant anyone holding the bomb key — everyone, always — respawned on
+// the same tick they died and never saw it happen. Ten seconds is long enough that dying costs
+// something, which is what makes not dying worth playing for.
+export const RESPAWN_DELAY_TICKS = 10 * TICK_HZ; // 300
+
+// How many of the furthest-apart spawn points to choose between. Always taking the single
+// furthest makes every death send you to the same two corners; picking at random from the best
+// handful keeps the "nobody lands in a firefight" guarantee while making it a real shuffle.
+export const SPAWN_CANDIDATES = 5;
 export const CONTAGIOUS = STATUS.PACIFISM | STATUS.SLOWDOWN | STATUS.INVISIBLE |
                           STATUS.CHANGELING | STATUS.REDUCTION | STATUS.FAST_DET;
 export const CONTAGION_COOLDOWN_TICKS = TICK_HZ; // 1 s per pair

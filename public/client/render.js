@@ -6,10 +6,12 @@
 
 import {
   TILE_PX, CHUNK_TILES, UNITS_PER_TILE, TRACER_SAMPLES, FUSE_TICKS, FIRE_TICKS, STATUS,
+  BLOCK, BLOCK_HP,
 } from '/shared/constants.js';
 import { cellType, cellHp } from '/shared/maps.js';
-import { BLOCK_HP } from '/shared/constants.js';
-import { drawTile, drawFire, drawPerk, playerShades, PALETTE, bake } from '/assets/art.js';
+import {
+  drawTile, drawFire, drawPerk, drawRock, playerShades, PALETTE, bake, bakeSea,
+} from '/assets/art.js';
 
 const CHUNK_PX = TILE_PX * CHUNK_TILES;
 
@@ -23,20 +25,49 @@ export function createRenderer(canvas, world) {
   // so a frame drop can never leave the camera stuck off-centre or the screen stuck red.
   let shake = 0;
   let flash = 0, flashColour = '255,255,255';
+  let sea = null, seaNear = null, seaFar = null;
+  let zoom = 1;
+  const splashes = [];         // shoreline foam, capped — see spawnSplash
+  let seaT = 0;
 
-  const ensureBaked = () => { baked ??= bake({ playerCount: 16 }); };
+  function ensureBaked() {
+    if (baked) return;
+    baked = bake({ playerCount: 16 });
+    sea = bakeSea();
+    seaNear = ctx.createPattern(sea.near, 'repeat');
+    seaFar = ctx.createPattern(sea.far, 'repeat');
+  }
+
+  /**
+   * How much of a tile fits on screen.
+   *
+   * The whole map on screen beats a camera that follows you: on an island you want to see the
+   * coast, and a 16-player game is mostly about reading where everyone is. So scale to fit the
+   * box the layout gives us, and only fall back to a following camera when even the minimum zoom
+   * cannot get the map in.
+   *
+   * Scaling up snaps to halves and keeps nearest-neighbour, because this is pixel art and a 1.37x
+   * nearest-neighbour upscale gives you rows of pixels that are visibly different widths. Scaling
+   * down is left unsnapped with smoothing on, where the same artefact reads as aliasing instead.
+   */
+  function fitZoom(vw, vh) {
+    const fit = Math.min(vw / (world.map.w * TILE_PX), vh / (world.map.h * TILE_PX));
+    if (fit >= 1) return { z: Math.max(1, Math.floor(fit * 2) / 2), smooth: false };
+    return { z: Math.max(0.42, fit), smooth: true };
+  }
 
   function resize() {
     const dpr = Math.min(2, devicePixelRatio || 1);
     const { clientWidth: w, clientHeight: h } = canvas;
+    if (!w || !h) return;                   // laid out but not measured yet
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.imageSmoothingEnabled = false;
+    // The transform and the smoothing flag belong to frame(), which recomputes the zoom every
+    // frame. Setting them here too would just mean two places to keep in step.
   }
   addEventListener('resize', resize);
 
-  const invalidateAll = () => { chunks = new Map(); };
+  const invalidateAll = () => { chunks = new Map(); shore = null; splashes.length = 0; };
 
   /** Mark the chunk holding a tile dirty, plus neighbours when it sits on a border. */
   function invalidateTile(tx, ty) {
@@ -59,8 +90,9 @@ export function createRenderer(canvas, world) {
     if (c.dirty) {
       const cc = c.canvas.getContext('2d');
       cc.imageSmoothingEnabled = false;
-      cc.fillStyle = PALETTE.void;
-      cc.fillRect(0, 0, CHUNK_PX, CHUNK_PX);
+      // Cleared, not filled: water tiles and everything off the edge of the map stay transparent
+      // so the animated sea drawn underneath shows through. The sea is the background now.
+      cc.clearRect(0, 0, CHUNK_PX, CHUNK_PX);
       const map = world.map;
       for (let j = 0; j < CHUNK_TILES; j++) {
         for (let i = 0; i < CHUNK_TILES; i++) {
@@ -68,11 +100,13 @@ export function createRenderer(canvas, world) {
           if (tx < 0 || ty < 0 || tx >= map.w || ty >= map.h) continue;
           const byte = map.cells[ty * map.w + tx];
           const type = cellType(byte);
+          if (type === BLOCK.WATER) continue;              // the sea draws itself
           const maxHp = BLOCK_HP[type] || 0;
           const dmg = maxHp ? 1 - cellHp(byte) / maxHp : 0;
           cc.save();
           cc.translate(i * TILE_PX, j * TILE_PX);
-          drawTile(cc, type, tx, ty, dmg);
+          if (type === BLOCK.IRON) drawRock(cc, tx, ty, seaEdges(tx, ty));
+          else drawTile(cc, type, tx, ty, dmg);
           cc.restore();
         }
       }
@@ -82,6 +116,114 @@ export function createRenderer(canvas, world) {
     return c.canvas;
   }
 
+  /** Which sides of this tile face open water, as a DIR_* bitmask. */
+  function seaEdges(tx, ty) {
+    const map = world.map;
+    const sea = (x, y) =>
+      x < 0 || y < 0 || x >= map.w || y >= map.h || cellType(map.cells[y * map.w + x]) === BLOCK.WATER;
+    return (sea(tx + 1, ty) ? 1 : 0) | (sea(tx, ty - 1) ? 2 : 0)
+         | (sea(tx - 1, ty) ? 4 : 0) | (sea(tx, ty + 1) ? 8 : 0);
+  }
+
+  /**
+   * The shoreline, cached once per map.
+   *
+   * Scanning every tile for a coast every frame would be the single most expensive thing the
+   * renderer does. The coast never changes — rock is indestructible and water never becomes
+   * anything else — so it is computed on the first frame after a map arrives and then reused.
+   */
+  let shore = null;
+  function shoreline() {
+    if (shore) return shore;
+    const map = world.map;
+    shore = [];
+    for (let ty = 0; ty < map.h; ty++) {
+      for (let tx = 0; tx < map.w; tx++) {
+        if (cellType(map.cells[ty * map.w + tx]) !== BLOCK.IRON) continue;
+        const e = seaEdges(tx, ty);
+        if (e) shore.push({ tx, ty, e });
+      }
+    }
+    return shore;
+  }
+
+  /**
+   * Foam breaking on a rock. Spawned at a trickle from random shoreline tiles, capped hard.
+   *
+   * A real particle system would be the obvious thing and the wrong one: the sea is scenery and
+   * is not allowed to compete with sixteen players and a chain reaction for the frame budget.
+   * Thirty short-lived circles, spawned a couple a second, reads as a coast.
+   */
+  const MAX_SPLASHES = 30;
+  function spawnSplash() {
+    const edges = shoreline();
+    if (!edges.length || splashes.length >= MAX_SPLASHES) return;
+    const s = edges[(Math.random() * edges.length) | 0];
+    // Push the splash out onto the water side, so it breaks against the rock rather than on it.
+    const dx = (s.e & 1 ? 1 : 0) - (s.e & 4 ? 1 : 0);
+    const dy = (s.e & 8 ? 1 : 0) - (s.e & 2 ? 1 : 0);
+    if (!dx && !dy) return;
+    splashes.push({
+      x: (s.tx + 0.5 + dx * 0.55) * TILE_PX,
+      y: (s.ty + 0.5 + dy * 0.55) * TILE_PX,
+      life: 1,
+      r: 3 + Math.random() * 4,
+      rate: 0.6 + Math.random() * 0.8,
+    });
+  }
+
+  function drawSea(vw, vh, ox, oy, dtMs) {
+    if (!seaNear) return;
+    seaT += dtMs / 1000;
+
+    ctx.fillStyle = PALETTE.seaDeep;
+    ctx.fillRect(0, 0, vw, vh);
+
+    // Two layers drifting at different speeds and angles. Parallax between them is the whole
+    // reason a flat fill reads as moving water.
+    for (const [pattern, sx, sy, alpha] of [[seaNear, 11, 5, 1], [seaFar, -7, 9, 1]]) {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate((seaT * sx) % 128, (seaT * sy) % 128);
+      ctx.fillStyle = pattern;
+      ctx.fillRect(-128, -128, vw + 256, vh + 256);
+      ctx.restore();
+    }
+
+    // A band of lighter shallows hugging the island, drawn in world space over the open sea.
+    ctx.save();
+    ctx.translate(ox, oy);
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = PALETTE.seaMid;
+    for (const s of shoreline()) {
+      if (s.e & 1) ctx.fillRect((s.tx + 1) * TILE_PX, s.ty * TILE_PX, TILE_PX, TILE_PX);
+      if (s.e & 4) ctx.fillRect((s.tx - 1) * TILE_PX, s.ty * TILE_PX, TILE_PX, TILE_PX);
+      if (s.e & 2) ctx.fillRect(s.tx * TILE_PX, (s.ty - 1) * TILE_PX, TILE_PX, TILE_PX);
+      if (s.e & 8) ctx.fillRect(s.tx * TILE_PX, (s.ty + 1) * TILE_PX, TILE_PX, TILE_PX);
+    }
+    ctx.restore();
+  }
+
+  function drawSplashes(ox, oy, dtMs) {
+    if (Math.random() < dtMs / 450) spawnSplash();
+    if (!splashes.length) return;
+    ctx.save();
+    ctx.translate(ox, oy);
+    for (let i = splashes.length - 1; i >= 0; i--) {
+      const s = splashes[i];
+      s.life -= (dtMs / 1000) * s.rate;
+      if (s.life <= 0) { splashes.splice(i, 1); continue; }
+      // Grows as it fades, like foam spreading out.
+      ctx.globalAlpha = s.life * 0.7;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r * (2 - s.life), 0, 7);
+      ctx.fillStyle = PALETTE.foam;
+      ctx.fill();
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
   // ─── frame ──────────────────────────────────────────────────────────────────
 
   function frame(dtMs = 16) {
@@ -89,11 +231,20 @@ export function createRenderer(canvas, world) {
     ensureBaked();
 
     const me = world.me();
-    const vw = canvas.clientWidth, vh = canvas.clientHeight;
+    const dpr = Math.min(2, devicePixelRatio || 1);
+    const fit = fitZoom(canvas.clientWidth, canvas.clientHeight);
+    zoom = fit.z;
+    // Everything below works in world pixels; the transform turns them into device pixels.
+    ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, 0, 0);
+    ctx.imageSmoothingEnabled = fit.smooth;
+
+    const vw = canvas.clientWidth / zoom, vh = canvas.clientHeight / zoom;
     const worldW = world.map.w * TILE_PX, worldH = world.map.h * TILE_PX;
 
-    // Follow, then clamp so we never show the void outside a small map.
-    if (me) {
+    // Follow, then clamp. When the whole map fits — which it now does on most screens — the
+    // clamp collapses to a single position and the camera simply stops existing, which is the
+    // right answer for a sixteen-player game on an island: you can see everyone.
+    if (me && (worldW > vw || worldH > vh)) {
       const tx = (me.rx / UNITS_PER_TILE) * TILE_PX - vw / 2;
       const ty = (me.ry / UNITS_PER_TILE) * TILE_PX - vh / 2;
       // Time-based, not per-frame: a fixed 0.25 factor makes the camera twice as laggy at
@@ -102,8 +253,9 @@ export function createRenderer(canvas, world) {
       if (Math.abs(tx - cam.x) > vw || Math.abs(ty - cam.y) > vh) { cam.x = tx; cam.y = ty; }
       else { cam.x += (tx - cam.x) * k; cam.y += (ty - cam.y) * k; }
     }
-    cam.x = Math.max(0, Math.min(Math.max(0, worldW - vw), cam.x));
-    cam.y = Math.max(0, Math.min(Math.max(0, worldH - vh), cam.y));
+    // Centre whichever axis has room to spare, instead of pinning the island to the top left.
+    cam.x = worldW <= vw ? (worldW - vw) / 2 : Math.max(0, Math.min(worldW - vw, cam.x));
+    cam.y = worldH <= vh ? (worldH - vh) / 2 : Math.max(0, Math.min(worldH - vh, cam.y));
 
     // Shake is applied to the draw offset, not to the camera, so it cannot accumulate into the
     // follow logic or drift the view. Decay is time-based for the same reason the follow is.
@@ -117,14 +269,15 @@ export function createRenderer(canvas, world) {
 
     const ox = -Math.round(cam.x) + Math.round(sx), oy = -Math.round(cam.y) + Math.round(sy);
 
-    ctx.fillStyle = PALETTE.void;
-    ctx.fillRect(0, 0, vw, vh);
+    drawSea(vw, vh, ox, oy, dtMs);
 
     const cx0 = Math.floor(cam.x / CHUNK_PX), cx1 = Math.floor((cam.x + vw) / CHUNK_PX);
     const cy0 = Math.floor(cam.y / CHUNK_PX), cy1 = Math.floor((cam.y + vh) / CHUNK_PX);
     for (let cy = cy0; cy <= cy1; cy++)
       for (let cx = cx0; cx <= cx1; cx++)
         ctx.drawImage(chunkAt(cx, cy), ox + cx * CHUNK_PX, oy + cy * CHUNK_PX);
+
+    drawSplashes(ox, oy, dtMs);
 
     for (const k of world.perks) {
       const bob = Math.sin((world.tick + k.id * 7) / 6) * 2;
@@ -156,7 +309,7 @@ export function createRenderer(canvas, world) {
 
     if (flash > 0.004) {
       ctx.fillStyle = `rgba(${flashColour},${flash * 0.5})`;
-      ctx.fillRect(0, 0, vw, vh);
+      ctx.fillRect(-4, -4, vw + 8, vh + 8);
       flash *= Math.exp(-dtMs / 110);
     } else flash = 0;
 

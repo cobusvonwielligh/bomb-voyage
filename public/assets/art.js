@@ -20,6 +20,9 @@ export const PALETTE = {
   outline: '#161b24',
   fireCore: '#fff4c2', fireMid: '#ff9b3d', fireEdge: '#e63f27',
   gold: '#ffd21f', text: '#e8eef7',
+  // The sea, and the rock the island is made of.
+  seaDeep: '#0a1a2e', seaMid: '#123252', seaLight: '#1d5176', foam: '#cfe7f5',
+  rock: '#3a4150', rockLit: '#4d5566', rockDark: '#20262f', sand: '#6e6346',
 };
 
 /** 16 maximally distinct player colours, plus their light/dark shades. Slots come from
@@ -394,6 +397,81 @@ const canvas = (w = TILE_PX, h = TILE_PX) => {
   el.width = w; el.height = h;
   return el;
 };
+
+// ─── the sea ──────────────────────────────────────────────────────────────────
+// Water is a two-layer scrolling pattern, not a particle system. Sixteen players and a chain
+// reaction already own the frame budget; the sea is scenery and has to cost close to nothing.
+// Two baked tiles, two fillRects a frame, and the illusion is done.
+
+const WATER_TILE = 128;
+
+/** One seamless ripple layer. Seamless because every wave is an integer number of cycles wide. */
+function waterLayer(cyclesX, cyclesY, amp, colour, alpha) {
+  const el = canvas(WATER_TILE, WATER_TILE);
+  const c = el.getContext('2d');
+  c.globalAlpha = alpha;
+  c.strokeStyle = colour;
+  c.lineWidth = 2;
+  const kx = (Math.PI * 2 * cyclesX) / WATER_TILE;
+  const ky = (Math.PI * 2 * cyclesY) / WATER_TILE;
+  for (let row = 0; row < 8; row++) {
+    const y0 = (row + 0.5) * (WATER_TILE / 8);
+    c.beginPath();
+    for (let x = 0; x <= WATER_TILE; x += 4) {
+      const y = y0 + Math.sin(x * kx + row * 1.7) * amp + Math.sin(y0 * ky) * amp * 0.4;
+      if (x === 0) c.moveTo(x, y); else c.lineTo(x, y);
+    }
+    c.stroke();
+  }
+  return el;
+}
+
+/**
+ * Everything needed to draw the sea, built once.
+ *
+ * Patterns rather than per-frame geometry: scrolling two of them at different speeds and in
+ * different directions is what makes a flat fill read as moving water, and it costs two draws.
+ */
+export function bakeSea() {
+  return {
+    near: waterLayer(3, 2, 3.0, PALETTE.seaLight, 0.5),
+    far: waterLayer(5, 3, 2.0, PALETTE.foam, 0.16),
+  };
+}
+
+/**
+ * A rock on a shoreline tile.
+ *
+ * `edges` is a bitmask of which sides face open water (1 right, 2 up, 4 left, 8 down), matching
+ * the DIR_* order used everywhere else. Rocks only get their lit cap and their wet foot on the
+ * sides that actually touch the sea, so the island reads as a solid mass with a coast rather than
+ * as a row of identical boulders.
+ */
+export function drawRock(c, tx, ty, edges) {
+  const S = TILE_PX;
+  px(c, 0, 0, S, S, PALETTE.rock);
+
+  // Two chunks of lighter stone, placed by hash so neighbouring tiles differ but never flicker.
+  const h1 = hash(tx, ty), h2 = hash(ty + 3, tx + 11);
+  px(c, (h1 * 10 | 0) + 2, (h2 * 10 | 0) + 2, 11, 9, PALETTE.rockLit);
+  px(c, (h2 * 12 | 0) + 4, (h1 * 14 | 0) + 12, 9, 8, PALETTE.rockDark);
+
+  // A lit edge wherever the sea is, because that is where the light gets in.
+  if (edges & 1) px(c, S - 3, 0, 3, S, PALETTE.rockLit);
+  if (edges & 2) px(c, 0, 0, S, 3, PALETTE.rockLit);
+  if (edges & 4) px(c, 0, 0, 3, S, PALETTE.rockLit);
+  if (edges & 8) px(c, 0, S - 3, S, 3, PALETTE.rockDark);
+
+  // A thin band of wet sand on the seaward side, so the join is not a hard line.
+  if (edges) {
+    c.globalAlpha = 0.5;
+    if (edges & 1) px(c, S - 2, 2, 2, S - 4, PALETTE.sand);
+    if (edges & 2) px(c, 2, 0, S - 4, 2, PALETTE.sand);
+    if (edges & 4) px(c, 0, 2, 2, S - 4, PALETTE.sand);
+    if (edges & 8) px(c, 2, S - 2, S - 4, 2, PALETTE.sand);
+    c.globalAlpha = 1;
+  }
+}
 
 export function bake({ playerCount = 16 } = {}) {
   const out = { tiles: {}, players: [], bombs: [], perks: {} };

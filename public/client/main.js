@@ -79,7 +79,7 @@ const net = createNet({
     renderer?.invalidateAll();
     if (!m.mapOnly) {
       $('menu').style.display = 'none';
-      $('hud').style.display = 'flex';
+      $('hud').classList.add('on');
       if (!running) {
         running = true;
         last = performance.now();
@@ -382,8 +382,12 @@ function drawHud() {
   if (!me) return;
 
   const mine = ranks.get(world.you);
-  $('who').textContent = `${me.name}  ${me.kills}/${me.deaths}`;
+  $('who').textContent = me.name;
   setValue($('rank'), mine ? mine.rankName : '');
+  setValue($('vKills'), me.kills);
+  setValue($('vDeaths'), me.deaths, { worse: true });
+  setValue($('vScore'), me.score);
+  renderLive();
 
   gearPip('pBombs', me.bombs, MAX_BOMBS_CARRIED);
   gearPip('pFire', me.radius, MAX_RADIUS);
@@ -418,6 +422,41 @@ function killFeed(text) {
   list.append(li);
   while (list.children.length > 50) list.firstChild.remove();
   list.scrollTop = list.scrollHeight;
+}
+
+/**
+ * The standings in the side panel. Always up, because a scoreboard you have to hold a key for is
+ * a scoreboard nobody reads in a game where letting go of the keys gets you killed.
+ *
+ * Rebuilt in place rather than cleared and re-created: this runs five times a second, and
+ * replacing sixteen list items that often is both wasteful and makes text unselectable.
+ */
+function renderLive() {
+  const rows = world.players.filter(Boolean)
+    .sort((a, b) => b.score - a.score || b.kills - a.kills)
+    .slice(0, 12);
+  const list = $('liveRows');
+  while (list.children.length > rows.length) list.lastChild.remove();
+  while (list.children.length < rows.length) {
+    const li = document.createElement('li');
+    for (const cls of ['pos', 'nm', 'kd', 'sc']) {
+      const sp = document.createElement('span');
+      sp.className = cls;
+      li.append(sp);
+    }
+    list.append(li);
+  }
+  for (const [n, p] of rows.entries()) {
+    const li = list.children[n];
+    const [pos, nm, kd, sc] = li.children;
+    pos.textContent = n + 1;
+    nm.textContent = p.name;
+    nm.style.color = playerColor(p.i);
+    kd.textContent = `${p.kills}/${p.deaths}`;
+    sc.textContent = p.score;
+    li.classList.toggle('me', p.i === world.you);
+    li.classList.toggle('out', !p.alive);
+  }
 }
 
 let scoresOpen = false;
@@ -474,7 +513,7 @@ function leave() {
   world.ready = false;
   running = false;
   $('menu').style.display = 'grid';
-  $('hud').style.display = 'none';
+  $('hud').classList.remove('on');
   $('dead').style.display = 'none';
   $('scores').style.display = 'none';
   scoresOpen = false;

@@ -30,7 +30,7 @@ export function spread(map, bomb) {
       const ty = bomb.ty + dy * step;
       const t = tileAt(map, tx, ty);
 
-      if (t === BLOCK.IRON) break;                     // stops before it
+      if (t === BLOCK.IRON || t === BLOCK.WATER) break;   // stops before it
 
       if (DESTRUCTIBLE.has(t)) {                       // damages it, burns the tile, stops
         hits.push({ tx, ty });

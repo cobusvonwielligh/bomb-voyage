@@ -1,8 +1,8 @@
 // Block damage, destruction, and the walls that grow back.
 
 import {
-  BLOCK, BLOCK_HP, BLOCK_DESTRUCTIBLE, REGEN_EVERY_TICKS, REGEN_PER_CYCLE,
-  REGEN_CLEAR_RADIUS_TILES, SCORE,
+  BLOCK, BLOCK_HP, BLOCK_DESTRUCTIBLE, BLOCK_WALKABLE, REGEN_EVERY_TICKS, REGEN_PER_CYCLE,
+  REGEN_CLEAR_RADIUS_TILES, REGEN_MAX_FILL, SCORE,
 } from '../constants.js';
 import { tileAt, hpAt, setTile } from './state.js';
 import { randInt } from '../util/rng.js';
@@ -27,15 +27,51 @@ export function damage(state, tx, ty, owner) {
 }
 
 /**
+ * How much of the playable map is wall right now, as a fraction of every non-IRON tile.
+ *
+ * "Wall" is anything you cannot walk through, which is the thing that actually turns a map into a
+ * maze — soft, reinforced, monolith, solid shrub and column all count; IRON is the fixed skeleton
+ * and is not part of the denominator.
+ *
+ * This is a full scan of w*h cells. That is fine *here specifically*: `regenerate` returns
+ * immediately on 599 of every 600 ticks, so this runs once every 20 seconds, not once per tick.
+ * Do not lift it anywhere that runs more often.
+ */
+function wallFill(map) {
+  let walls = 0, open = 0;
+  for (let ty = 0; ty < map.h; ty++) {
+    for (let tx = 0; tx < map.w; tx++) {
+      const t = tileAt(map, tx, ty);
+      if (t === BLOCK.IRON) continue;
+      open++;
+      if (!BLOCK_WALKABLE(t, false)) walls++;
+    }
+  }
+  return open ? walls / open : 1;
+}
+
+/**
  * Game of Bombs rematerialises walls as a round runs, which stops a 16-minute map collapsing
  * into an empty field where nobody can hide. Cheap version: every 20s, turn a few quiet floor
  * tiles back into soft walls — never near a player, a bomb, fire or a dropped perk.
+ *
+ * Bounded at both ends. Unbounded growth was not a slow drift: three walls every 20 s is 144
+ * walls over a round, which closes an open Arena into a maze nobody can cross. And a wall grown
+ * on a spawn tile entombs whoever spawns there next, so spawns and their immediate neighbours are
+ * off limits.
  */
 export function regenerate(state) {
   if (state.tick === 0 || state.tick % REGEN_EVERY_TICKS !== 0) return;
+  if (wallFill(state.map) > REGEN_MAX_FILL) return;
 
   const { w, h } = state.map;
   const R = REGEN_CLEAR_RADIUS_TILES;
+
+  // A spawn ring, unlike the busy list, is a hard exclusion rather than a radius: respawn picks
+  // the spawn furthest from the action, which is exactly the quiet corner this function likes.
+  const spawns = state.map.spawns ?? [];
+  const onSpawnRing = (tx, ty) =>
+    spawns.some(([sx, sy]) => Math.abs(sx - tx) <= 1 && Math.abs(sy - ty) <= 1);
 
   const busy = [];
   for (const p of state.players) if (p && p.alive) busy.push([p.x >> 8, p.y >> 8]);
@@ -48,6 +84,7 @@ export function regenerate(state) {
     const tx = 1 + randInt(state.next, w - 2);
     const ty = 1 + randInt(state.next, h - 2);
     if (tileAt(state.map, tx, ty) !== BLOCK.FLOOR) continue;
+    if (onSpawnRing(tx, ty)) continue;
     if (busy.some(([bx, by]) => Math.abs(bx - tx) <= R && Math.abs(by - ty) <= R)) continue;
     setTile(state.map, tx, ty, BLOCK.SOFT, BLOCK_HP[BLOCK.SOFT]);
     state.events.push({ e: 'blocknew', tick: state.tick, x: tx, y: ty, b: BLOCK.SOFT });

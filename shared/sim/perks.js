@@ -2,7 +2,7 @@
 
 import {
   PERK, PERK_WEIGHTS, PERK_DROP_CHANCE_SOFT, PERK_DROP_ALWAYS, PERK_EXPIRE_TICKS,
-  MAX_BOMBS, MAX_RADIUS, MAX_SKATES, MAX_SHIELDS, SCORE, BLOCK, HITBOX_UNITS, STATUS,
+  MAX_BOMBS_CARRIED, MAX_RADIUS, MAX_SKATES, MAX_SHIELDS, SCORE, BLOCK, HITBOX_UNITS, STATUS,
   PERKS_DROPPED_ON_DEATH, START_BOMBS, START_RADIUS, GIFT_DISEASE_CHANCE,
 } from '../constants.js';
 import { tileAt, toTile } from './state.js';
@@ -35,10 +35,16 @@ export function drop(state, tx, ty, type) {
   state.events.push({ e: 'perkadd', tick: state.tick, id: perk.id, x: tx, y: ty, p: type });
 }
 
-/** Caps still pay out — a late-round pickup should never be nothing at all. */
+/**
+ * Caps still pay out — a late-round pickup should never be nothing at all.
+ *
+ * Bombs cap at MAX_BOMBS_CARRIED, not the MAX_BOMBS safety valve: the HUD shows n/8 next to n/6
+ * fire and n/4 speed, so the number has to be a real limit rather than a number the player can
+ * walk past.
+ */
 function apply(state, p, type) {
   switch (type) {
-    case PERK.BOMB:   if (p.bombs  < MAX_BOMBS)  { p.bombs++;  return true; } return false;
+    case PERK.BOMB:   if (p.bombs  < MAX_BOMBS_CARRIED) { p.bombs++; return true; } return false;
     case PERK.FIRE:   if (p.radius < MAX_RADIUS) { p.radius++; return true; } return false;
     case PERK.SKATE:  if (p.speed  < MAX_SKATES) { p.speed++;  return true; } return false;
     case PERK.SHIELD: if (p.shields < MAX_SHIELDS) { p.shields++; return true; } return false;

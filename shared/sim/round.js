@@ -79,9 +79,24 @@ function killInFire(state) {
       continue;
     }
 
+    // Who gets the kill.
+    //
+    // The centre tile is the documented rule (RULES.md §3) and stays the first choice, so every
+    // outcome that was already right is unchanged. The fallback used to be `fresh[0]` — the oldest
+    // still-burning fire ANYWHERE on the map — which handed +100 and the kill-feed line to a
+    // player who was not involved, or scored a suicide when that stray fire happened to be the
+    // victim's own. A 160-unit hitbox straddles a tile boundary most of the time, so the centre
+    // tile misses often and the wrong fallback fired often.
+    //
+    // So: fall back to the fire the hitbox actually overlaps, scanning `fresh` in array order,
+    // which is `detonate` push order and therefore deterministic. One of them must match, because
+    // `burns()` just returned true for the identical box.
     const tx = toTile(p.x), ty = toTile(p.y);
-    const fire = fresh.find(f => f.tx === tx && f.ty === ty) || fresh[0];
-    const killer = fire?.owner ?? p.i;
+    const overlapped = fresh.find(f =>
+      f.tx >= (p.x - half) >> 8 && f.tx <= (p.x + half - 1) >> 8 &&
+      f.ty >= (p.y - half) >> 8 && f.ty <= (p.y + half - 1) >> 8);
+    const fire = fresh.find(f => f.tx === tx && f.ty === ty) || overlapped;
+    const killer = fire.owner;
 
     scatterOnDeath(state, p);
 

@@ -62,6 +62,23 @@ export function detonate(state) {
 
     const { cells, hits } = spread(state.map, bomb);
 
+    // `boom` must come out BEFORE the block events this same blast produces.
+    //
+    // The client replays a snapshot's events strictly in order and only derives the blast when it
+    // reaches `boom` — by running the same `spread` against its own map. Emitted last, the block
+    // the arm was supposed to stop at has already been turned to floor by the preceding
+    // `blockdie`, so the client draws fire two tiles past where the server actually burned. That
+    // happened on roughly half of all bombs (both fuse lengths are even, so `at` shares parity
+    // with the placement tick and lands in the same snapshot as its own block events) and on every
+    // chain-detonated bomb regardless of parity.
+    //
+    // The alternative — buffering block events on the client until after the booms — is wrong: a
+    // snapshot spans two ticks, so it would mis-order block changes from the earlier tick.
+    state.events.push({
+      e: 'boom', tick: state.tick, id: bomb.id,
+      x: bomb.tx, y: bomb.ty, o: bomb.owner, r: bomb.radius,
+    });
+
     for (const { tx, ty } of hits) {
       const res = damage(state, tx, ty, bomb.owner);
       if (res?.destroyed) maybeDrop(state, tx, ty, res.type);
@@ -73,11 +90,6 @@ export function detonate(state) {
       const neighbour = bombAt(state, c.tx, c.ty);
       if (neighbour && !burst.has(neighbour.id)) queue.push(neighbour);
     }
-
-    state.events.push({
-      e: 'boom', tick: state.tick, id: bomb.id,
-      x: bomb.tx, y: bomb.ty, o: bomb.owner, r: bomb.radius,
-    });
   }
 
   state.bombs = state.bombs.filter(b => !burst.has(b.id));

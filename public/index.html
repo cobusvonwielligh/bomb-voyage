@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bomb Voyage</title>
 <link rel="icon" href="data:,">
-<link rel="preload" href="/assets/pixel-game.otf" as="font" type="font/otf" crossorigin>
+<link rel="preload" href="/assets/shotling.ttf" as="font" type="font/ttf" crossorigin>
 <link rel="stylesheet" href="/style.css">
 
 <!-- One SVG sprite sheet, defined once and referenced by <use>. Repeating the paths per pip would
@@ -43,10 +43,6 @@
 
 <div id="hud">
   <div id="topbar" class="edge">
-    <span id="who">&mdash;</span>
-    <span id="rank"></span>
-    <span class="sep"></span>
-
     <span class="stat" id="clock"><span class="k">left</span><span class="v" id="vClock">--:--</span></span>
     <span class="stat"><span class="k">ping</span><span class="v" id="vPing">&mdash;</span></span>
     <span class="stat"><span class="k">alive</span><span class="v" id="vOnline">&mdash;</span></span>
@@ -86,9 +82,27 @@
     </span>
   </div>
 
-  <div id="chat" class="edge">
-    <ul id="chatList"></ul>
-    <input id="chatInput" placeholder="enter to chat &middot; /help for commands" maxlength="140">
+  <div id="side" class="edge">
+    <div id="card">
+      <span id="who">&mdash;</span>
+      <span id="rank"></span>
+      <div id="cardStats">
+        <span><span class="k">kills</span><span id="vKills">0</span></span>
+        <span><span class="k">deaths</span><span id="vDeaths">0</span></span>
+        <span><span class="k">round</span><span id="vScore">0</span></span>
+      </div>
+    </div>
+
+    <div>
+      <h2 class="panelHead">standings</h2>
+      <ul id="liveRows"></ul>
+    </div>
+
+    <div id="chat">
+      <h2 class="panelHead">chat</h2>
+      <ul id="chatList"></ul>
+      <input id="chatInput" placeholder="enter to chat &middot; /help for commands" maxlength="140">
+    </div>
   </div>
 </div>
 
