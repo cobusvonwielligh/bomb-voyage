@@ -256,7 +256,11 @@ export function createRenderer(canvas, world) {
   // The flow field is two crossed sine waves sampled at the particle's position. It costs two
   // sin() per particle per frame and produces swirls, eddies and a slow prevailing drift, which
   // is everything the eye needs to read it as water.
-  const DROPS = 220;
+  // Doubled from 220. The field was readable but sparse — at any one moment most of the open
+  // water had nothing moving in it, so the current was something you inferred rather than saw.
+  // Cost is linear and tiny: two sin() per particle per frame against a budget that is spent on
+  // sixteen players and a chain reaction.
+  const DROPS = 440;
   const drops = [];
   let dropsFor = null;              // the map they were seeded for
 
