@@ -308,15 +308,45 @@ export function createSfx({ listener }) {
     },
 
     /** You are back. Same shape, with a fifth under it so it feels like a start, not an event. */
+    /**
+     * Your own arrival: a falling whoosh that lands on a thump, then the rising chime.
+     *
+     * Matched to what the sprite does. It drops in from twenty times its size and collapses, so
+     * the sound has to fall too — a rising tone alone said "something good happened" when the
+     * picture said "something just landed". The noise sweeps DOWN through the collapse, the
+     * thump hits where the squash is, and only then does the chime rise.
+     */
     ownSpawn(c, out, t) {
-      for (const [mul, peak] of [[1, 0.24], [1.5, 0.14]]) {
-        const g = voiceGain(c, out, t, { a: 0.02, d: 0.34, peak, send: 0.2 });
+      // The descent. Bandpassed noise falling 5 kHz -> 400 Hz over the pop window.
+      const air = voiceGain(c, out, t, { a: 0.03, d: 0.3, peak: 0.3, send: 0.25 });
+      const s = noiseSource();
+      const bp = c.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.Q.value = 1.1;
+      bp.frequency.setValueAtTime(hz(5000), t);
+      bp.frequency.exponentialRampToValueAtTime(hz(400), t + 0.3);
+      s.connect(bp); bp.connect(air);
+      s.start(t); s.stop(t + 0.42);
+
+      // The landing, a fifth of a second in, where the sprite reaches normal size.
+      const hit = t + 0.2;
+      const body = voiceGain(c, out, hit, { a: 0.004, d: 0.26, peak: 0.42, send: 0.35 });
+      const thump = c.createOscillator();
+      thump.type = 'sine';
+      thump.frequency.setValueAtTime(hz(180), hit);
+      thump.frequency.exponentialRampToValueAtTime(hz(52), hit + 0.22);
+      thump.connect(body);
+      thump.start(hit); thump.stop(hit + 0.3);
+
+      // And the chime, after the impact rather than through it.
+      for (const [mul, peak] of [[1, 0.2], [1.5, 0.12]]) {
+        const g = voiceGain(c, out, hit + 0.02, { a: 0.02, d: 0.34, peak, send: 0.2 });
         const o = c.createOscillator();
         o.type = 'triangle';
-        o.frequency.setValueAtTime(220 * mul, t);
-        o.frequency.exponentialRampToValueAtTime(660 * mul, t + 0.3);
+        o.frequency.setValueAtTime(hz(220 * mul), hit + 0.02);
+        o.frequency.exponentialRampToValueAtTime(hz(660 * mul), hit + 0.32);
         o.connect(g);
-        o.start(t); o.stop(t + 0.45);
+        o.start(hit + 0.02); o.stop(hit + 0.45);
       }
     },
 

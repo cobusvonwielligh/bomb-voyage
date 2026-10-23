@@ -573,17 +573,32 @@ export function createRenderer(canvas, world) {
     const t = (pop - 1) / (SPAWN_POP_SCALE - 1);     // 1 at the moment of arrival, 0 when settled
     const k = playerShades(i);
     c.save();
-    c.globalAlpha = t * 0.55;
-    c.lineWidth = 2 + t * 3;
+
+    // An expanding ring that runs the opposite way to the sprite: the pirate collapses inwards
+    // while the shockwave races outwards, and the two moving apart is what reads as an impact
+    // rather than as a sprite being resized.
+    const ring = TILE_PX * (0.4 + (1 - t) * 7);
+    c.globalAlpha = t * 0.5;
+    c.lineWidth = 2 + t * 6;
     c.strokeStyle = k.light;
     c.beginPath();
-    c.arc(cx, cy, TILE_PX * (0.4 + (1 - t) * 1.6), 0, 7);
+    c.arc(cx, cy, ring, 0, 7);
     c.stroke();
-    c.globalAlpha = t * 0.25;
+
+    // A second, faster ring, so the wave has an edge instead of being one fat band.
+    c.globalAlpha = t * 0.28;
+    c.lineWidth = 1 + t * 2;
+    c.beginPath();
+    c.arc(cx, cy, ring * 1.45, 0, 7);
+    c.stroke();
+
+    // The glow under the sprite itself, which stays tied to how big the sprite still is.
+    c.globalAlpha = t * 0.2;
     c.fillStyle = k.base;
     c.beginPath();
-    c.arc(cx, cy, TILE_PX * 0.5 * pop, 0, 7);
+    c.arc(cx, cy, TILE_PX * 0.5 * Math.min(pop, 6), 0, 7);
     c.fill();
+
     c.restore();
     c.globalAlpha = 1;
   }
@@ -607,14 +622,21 @@ export function createRenderer(canvas, world) {
     const small = (p.status & STATUS.REDUCTION) !== 0;
 
     // Arriving. A player who simply appears at full size in a sixteen-player scrum is invisible,
-    // so they land huge and collapse to size over about half a second. Cubic ease-out: nearly
-    // all of the shrink happens in the first third, which is what makes it read as a landing
-    // rather than as a slow zoom.
+    // so they land enormous and collapse to size.
+    //
+    // Quintic ease-out, not cubic: at twenty times scale a cubic curve is still four tiles wide
+    // a third of the way through, which covers the fight. The fifth power dumps almost all of
+    // the shrink into the first few frames, so it reads as something LANDING rather than as a
+    // slow zoom — and then overshoots slightly below 1 and settles, which is the squash that
+    // sells the impact.
     let pop = 1;
     if (p.spawnAt !== undefined) {
       const age = (world.tick - p.spawnAt) / SPAWN_POP_TICKS;
-      if (age >= 0 && age < 1) pop = 1 + (SPAWN_POP_SCALE - 1) * Math.pow(1 - age, 3);
-      else p.spawnAt = undefined;
+      if (age >= 0 && age < 1) {
+        pop = 1 + (SPAWN_POP_SCALE - 1) * Math.pow(1 - age, 5);
+        // The last fifth of the window is a small squash-and-settle, under a tenth of a tile.
+        if (age > 0.8) pop -= Math.sin((age - 0.8) * 5 * Math.PI) * 0.12;
+      } else p.spawnAt = undefined;
     }
 
     if (pop > 1) drawSpawnRing(c, px + TILE_PX / 2, py + TILE_PX / 2, pop, p.i);

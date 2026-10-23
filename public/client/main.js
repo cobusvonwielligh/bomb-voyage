@@ -629,10 +629,12 @@ function showDeadBanner(by) {
  *
  * Dying is a thing that happens to your player on the board, and covering the board with a panel
  * the same instant takes the moment away — you never see what killed you. The banner and the
- * flash land immediately; the dialog waits until the explosion has finished and the eye has had
- * somewhere to look.
+ * flash land immediately; the dialog waits for the banner to finish saying who got you, and
+ * then another half second on top so the two do not cross-fade into each other.
  */
-const DEAD_DIALOG_DELAY_TICKS = 2 * TICK_HZ;
+// The banner runs for 2.9s (see #deadBanner in style.css); the dialog follows half a second
+// after it clears, so the two never share the screen.
+const DEAD_DIALOG_DELAY_TICKS = Math.round(3.4 * TICK_HZ);
 
 function showDead(dead) {
   const held = dead && diedAtTick >= 0 && world.tick - diedAtTick < DEAD_DIALOG_DELAY_TICKS;

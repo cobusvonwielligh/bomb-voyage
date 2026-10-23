@@ -319,8 +319,15 @@ export const TAKEOVER_WINDOW_TICKS = 20 * TICK_HZ; // 20 s
 // How long a freshly spawned player is drawn oversized, shrinking to normal. Appearing out of
 // nowhere in a sixteen-player scrum is invisible otherwise, and you need to know instantly
 // whether the thing that just materialised is next to you.
-export const SPAWN_POP_TICKS = 18;   // 0.6 s
-export const SPAWN_POP_SCALE = 3.4;
+/* Arriving. The sprite lands at SPAWN_POP_SCALE times its size and collapses to normal.
+ *
+ * Twenty is absurd on purpose — at a zoomed-out map that is a pirate the height of the island,
+ * which is exactly the point: in a sixteen-player scrum the question "where did I just come
+ * back" has to be answerable in one frame, from the far corner of the screen. The quintic
+ * ease-out below is what keeps it from being obnoxious: it is past 20x within three frames and
+ * spends most of the window near normal size. */
+export const SPAWN_POP_TICKS = 24;   // 0.8 s
+export const SPAWN_POP_SCALE = 20;
 
 export const TRACER_SAMPLES = 8;
 export const TRACER_EVERY_TICKS = 3;
