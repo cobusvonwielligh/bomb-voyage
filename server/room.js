@@ -5,6 +5,7 @@
 
 import {
   TICK_MS, TICK_HZ, SNAP_EVERY_TICKS, MAX_PLAYERS, ROUND_TICKS, STATUS, STATUS_TICKS,
+  ROUNDTIME_MIN_MIN, ROUNDTIME_MAX_MIN,
   TILE_PX, UNITS_PER_TILE, FUSE_TICKS, FIRE_TICKS, playerColor, SCORE, ROUND_INTERMISSION_MS,
   progressFor,
   STREAK_WINDOW_TICKS, STREAK_NAMES, STREAK_ACE, GAMESPEED_MIN, GAMESPEED_MAX,
@@ -51,6 +52,9 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
 
   // Percent of the real-time tick rate. The tick itself is always 1/30 s of simulated time.
   let gamespeed = 100;
+  // How long a round runs, in ticks. Defaults to ROUND_TICKS and is changeable at runtime by the
+  // host with /roundtime — a Friday session is not always a ten-minute-round session.
+  let roundTicks = ROUND_TICKS;
   const tickMs = () => TICK_MS * 100 / gamespeed;
 
   // Monotonic, so "the most recently added bot" survives bots being removed from the middle.
@@ -356,7 +360,7 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       state.events.length = 0;      // nobody listening; do not grow without bound
     }
 
-    if (state.tick >= ROUND_TICKS) endRound();
+    if (state.tick >= roundTicks) endRound();
   }
 
   /**
@@ -512,7 +516,7 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       // which two clients would then fight over.
       playerId: seats[seat]?.playerId ?? null,
       tick: state.tick,
-      roundEndsAtTick: ROUND_TICKS,
+      roundEndsAtTick: roundTicks,
       color: playerColor(seat),
       map: welcomePayloadBase().map,
       players,
@@ -650,6 +654,24 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     return gamespeed;
   }
 
+  /**
+   * Round length, in minutes, to a tenth.
+   *
+   * Changing it takes effect immediately rather than at the next round: the host asking for a
+   * shorter round almost always means "this one is dragging". If the new length is already past,
+   * the round ends on the next tick, which is the honest reading of the request.
+   *
+   * Everyone is told the new deadline, because the clock in the bar is driven from it and a
+   * client that missed the change would count down to the wrong number.
+   */
+  function setRoundTime(minutes) {
+    const m = Math.round(Number(minutes) * 10) / 10;
+    if (!Number.isFinite(m) || m < ROUNDTIME_MIN_MIN || m > ROUNDTIME_MAX_MIN) return null;
+    roundTicks = Math.max(1, Math.round(m * 60 * TICK_HZ));
+    onBroadcast({ t: 'roundtime', endsAtTick: roundTicks, minutes: m });
+    return m;
+  }
+
   /** Toggle permanent invulnerability. Re-applied every tick would be neater, but this is a
    *  very long status and nothing else writes INVULN except respawn, which also sets it. */
   function toggleGod(seat) {
@@ -678,12 +700,13 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     if (p && !p.alive && state.tick >= p.respawnAt) respawn(p);
   }
 
-  const roundInfo = () => ({ tick: state.tick, endsAt: ROUND_TICKS, between, map: state.map.id });
+  const roundInfo = () => ({ tick: state.tick, endsAt: roundTicks, between, map: state.map.id });
 
   return {
     start, stop, join, disconnect, input, requestRespawn, welcomeFor, roundInfo, stats,
     setBots, botCount, restartRound, toggleGod, logout, hostSeat,
-    kickSeat, seatOfName, setMap, setGameSpeed,
+    kickSeat, seatOfName, setMap, setGameSpeed, setRoundTime,
+    roundMinutes: () => Math.round((roundTicks / TICK_HZ / 60) * 10) / 10,
     isBot: seat => !!seats[seat]?.isBot,
     maps: () => MAPS.map(m => m.id),
     gamespeed: () => gamespeed,

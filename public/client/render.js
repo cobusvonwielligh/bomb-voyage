@@ -507,12 +507,21 @@ export function createRenderer(canvas, world) {
     return moored;
   }
 
+  /* Four times the drawn size.
+   *
+   * At 1:1 she was about four tiles long, which next to a 32px pirate made her a dinghy. A real
+   * ship dwarfs the crew, and the fact that she runs off the edge of the island — and sometimes
+   * off the edge of the screen — is the thing that sells the scale rather than a problem with
+   * it. The detail holds up because none of it is a bitmap. */
+  const SHIP_SCALE = 4;
+
   function drawMoored(ox, oy) {
     const m = mooring();
     if (!m) return;
     ctx.save();
     ctx.translate(ox + m.x, oy + m.y);
     ctx.rotate(m.angle);
+    ctx.scale(SHIP_SCALE, SHIP_SCALE);
     // A slow roll at anchor. Tiny — a degree and a half — but a ship that is perfectly still on
     // water that is not reads as a sprite rather than as a boat.
     ctx.rotate(Math.sin(seaT * 0.45) * 0.026);
@@ -640,10 +649,11 @@ export function createRenderer(canvas, world) {
     const ox = -Math.round(cam.x) + Math.round(sx), oy = -Math.round(cam.y) + Math.round(sy);
 
     drawSea(vw, vh, ox, oy, dtMs);
-    // Under the island chunks on purpose: the shoreline rocks are drawn over her, so part of the
-    // hull disappears behind the headland she is moored against.
-    drawMoored(ox, oy);
     drawDrops(vw, vh, ox, oy, Math.min(0.05, dtMs / 1000));
+    // After the water, before the island. The flow field runs UNDER her — streaks of foam
+    // crossing the deck would be nonsense — while the shoreline rocks are still drawn over her,
+    // so part of the hull disappears behind the headland she is moored against.
+    drawMoored(ox, oy);
 
     const cx0 = Math.floor(cam.x / CHUNK_PX), cx1 = Math.floor((cam.x + vw) / CHUNK_PX);
     const cy0 = Math.floor(cam.y / CHUNK_PX), cy1 = Math.floor((cam.y + vh) / CHUNK_PX);

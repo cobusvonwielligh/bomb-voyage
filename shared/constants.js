@@ -14,6 +14,12 @@ export const SNAP_EVERY_TICKS = 2; // → 15 Hz snapshots
 
 export const ROUND_TICKS = 10 * 60 * TICK_HZ; // 18000
 
+// What /roundtime will accept, in minutes. The floor is a tenth of a minute — six seconds — which
+// is short enough to be useless for a real round and exactly right for testing the round-end
+// path without waiting ten minutes for it.
+export const ROUNDTIME_MIN_MIN = 0.1;
+export const ROUNDTIME_MAX_MIN = 60;
+
 // Tiles of open sea kept visible on every side of the island. The board is scaled so the map
 // plus this margin fits exactly — without it an island can sit flush against the panel edge and
 // stop reading as an island.

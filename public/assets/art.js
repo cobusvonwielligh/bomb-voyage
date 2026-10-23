@@ -700,7 +700,9 @@ export function drawPerk(c, { type = 1, bob = 0 }) {
  * suggest the rest.
  */
 export function drawShip(c) {
-  const L = 134, W = 38;                 // length bow-to-stern, beam at the waist
+  // Beam is half again what it was. At the old 3.5:1 she was a sleek thing; a working pirate
+  // ship is a fat one, and the extra width is also what gives the deck room to be read at all.
+  const L = 134, W = 57;                 // length bow-to-stern, beam at the waist
 
   /* The hull outline, as one reusable path at a given inset.
    *
@@ -714,11 +716,11 @@ export function drawShip(c) {
     const bx = L / 2 - i, sx = -L / 2 + i, hw = W / 2 - i, tw = W / 2.6 - i;
     c.beginPath();
     c.moveTo(bx, 0);
-    c.bezierCurveTo(bx - L * 0.16, -hw * 0.5, -L * 0.06, -hw, sx + L * 0.05, -tw);
+    c.bezierCurveTo(bx - L * 0.22, -hw * 0.32, -L * 0.02, -hw, sx + L * 0.05, -tw);
     c.lineTo(sx, -tw * 0.92);
     c.lineTo(sx, tw * 0.92);
     c.lineTo(sx + L * 0.06, tw);
-    c.bezierCurveTo(-L * 0.06, hw, bx - L * 0.16, hw * 0.5, bx, 0);
+    c.bezierCurveTo(-L * 0.02, hw, bx - L * 0.22, hw * 0.32, bx, 0);
     c.closePath();
     if (fill) { c.fillStyle = fill; c.fill(); }
   };
@@ -745,6 +747,10 @@ export function drawShip(c) {
 
   // ── hull ──
   hull(0, '#2f2217');                    // wet planking at the waterline
+  // A dark line right on the outline. Against open water the hull is the only silhouette she
+  // has, and a beamy shape with no edge reads as a rounded rectangle rather than as a boat.
+  hull(0, null);
+  c.strokeStyle = '#140e08'; c.lineWidth = 2; c.stroke();
   hull(3, '#73512f');                    // gunwale, lit
   hull(4.5, '#4e381f');                  // inner face of the rail, in shadow
   hull(7, '#9a7047');                    // deck
@@ -753,6 +759,11 @@ export function drawShip(c) {
   c.save();
   hull(7, null);                         // the same path again, used only as a clip
   c.clip();
+
+  // A rail inside the gunwale. On a beamy hull the open waist is a lot of empty plank, and the
+  // line is what tells you where the deck stops and the side begins.
+  hull(8.5, null);
+  c.strokeStyle = 'rgba(0,0,0,0.22)'; c.lineWidth = 1.4; c.stroke();
 
   // Planking, running fore and aft as deck planks actually do.
   for (let y = -W / 2; y < W / 2; y += 3) px(c, -L / 2, y, L, 1, 'rgba(0,0,0,0.13)');
@@ -763,10 +774,11 @@ export function drawShip(c) {
 
   // Raised quarterdeck aft, with its own shadow onto the main deck. This is what reads as a
   // ship with a stern castle rather than as an open boat.
-  px(c, -L / 2 + 28, -W / 2, 3, W, 'rgba(0,0,0,0.22)');
-  rr(c, -L / 2 + 2, -W / 2 + 5, 26, W - 10, 3, '#a87a4e');
-  for (let y = -W / 2 + 7; y < W / 2 - 5; y += 3) px(c, -L / 2 + 2, y, 26, 1, 'rgba(0,0,0,0.12)');
-  px(c, -L / 2 + 2, -W / 2 + 5, 26, 1, 'rgba(255,255,255,0.16)');
+  px(c, -L / 2 + 30, -W / 2, 4, W, 'rgba(0,0,0,0.25)');          // its shadow, cast forward
+  rr(c, -L / 2 + 2, -W / 2 + 9, 28, W - 18, 4, '#3d2c1b');        // the break of the deck
+  rr(c, -L / 2 + 3.5, -W / 2 + 10.5, 25, W - 21, 3, '#a87a4e');
+  for (let y = -W / 2 + 13; y < W / 2 - 11; y += 3) px(c, -L / 2 + 3.5, y, 25, 1, 'rgba(0,0,0,0.12)');
+  px(c, -L / 2 + 3.5, -W / 2 + 10.5, 25, 1, 'rgba(255,255,255,0.18)');
 
   // The wheel, right aft.
   c.strokeStyle = '#3a2a1c'; c.lineWidth = 1.6;
@@ -781,7 +793,7 @@ export function drawShip(c) {
 
   // Two cargo hatches with gratings. Cross-hatched, because a plain rectangle on a planked deck
   // disappears into the planking.
-  for (const [hx, hw2, hh] of [[-10, 22, 20], [26, 15, 14]]) {
+  for (const [hx, hw2, hh] of [[-12, 26, 28], [24, 18, 20]]) {
     rr(c, hx, -hh / 2, hw2, hh, 2, '#4a3421');
     rr(c, hx + 2, -hh / 2 + 2, hw2 - 4, hh - 4, 1, '#6b4e30');
     for (let gx = hx + 3; gx < hx + hw2 - 2; gx += 4) px(c, gx, -hh / 2 + 2, 1, hh - 4, '#3a2a1c');
@@ -791,15 +803,15 @@ export function drawShip(c) {
   // The ship's boat, stowed upside down amidships. Instantly readable as "a boat on a boat",
   // and the kind of detail that makes a vessel look lived in.
   c.save();
-  c.translate(8, 0);
+  c.translate(6, 0);
   c.beginPath();
-  c.moveTo(10, 0);
-  c.bezierCurveTo(5, -5.5, -5, -5.5, -10, 0);
-  c.bezierCurveTo(-5, 5.5, 5, 5.5, 10, 0);
+  c.moveTo(14, 0);
+  c.bezierCurveTo(7, -8, -7, -8, -14, 0);
+  c.bezierCurveTo(-7, 8, 7, 8, 14, 0);
   c.closePath();
   c.fillStyle = '#6b4e30'; c.fill();
   c.strokeStyle = '#3a2a1c'; c.lineWidth = 1; c.stroke();
-  px(c, -9, -0.5, 18, 1, '#3a2a1c');     // its keel, uppermost
+  px(c, -13, -0.6, 26, 1.2, '#3a2a1c');   // its keel, uppermost
   c.restore();
 
   // Coils of rope by the rail. Three rings each, because a single circle reads as a plate.
@@ -809,9 +821,10 @@ export function drawShip(c) {
   }
 
   // The fo'c'sle: a short raised deck right forward, mirroring the quarterdeck.
-  rr(c, L / 2 - 38, -W / 2 + 8, 22, W - 16, 3, '#a87a4e');
-  for (let y = -W / 2 + 10; y < W / 2 - 8; y += 3) px(c, L / 2 - 38, y, 22, 1, 'rgba(0,0,0,0.12)');
-  px(c, L / 2 - 38, -W / 2 + 8, 22, 1, 'rgba(255,255,255,0.14)');
+  rr(c, L / 2 - 40, -W / 2 + 14, 26, W - 28, 4, '#3d2c1b');
+  rr(c, L / 2 - 38.5, -W / 2 + 15.5, 23, W - 31, 3, '#a87a4e');
+  for (let y = -W / 2 + 18; y < W / 2 - 16; y += 3) px(c, L / 2 - 38.5, y, 23, 1, 'rgba(0,0,0,0.12)');
+  px(c, L / 2 - 38.5, -W / 2 + 15.5, 23, 1, 'rgba(255,255,255,0.16)');
   // An anchor stowed on the fo'c'sle: a stock, a shank and two flukes. Small, but it is the one
   // object up here that is unmistakably nautical.
   c.save();
@@ -865,6 +878,16 @@ export function drawShip(c) {
   }
   mast(-18, W + 8, 4);
   mast(18, W - 4, 3.4);
+
+  // The stem: a wedge of dark timber at the cutwater, so the bow comes to a point instead of
+  // fading into deck planking.
+  c.beginPath();
+  c.moveTo(L / 2 - 1, 0);
+  c.lineTo(L / 2 - 20, -5.5);
+  c.lineTo(L / 2 - 20, 5.5);
+  c.closePath();
+  c.fillStyle = '#5c422b'; c.fill();
+  c.strokeStyle = '#2f2217'; c.lineWidth = 1.2; c.stroke();
 
   // Bowsprit, out over the bow with a jib furled along it. The detail that reads as "ship" from
   // furthest away, because it is the one thing that breaks the hull outline.

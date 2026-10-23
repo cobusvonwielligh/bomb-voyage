@@ -7,7 +7,8 @@
 import { PING_EVERY_MS, RTT_SAMPLES, CLOCK_SAFETY_MS, TICK_MS } from '/shared/constants.js';
 import { createTransport } from './transport.js';
 
-export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onScores, onStreak, onRejected }) {
+export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onScores, onStreak,
+  onRoundTime, onRejected }) {
   let ws = null;
   // serverTick ≈ performance.now()/TICK_MS + tickOffset. Keeping an offset rather than a
   // timestamped sample means the estimate is continuous: a new ping nudges it instead of
@@ -126,6 +127,9 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
         case 'roundend': onRoundEnd?.(m); break;
         case 'scores': onScores?.(m); break;
         case 'streak': onStreak?.(m); break;
+        // The host changed the round length. The clock in the bar counts down to this, so a
+        // client that ignored it would show the wrong number until the next round.
+        case 'roundtime': onRoundTime?.(m); break;
       }
     }
   }

@@ -300,6 +300,9 @@ const net = createNet({
    * Kill streaks. The server decides what counts; this only has to make it impossible to miss.
    * Shape: { t:'streak', i, name, kind, ace }.
    */
+  // The host moved the finish line. One field, and the HUD clock follows it from the next frame.
+  onRoundTime: m => { world.roundEndsAtTick = m.endsAtTick; },
+
   onStreak: m => {
     const el = $('streak');
     // How far up the ladder, from the name the server sent. Everything scales off it: the type
