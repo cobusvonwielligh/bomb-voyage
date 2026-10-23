@@ -27,6 +27,19 @@ const $ = id => document.getElementById(id);
  * Short and loud. This is read in peripheral vision in under a second, so "+1 BOMB" beats
  * "extra bomb capacity" by a distance.
  */
+/**
+ * The passive upgrades that get a floating badge when you collect one.
+ *
+ * Only the ones that change you permanently. A bomb or a fire pickup is a number going up and
+ * the pip covers it; boots, shields and lungs change how you move and how much you can take, and
+ * those are worth a beat of celebration.
+ */
+const UPGRADES = {
+  3:  { icon: '#i-boot',   text: 'boots',  colour: '#5fd8f0', of: () => MAX_SKATES },
+  4:  { icon: '#i-shield', text: 'shield', colour: '#5ad1a0', of: () => MAX_SHIELDS },
+  15: { icon: '#i-bolt',   text: 'lungs',  colour: '#ffe04a', of: () => MAX_STAMINA_LEVELS },
+};
+
 const PERK_LABEL = {
   1: { text: '+1 BOMB', colour: '#7e93d6' },
   2: { text: '+1 FIRE', colour: '#ff9b4a' },
@@ -190,6 +203,7 @@ const net = createNet({
           if (!p) break;
           const type = perkTypes.get(e.id);
           sfx.playAtUnits('pickup', p.rx ?? p.x, p.ry ?? p.y, { perk: type });
+          if (e.i === world.you) showUpgrade(type);
           // Say what it was. Four of the five perks are a number going up somewhere in the top
           // bar, which is the last place you are looking while somebody is chasing you.
           const label = PERK_LABEL[type];
@@ -515,6 +529,32 @@ function setValue(el, text, { worse = false, calm = false } = {}) {
  * up: every player has one bomb from the first tick, and a bar that is lit from the start tells
  * you nothing. Speed, shields and lungs all start at zero, so for those the default is right.
  */
+/**
+ * Float a badge for a passive upgrade, then throw it away.
+ *
+ * The element removes itself on animationend rather than on a timer: a tab that was hidden for
+ * the duration never ran the animation, and a timer would delete a badge that had not yet been
+ * seen. Capped at three on screen, because collecting a cluster should not build a tower.
+ */
+function showUpgrade(type) {
+  const up = UPGRADES[type];
+  if (!up) return;
+  const me = world.me();
+  const have = type === 3 ? me?.speed : type === 4 ? me?.shields : me?.staminaLevel;
+
+  const box = $('ups');
+  while (box.children.length >= 3) box.firstChild.remove();
+  // Stack, so a second pickup does not land exactly on top of the first.
+  const el = document.createElement('div');
+  el.className = 'up';
+  el.style.color = up.colour;
+  el.style.top = `${2 + box.children.length * 30}px`;
+  el.innerHTML = `<svg><use href="${up.icon}"/></svg><span>${up.text}</span>`
+    + `<span class="lvl">${(have ?? 0)}/${up.of()}</span>`;
+  el.addEventListener('animationend', () => el.remove());
+  box.append(el);
+}
+
 const gearPip = (id, value, cap, base = 0) => {
   const el = $(id);
   setValue(el.querySelector('.n'), value);

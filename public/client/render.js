@@ -73,13 +73,45 @@ export function createRenderer(canvas, world) {
    * visible ocean and the island reads as an island rather than as a diagram that ran out of
    * paper. Beyond that the board is as large as it can possibly be.
    */
+  /**
+   * The bounding box of the LAND, in tiles, as [x0, y0, w, h].
+   *
+   * Not the map rectangle. Every map but Arena is a shape inside its rectangle — Cove is a blob,
+   * Twins is two circles — and the rest of the grid is WATER. Fitting the rectangle therefore
+   * fitted a frame of ocean that was already several tiles thick before the margin was added,
+   * which is why Cove rendered a small island in a sea of empty blue.
+   *
+   * Cached per map object: this is a full w*h scan and the map identity only changes on a round.
+   */
+  let landBoxFor = null, landBox = null;
+  function landBounds() {
+    if (landBoxFor === world.map && landBox) return landBox;
+    const { w, h, cells } = world.map;
+    let x0 = w, y0 = h, x1 = -1, y1 = -1;
+    for (let ty = 0; ty < h; ty++) {
+      for (let tx = 0; tx < w; tx++) {
+        if (cellType(cells[ty * w + tx]) === BLOCK.WATER) continue;
+        if (tx < x0) x0 = tx;
+        if (tx > x1) x1 = tx;
+        if (ty < y0) y0 = ty;
+        if (ty > y1) y1 = ty;
+      }
+    }
+    // A map that is somehow all water still has to render something.
+    if (x1 < x0) { x0 = 0; y0 = 0; x1 = w - 1; y1 = h - 1; }
+    landBoxFor = world.map;
+    landBox = [x0, y0, x1 - x0 + 1, y1 - y0 + 1];
+    return landBox;
+  }
+
   function recomputeZoom() {
     if (!world.map || !view.w) return;
     const m = SEA_MARGIN_TILES * 2;
-    // Fit the map PLUS its ocean margin, so there is always visible sea on every side and the
-    // island reads as an island rather than as a diagram that ran out of paper.
-    const fit = Math.min(view.w / ((world.map.w + m) * TILE_PX),
-                         view.h / ((world.map.h + m) * TILE_PX));
+    const [, , lw, lh] = landBounds();
+    // Fit the ISLAND plus its ocean margin, so the water starts SEA_MARGIN_TILES beyond the
+    // coast on every map, whatever shape the land is inside its grid.
+    const fit = Math.min(view.w / ((lw + m) * TILE_PX),
+                         view.h / ((lh + m) * TILE_PX));
 
     // Quantised. An unrounded scale changes by a hair on every layout settle and on every DPR
     // report, and a board that resizes by one part in a thousand reads as jitter. Fortieths are
@@ -450,7 +482,11 @@ export function createRenderer(canvas, world) {
     ctx.imageSmoothingEnabled = view.smooth;
 
     const vw = view.w / zoom, vh = view.h / zoom;
-    const worldW = world.map.w * TILE_PX, worldH = world.map.h * TILE_PX;
+    // The camera frames the ISLAND, not the grid: centring on the middle of the rectangle puts
+    // an off-centre island off-centre on screen, with all the spare ocean on one side.
+    const [lx, ly, lw, lh] = landBounds();
+    const worldW = lw * TILE_PX, worldH = lh * TILE_PX;
+    const originX = lx * TILE_PX, originY = ly * TILE_PX;
 
     // Follow, then clamp. When the whole map fits — which it now does on most screens — the
     // clamp collapses to a single position and the camera simply stops existing, which is the
@@ -465,8 +501,11 @@ export function createRenderer(canvas, world) {
       else { cam.x += (tx - cam.x) * k; cam.y += (ty - cam.y) * k; }
     }
     // Centre whichever axis has room to spare, instead of pinning the island to the top left.
-    cam.x = worldW <= vw ? (worldW - vw) / 2 : Math.max(0, Math.min(worldW - vw, cam.x));
-    cam.y = worldH <= vh ? (worldH - vh) / 2 : Math.max(0, Math.min(worldH - vh, cam.y));
+    // cam stays in absolute world pixels throughout; only the clamp knows about the island.
+    cam.x = worldW <= vw ? originX + (worldW - vw) / 2
+      : Math.max(originX, Math.min(originX + worldW - vw, cam.x));
+    cam.y = worldH <= vh ? originY + (worldH - vh) / 2
+      : Math.max(originY, Math.min(originY + worldH - vh, cam.y));
 
     // Shake is applied to the draw offset, not to the camera, so it cannot accumulate into the
     // follow logic or drift the view. Decay is time-based for the same reason the follow is.

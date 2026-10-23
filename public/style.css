@@ -457,6 +457,50 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   display: block; color: var(--dim); font-size: 10px;
   text-transform: uppercase; letter-spacing: .2em; margin-top: 3px;
 }
+/* Where a passive upgrade announces itself.
+ *
+ * A pip in the top bar going from 0 to 1 is correct and almost invisible — it is six pixels of
+ * change in a bar you are not looking at. The badge is the loud half of the same event: it
+ * floats up over the panel for a couple of seconds and then is gone, leaving the pip as the
+ * permanent record.
+ *
+ * Zero height and overflow visible, so it announces things without ever pushing the XP bar and
+ * the standings down the panel and back up again. */
+#ups {
+  position: relative;
+  height: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 3;
+}
+.up {
+  position: absolute; left: 0; top: 2px;
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 11px 5px 8px;
+  border-radius: 999px;
+  background: #11161ef2;
+  border: 1px solid currentColor;
+  box-shadow: 0 6px 20px #000a, 0 0 18px -4px currentColor;
+  font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  white-space: nowrap;
+  animation: upFloat 2.6s cubic-bezier(.2, .9, .3, 1) forwards;
+}
+.up svg { width: 15px; height: 15px; display: block; }
+.up .lvl { color: var(--dim); font-weight: 600; letter-spacing: .04em; }
+
+/* Up and out. Most of the travel is early, so the eye is caught by the movement and then has a
+   still badge to actually read. */
+@keyframes upFloat {
+  0%   { opacity: 0; transform: translateY(14px) scale(.8); }
+  12%  { opacity: 1; transform: translateY(0)    scale(1.06); }
+  22%  {              transform: translateY(-2px) scale(1); }
+  70%  { opacity: 1; transform: translateY(-10px) scale(1); }
+  100% { opacity: 0; transform: translateY(-30px) scale(.96); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .up { animation: upFloat 2.6s steps(1) forwards; }
+}
+
 #cardStats {
   display: flex; gap: 16px; margin-top: 9px;
   font-family: var(--nums); font-variant-numeric: tabular-nums; font-size: 13px;

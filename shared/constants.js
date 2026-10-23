@@ -35,10 +35,14 @@ export const MAX_PLAYERS = 16;
 
 // ─── Movement ─────────────────────────────────────────────────────────────────
 
-// Index = skate count. Twenty percent slower than the first pass across the board: at the old
-// pace a full-speed player crossed a tile in under five ticks, which is faster than the eye can
-// plan a turn in and made corners feel like luck rather than judgement.
-export const SPEED_UNITS_PER_TICK = [27, 31, 35, 39, 43];
+// Index = skate count. The BASE is twenty percent slower than the first pass across the board:
+// at the old pace a full-speed player crossed a tile in under five ticks, which is faster than
+// the eye can plan a turn in and made corners feel like luck rather than judgement.
+//
+// The STEP is double what it was — 8 units a boot rather than 4. Four was a 59% gain across all
+// four boots; eight makes a fully booted player 119% faster than a fresh one, 3.2 tiles a second
+// against 6.9. Worth crossing the map for, which the old step was not.
+export const SPEED_UNITS_PER_TICK = [27, 35, 43, 51, 59];
 export const MAX_SKATES = SPEED_UNITS_PER_TICK.length - 1; // 4
 export const SLOWDOWN_NUM = 1, SLOWDOWN_DEN = 2; // speed * 1/2, integer division
 

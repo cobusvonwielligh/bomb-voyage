@@ -13,8 +13,8 @@ import {
   PERK, PERK_DROP_CHANCE_SOFT, PERK_GLUT_FLOOR, PERK_SCARCE_BOOST, PERK_TARGET_MIN,
   HITBOX_UNITS, TICK_HZ, PERK_EXPIRE_TICKS, PERK_FADE_TICKS,
 } from '../shared/constants.js';
-import { MAPS } from '../shared/maps.js';
-import { PERK_WEIGHTS } from '../shared/constants.js';
+import { MAPS, buildMap, cellType } from '../shared/maps.js';
+import { PERK_WEIGHTS, BLOCK } from '../shared/constants.js';
 import { readFileSync } from 'node:fs';
 
 const read = rel => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8');
@@ -129,4 +129,33 @@ test('every perk that can drop has its own colour, silhouette and floating label
     skins.add(label[2]);
   }
   assert.equal(skins.size, droppable.length, 'two perks share a colour');
+});
+
+test('the zoom frames the island, not the grid it is drawn in', () => {
+  // Every map but Arena is a shape inside its rectangle, and the rest of the grid is WATER.
+  // Fitting the rectangle fits a frame of ocean that is already several tiles thick before the
+  // margin is added, which is what made Cove render a small island in a sea of empty blue.
+  const render = read('public/client/render.js');
+  assert.match(render, /function landBounds\(\)/, 'render.js no longer measures the land');
+  assert.match(render, /const \[, , lw, lh\] = landBounds\(\)/,
+    'recomputeZoom is not using the land bounds');
+  assert.ok(!/view\.w \/ \(\(world\.map\.w \+ m\)/.test(render),
+    'the zoom is still fitted to the map rectangle');
+
+  // And the numbers, measured from the real maps.
+  const worst = MAPS.map(m => {
+    const map = buildMap(m);
+    let x0 = m.w, y0 = m.h, x1 = -1, y1 = -1;
+    for (let ty = 0; ty < m.h; ty++) {
+      for (let tx = 0; tx < m.w; tx++) {
+        if (cellType(map.cells[ty * m.w + tx]) === BLOCK.WATER) continue;
+        if (tx < x0) x0 = tx; if (tx > x1) x1 = tx;
+        if (ty < y0) y0 = ty; if (ty > y1) y1 = ty;
+      }
+    }
+    return { id: m.id, slackW: m.w - (x1 - x0 + 1), slackH: m.h - (y1 - y0 + 1) };
+  });
+  // At least one map has real slack, or this change would be pointless and the test vacuous.
+  assert.ok(worst.some(w => w.slackW >= 4 || w.slackH >= 4),
+    `no map has unused grid; measured ${JSON.stringify(worst)}`);
 });
