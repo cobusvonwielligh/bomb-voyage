@@ -824,6 +824,53 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * No disc and no ring: the art has its own alpha and a circular backing plate behind it just
  * reads as a sticker. Overlapping the card is what puts him in the scene rather than beside it. */
 #menuWrap { position: relative; }
+/* The card paints over the props. Both are positioned with auto z-index, which means DOM order
+   decides — and the props come later in the markup, so without this they would sit on top of
+   the form. */
+#menuWrap > .card { z-index: 1; }
+
+/* The two props: a stack of powder kegs off the top left, the ship off the bottom right.
+ *
+ * Behind the card on purpose (z-index 0 against the card's own stacking context), so each one is
+ * half tucked underneath it. A prop that clears the panel entirely reads as a sticker placed
+ * next to the dialog; one that goes under it reads as a scene the dialog is sitting in.
+ *
+ * They drift on two different, slow, prime-ish periods so the pair never visibly syncs up — the
+ * moment two decorations bob in time they stop being scenery and start being an animation. */
+.prop {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  user-select: none;
+  /* Knocked back: these sit behind text that has to stay readable, and full-strength artwork
+     either side of a dark panel pulls the eye straight off the thing you came here to press. */
+  opacity: .82;
+  filter: drop-shadow(0 20px 34px #000b);
+}
+#propBarrels {
+  width: 230px; height: auto;
+  top: -74px; left: -118px;
+  transform: rotate(-7deg);
+  animation: propA 9s ease-in-out infinite;
+}
+#propShip {
+  width: 330px; height: auto;
+  right: -132px; bottom: -78px;
+  animation: propB 13s ease-in-out infinite;
+}
+
+@keyframes propA {
+  0%, 100% { transform: translateY(0) rotate(-7deg); }
+  50%      { transform: translateY(-11px) rotate(-4deg); }
+}
+@keyframes propB {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-14px) rotate(1.6deg); }
+}
+@media (prefers-reduced-motion: reduce) { .prop { animation: none; } }
+/* Below this the card has the width to itself; a prop here would be over the form, not beside
+   it. Same breakpoint the mascot uses. */
+@media (max-width: 1100px) { .prop { display: none; } }
 #mascot {
   position: absolute;
   /* Pinned a third of the way down the card, so he sits beside the name field rather than over
