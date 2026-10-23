@@ -123,13 +123,16 @@ export async function startWebTransport({ port, cert, privKey, path = '/wt', onS
   })().catch(err => log.warn?.(`webtransport: session loop ended (${err.message})`));
 
   async function accept(session) {
+    log.log?.('webtransport: session arriving');
     await session.ready;
+    log.log?.('webtransport: session ready, waiting for its stream');
 
     // One bidirectional stream carries everything that must arrive in order. The client opens
     // it immediately after connecting, so waiting for it is the handshake.
     const streams = session.incomingBidirectionalStreams.getReader();
     const { value: stream } = await streams.read();
-    if (!stream) { session.close(); return; }
+    if (!stream) { log.warn?.('webtransport: session opened no stream'); session.close(); return; }
+    log.log?.('webtransport: stream open, session live');
 
     const socket = new SessionSocket(session, stream.writable.getWriter());
     open++;

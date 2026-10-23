@@ -803,6 +803,27 @@ export function createRenderer(canvas, world) {
     const flipped = (p.status & STATUS.CHANGELING) !== 0;
     const small = (p.status & STATUS.REDUCTION) !== 0;
 
+    /* Out of breath, on the sprite itself.
+     *
+     * The meter beside the player is precise and easy to miss; this is the opposite. The figure
+     * heaves — scaled on one axis only, so it reads as breathing rather than as a zoom — and
+     * once genuinely exhausted it flashes amber on the beat of the breath.
+     *
+     * Deliberately on the SPRITE rather than only in the HUD: at the moment you need to know
+     * you are about to be slow, you are looking at your pirate, not at a bar.
+     */
+    let pant = 0, gasp = 0;
+    if (p.stamina !== undefined) {
+      const frac = Math.max(0, Math.min(1, p.stamina / staminaMaxFor(p)));
+      if (frac < STAMINA_SHOW_AT || p.tired) {
+        // Breathing gets faster and deeper the emptier it gets.
+        const depth = p.tired ? 1 : (STAMINA_SHOW_AT - frac) / STAMINA_SHOW_AT;
+        const rate = 0.22 + depth * 0.3;
+        pant = Math.sin(world.tick * rate) * 0.07 * depth;
+        gasp = p.tired ? 0.5 + 0.5 * Math.sin(world.tick * rate) : 0;
+      }
+    }
+
     // Arriving. A player who simply appears at full size in a sixteen-player scrum is invisible,
     // so they land enormous and collapse to size.
     //
@@ -823,8 +844,22 @@ export function createRenderer(canvas, world) {
 
     if (pop > 1) drawSpawnRing(c, px + TILE_PX / 2, py + TILE_PX / 2, pop, p.i);
 
-    const sx = (small ? 0.55 : 1) * pop;
-    const sy = (small ? 0.55 : 1) * pop * (flipped ? -1 : 1);
+    // Exhausted: a warm pulse on the ground under them. Under, not over — it says "slow" without
+    // obscuring the one thing you are aiming at.
+    if (gasp > 0) {
+      c.save();
+      c.globalAlpha = 0.18 + gasp * 0.3;
+      c.fillStyle = '#ff9b4a';
+      c.beginPath();
+      c.ellipse(px + TILE_PX / 2, py + TILE_PX * 0.72, TILE_PX * (0.34 + gasp * 0.12),
+        TILE_PX * (0.16 + gasp * 0.05), 0, 0, 7);
+      c.fill();
+      c.restore();
+      c.globalAlpha = 1;
+    }
+
+    const sx = (small ? 0.55 : 1) * pop * (1 - pant * 0.5);
+    const sy = (small ? 0.55 : 1) * pop * (flipped ? -1 : 1) * (1 + pant);
     if (sx !== 1 || sy !== 1) {
       c.save();
       c.translate(px + TILE_PX / 2, py + TILE_PX / 2);

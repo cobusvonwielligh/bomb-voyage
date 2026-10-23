@@ -170,9 +170,11 @@ export const STAMINA_REGEN_MOVING = 1;             // only while exhausted; see 
 export const STAMINA_REGEN_IDLE = 2;
 export const STAMINA_RECOVER_UNITS = Math.round(STAMINA_MAX / 3);
 export const STAMINA_TIRED_NUM = 1, STAMINA_TIRED_DEN = 2;   // half pace when exhausted
-// Below this fraction the indicator appears beside the player. Above it, nothing is drawn: a
-// meter that is always on screen is a meter nobody looks at.
-export const STAMINA_SHOW_AT = 0.5;
+// Below this fraction the indicator appears beside the player. Above it nothing is drawn: a
+// meter that is always on screen is a meter nobody looks at. Raised from a half to seven tenths
+// — at a half the warning and the limp arrived almost together, which is a notification rather
+// than a warning.
+export const STAMINA_SHOW_AT = 0.7;
 // Each Lung perk adds this much to your ceiling, up to MAX_STAMINA_LEVELS of them. Four levels
 // takes ten seconds of running to twenty.
 export const STAMINA_PER_LEVEL = 75;
