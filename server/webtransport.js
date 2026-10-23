@@ -139,6 +139,17 @@ export async function startWebTransport({ port, cert, privKey, path = '/wt', onS
 
     const push = createFramer(msg => socket.emit('message', JSON.stringify(msg)));
 
+    /* Hand the socket over BEFORE anything can be read off the wire.
+     *
+     * The read loops below emit 'message' the instant bytes arrive, and a client that sends its
+     * join in the same breath as opening the stream — which both our client and the browser one
+     * do — can get that join delivered before net.js has attached a listener. EventEmitter drops
+     * an event with no listener silently, so the symptom was a QUIC session that connected
+     * perfectly and then sat there receiving nothing, which looks like a server bug anywhere but
+     * here.
+     */
+    onSocket(socket);
+
     // Reliable half.
     (async () => {
       const r = stream.readable.getReader();
@@ -161,8 +172,6 @@ export async function startWebTransport({ port, cert, privKey, path = '/wt', onS
 
     session.closed.then(() => socket._gone()).catch(() => socket._gone());
     socket.once('close', () => { open--; });
-
-    onSocket(socket);
   }
 
   log.log?.(`webtransport listening on udp/${port}${path}`);
