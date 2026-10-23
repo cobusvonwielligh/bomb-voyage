@@ -7,7 +7,7 @@ Two requirements shape all of this:
    rewrite.**
 
 **Current target:** `af-south-1` (Cape Town), one `t3.micro`, hostname
-`16.28.138.34.sslip.io`. Cape Town puts the whole team at roughly **15 ms** instead of the
+`15.240.88.189.sslip.io`. Cape Town puts the whole team at roughly **15 ms** instead of the
 ~165 ms the netcode was designed to survive, so the game will feel better than specified.
 
 ---
@@ -63,12 +63,12 @@ Each row is a thing that commonly gets a game blocked, and the choice that avoid
 
 ## 3. Hostname without a domain
 
-`sslip.io` resolves any embedded IP, so `16.28.138.34.sslip.io` → `16.28.138.34`, free, instant,
+`sslip.io` resolves any embedded IP, so `15.240.88.189.sslip.io` → `15.240.88.189`, free, instant,
 no account. Let's Encrypt issues for it happily.
 
 ```
-$ dig +short 16.28.138.34.sslip.io
-16.28.138.34
+$ dig +short 15.240.88.189.sslip.io
+15.240.88.189
 ```
 
 Swapping to a real eezi hostname later is a DNS record plus re-running `bootstrap.sh` with the
@@ -96,9 +96,9 @@ new `HOST`. Nothing in the code knows the name.
 ### On the box (once, ~3 minutes)
 
 ```bash
-scp -i ~/Downloads/bombs-away.pem infra/bootstrap.sh ec2-user@16.28.138.34:
-ssh -i ~/Downloads/bombs-away.pem ec2-user@16.28.138.34 \
-  'HOST=16.28.138.34.sslip.io EMAIL=you@example.com bash bootstrap.sh'
+scp -i ~/Downloads/bombs-away.pem infra/bootstrap.sh ec2-user@15.240.88.189:
+ssh -i ~/Downloads/bombs-away.pem ec2-user@15.240.88.189 \
+  'HOST=15.240.88.189.sslip.io EMAIL=you@example.com bash bootstrap.sh'
 ```
 
 `bootstrap.sh` is idempotent — re-run it any time. It installs Node, creates
@@ -109,7 +109,7 @@ timer for 03:00 Sunday.
 ### From your laptop, every deploy after that
 
 ```bash
-HOST=16.28.138.34.sslip.io npm run deploy
+HOST=15.240.88.189.sslip.io npm run deploy
 ```
 
 Runs the tests, rsyncs, `npm ci --omit=dev`, restarts the service, and polls `/healthz` until it
@@ -207,22 +207,22 @@ Everything is already parameterised. The whole switch:
 
    | Type | Name | Value |
    |---|---|---|
-   | A | `@` | `16.28.138.34` |
-   | A | `www` | `16.28.138.34` |
+   | A | `@` | `15.240.88.189` |
+   | A | `www` | `15.240.88.189` |
 
 2. **Wait for DNS**, and confirm before going further — certbot fails loudly if the name does
    not resolve to the box yet:
 
    ```bash
-   dig +short bombvoyage.co.za      # must print 16.28.138.34
+   dig +short bombvoyage.co.za      # must print 15.240.88.189
    ```
 
 3. **Re-run bootstrap** with the new names. It is idempotent, `--expand` adds them to the
    existing certificate, and the existing deploy token is preserved:
 
    ```bash
-   scp -i ~/Downloads/bombs-away.pem infra/bootstrap.sh ec2-user@16.28.138.34:/tmp/
-   ssh -i ~/Downloads/bombs-away.pem ec2-user@16.28.138.34 \
+   scp -i ~/Downloads/bombs-away.pem infra/bootstrap.sh ec2-user@15.240.88.189:/tmp/
+   ssh -i ~/Downloads/bombs-away.pem ec2-user@15.240.88.189 \
      'HOST=bombvoyage.co.za ALT_HOSTS=www.bombvoyage.co.za EMAIL=you@example.com bash /tmp/bootstrap.sh'
    ```
 
@@ -246,7 +246,7 @@ moment and nothing to coordinate.
 |---|---|---|
 | Compute | EC2 + systemd | Same, in a private subnet — or ECS with a six-line Dockerfile |
 | TLS | Let's Encrypt on the box | ACM certificate on an ALB; the app drops to plain HTTP by unsetting `TLS_CERT` |
-| Hostname | `16.28.138.34.sslip.io` | `game.<eezi domain>` in Route 53 |
+| Hostname | `15.240.88.189.sslip.io` | `game.<eezi domain>` in Route 53 |
 | Access | Public internet | VPC + VPN or an internal ALB — **then IT does not need to unblock anything at all** |
 | Data | `/var/lib/bomb-voyage/` | EFS mount, same path |
 | Config | `/etc/bomb-voyage.env` | Task definition env or SSM Parameter Store |

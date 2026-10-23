@@ -3,8 +3,8 @@
 A lightweight 16-player browser clone of [Game of Bombs](https://gameofbombs.com), built for
 Friday-afternoon games at eezi.
 
-**Live:** https://16.28.138.34.sslip.io · **Health:** [/healthz](https://16.28.138.34.sslip.io/healthz)
-· **Sprites:** [/art-preview.html](https://16.28.138.34.sslip.io/art-preview.html)
+**Live:** https://15.240.88.189.sslip.io · **Health:** [/healthz](https://15.240.88.189.sslip.io/healthz)
+· **Sprites:** [/art-preview.html](https://15.240.88.189.sslip.io/art-preview.html)
 
 ---
 
@@ -14,7 +14,9 @@ Friday-afternoon games at eezi.
 |---|---|
 | ✅ Spec | All of `docs/`. Read [docs/PLAN.md](docs/PLAN.md) first. |
 | ✅ Deployment spine | Server, TLS, systemd, smoke tests, reboot-safe. |
-| ✅ CI/CD | Tests on every push; `main` deploys itself. Needs `DEPLOY_URL` and `DEPLOY_TOKEN` repo secrets. |
+| ✅ CI | Tests on every push and PR. No secrets needed. |
+| ✅ Deploy | Manual, ~4 s, with one-level rollback. Auto-deploy is built but switched off. |
+| ⬜ Domain | `bombvoyage.online` — waiting on DNS. The `sslip.io` name works meanwhile. |
 | ⬜ The game | Not started. Phase 0 onward in [docs/PLAN.md](docs/PLAN.md). |
 
 What works end to end today: HTTPS on 443, `wss://` on the same origin, static serving, the
