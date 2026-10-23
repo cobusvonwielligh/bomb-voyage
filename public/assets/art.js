@@ -283,6 +283,26 @@ export function drawTile(c, type, tx = 0, ty = 0, dmg = 0) {
   }
   if (dmg > 0) drawCracks(c, dmg, tx, ty);
   if (CASTS_SHADOW.has(type)) castShadow(c);
+  if (OUTLINED.has(type)) outlineTile(c);
+}
+
+/* Blocks that get a hairline round them.
+ *
+ * Two soft walls side by side used to be one continuous slab of brown, which matters because
+ * "how many hits is that" is a count of blocks, not of pixels. A single dark line between them
+ * turns a wall into a row of walls. Floor and water are excluded — a grid drawn on open ground
+ * is a chessboard, and the floor already has its own faint seam. */
+const OUTLINED = new Set([
+  BLOCK.SOFT, BLOCK.REINFORCED, BLOCK.MONOLITH, BLOCK.POWDER, BLOCK.COLUMN,
+  BLOCK.SHRUB_SOLID, BLOCK.IRON,
+]);
+
+/** One pixel of dark around the tile. Inside the tile, for the reason given in castShadow. */
+function outlineTile(c) {
+  const S = TILE_PX;
+  c.strokeStyle = 'rgba(14,18,24,0.55)';
+  c.lineWidth = 1;
+  c.strokeRect(0.5, 0.5, S - 1, S - 1);
 }
 
 /* Blocks that stand proud of the floor and therefore throw one.
@@ -1050,6 +1070,11 @@ export function bakeSea() {
 export function drawRock(c, tx, ty, edges) {
   const S = TILE_PX;
   px(c, 0, 0, S, S, PALETTE.rockDark);
+  // The island's outline, drawn only on the sides that actually face open water. A border round
+  // every rock tile would draw a grid through the middle of the coast; this draws one line
+  // round the whole island, because the only tiles that carry it are the ones on the edge.
+  // Same weight as the block hairline, in the darkest brown on the palette.
+  const EDGE = '#241c14', T = 2;
 
   // Boulders, not a brick. Three overlapping rounded lumps of brown-grey stone, sized and placed
   // by hash — so every tile is a different pile, and the same tile is the same pile every time.
@@ -1077,6 +1102,13 @@ export function drawRock(c, tx, ty, edges) {
     if (edges & 4) px(c, 0, 2, 3, S - 4, PALETTE.sand);
     if (edges & 8) px(c, 2, S - 3, S - 4, 3, PALETTE.sand);
     c.globalAlpha = 1;
+
+    // And the outline itself, on the seaward faces only. Drawn last so the sand does not sit on
+    // top of it, and square-cornered: a rounded one would leave gaps where two edge tiles meet.
+    if (edges & 1) px(c, S - T, 0, T, S, EDGE);
+    if (edges & 2) px(c, 0, 0, S, T, EDGE);
+    if (edges & 4) px(c, 0, 0, T, S, EDGE);
+    if (edges & 8) px(c, 0, S - T, S, T, EDGE);
   }
 }
 

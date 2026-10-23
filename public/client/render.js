@@ -528,6 +528,7 @@ export function createRenderer(canvas, world) {
    */
   const SHIP_SCALE = 2;
   const SHIP_ALPHA = 0.42;
+  const ROCK_ALPHA = 0.42;      // the same knock-back, so the two read as one layer of scenery
   // Her centre sits this far outside the island's bounding box. The visible ocean margin is two
   // or three tiles, so at two and a half she is half in frame and half past the edge of the
   // board — present, cut off, and obviously not something you can interact with.
@@ -642,21 +643,24 @@ export function createRenderer(canvas, world) {
     for (const k of waterRocks()) {
       const x = ox + k.x, y = oy + k.y;
       ctx.save();
+      // Everything below is drawn inside this one alpha, so the rock sits at the same distance
+      // from the eye as the ship does.
+      ctx.globalAlpha = ROCK_ALPHA;
 
       // The water piling up around it. Wide and faint — a bright collar is what made these look
       // like islands rather than like something barely breaking the surface.
-      ctx.globalAlpha = 0.09 + 0.03 * Math.sin(seaT * 1.1 + k.phase);
+      ctx.globalAlpha = ROCK_ALPHA * (0.09 + 0.03 * Math.sin(seaT * 1.1 + k.phase)) / 0.42;
       ctx.strokeStyle = PALETTE.foam;
       ctx.lineWidth = 3;
       ctx.beginPath(); ctx.ellipse(x, y, k.r * 1.25, k.r * 1.05, 0, 0, 7); ctx.stroke();
-      ctx.globalAlpha = 0.05;
+      ctx.globalAlpha = ROCK_ALPHA * 0.12;
       ctx.lineWidth = 9;
       ctx.beginPath(); ctx.ellipse(x, y, k.r * 1.6, k.r * 1.35, 0, 0, 7); ctx.stroke();
 
       // The mass itself. Every tone is mixed well down toward the deep sea, so the rock is a
       // shape you notice rather than an object that announces itself.
       const lump = (l, grow, fill, alpha) => {
-        ctx.globalAlpha = alpha;
+        ctx.globalAlpha = ROCK_ALPHA * alpha;
         ctx.fillStyle = fill;
         ctx.beginPath();
         ctx.ellipse(x + l.dx, y + l.dy, l.r * grow, l.r * l.squash * grow, l.turn, 0, 7);
@@ -670,7 +674,7 @@ export function createRenderer(canvas, world) {
         0.26, '#4b515c', 0.55);                                       // the dry cap
 
       // A wet line where it goes into the water, which is what sells "half submerged".
-      ctx.globalAlpha = 0.3;
+      ctx.globalAlpha = ROCK_ALPHA * 0.7;
       ctx.strokeStyle = PALETTE.seaLight;
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -802,10 +806,10 @@ export function createRenderer(canvas, world) {
     const ox = -Math.round(cam.x) + Math.round(sx), oy = -Math.round(cam.y) + Math.round(sy);
 
     drawSea(vw, vh, ox, oy, dtMs);
+    // Both before the flow field, so the current runs ACROSS them rather than over the top.
+    // Streaks of foam crossing a deck or a boulder read as the water being in front of the
+    // thing, which is the one spatial relationship that cannot be true here.
     drawWaterRocks(ox, oy);
-    // Before the flow field, so the water runs across her and she sits down in the sea rather
-    // than on it. Combined with the alpha this is what pushes her into the background: a
-    // foreground object does not have the ocean drifting over the top of it.
     drawMoored(ox, oy);
     drawDrops(vw, vh, ox, oy, Math.min(0.05, dtMs / 1000));
 
