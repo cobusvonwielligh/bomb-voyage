@@ -216,7 +216,12 @@ const net = createNet({
   // is not in the snapshot.
   onScores: m => {
     ranks.clear();
-    for (const r of m.ranks || []) ranks.set(r.i, r);
+    for (const r of m.ranks || []) {
+      ranks.set(r.i, r);
+      // Authoritative names, once a second. See emitScores in server/room.js.
+      const p = world.players[r.i];
+      if (p && r.name && p.name !== r.name) p.name = r.name;
+    }
     allTime = m.top || [];
     hostSeat = m.host ?? -1;
     if (scoresOpen) renderScores();

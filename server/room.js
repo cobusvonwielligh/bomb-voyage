@@ -479,7 +479,12 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       if (!s || !p) continue;
       const banked = leaderboard.get(s.playerId);
       const lifetime = (banked?.score ?? 0) + Math.max(0, p.score);
-      ranks.push({ i, bot: !!s.isBot, ...progressFor(lifetime) });
+      // The name rides along because nothing else refreshes it. The snapshot leaves names out
+      // on purpose — fifteen a second of a string that changes once per join is most of the
+      // bandwidth — so a client that misses the welcome, or hydrates a seat from a snapshot
+      // that arrived first, is stuck calling somebody "p1" for the rest of the round. Once a
+      // second it heals itself.
+      ranks.push({ i, name: p.name, bot: !!s.isBot, ...progressFor(lifetime) });
     }
     onBroadcast({ t: 'scores', ranks, host: hostSeat(), top: leaderboard.top(5) });
   }

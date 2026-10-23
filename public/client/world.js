@@ -111,6 +111,9 @@ export function createWorld() {
   };
 
   w.applySnap = snap => {
+    // Before the welcome there is no map, no seat and no names: a snapshot applied here would
+    // create every player as "p<seat>" and hydrate() keeps the first name it is given.
+    if (!w.ready) return;
     // A snapshot older than one already applied is not news. TCP cannot reorder, but the dev lag
     // shim can, and a rewound tick would unburst bombs and walk the interpolation backwards.
     if (snap.tick < w.tick) return;
