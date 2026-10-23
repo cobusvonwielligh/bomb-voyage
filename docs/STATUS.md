@@ -1,6 +1,6 @@
 # Bomb Voyage — Where We Stand
 
-Last updated: **2026-10-24**. Live on `bombvoyage.online`. 227 tests passing.
+Last updated: **2026-10-24**. Live on `bombvoyage.online`. 230 tests passing.
 
 This document replaces the "⬜ The game: not started" line in the README. The game is built, the
 whole plan in [PLAN.md](PLAN.md) has been walked through, and several decisions in it have since
@@ -64,10 +64,10 @@ Bomb, Fire, Boots, Shield, **Stim** (stamina capacity) and **Rum**. The **Gift**
 zero — it hands out diseases, and that mechanic is unfinished. It is still implemented and still
 tested; a single number switches it back on.
 
-Rum is the odd one. At weight 11 of 101 it is a tenth of all drops, it glows on the floor, and
-it is the only perk you might not want: it softens damage and makes you drunk, which sways your
+Rum is the odd one. At weight 11 of 411 it is **2.7% of drops**, it glows on the floor, and it
+is the only perk you might not want: it softens damage and makes you drunk, which sways your
 walk and rolls the camera. It is the only perk whose effect is visible to the person carrying
-it and nobody else.
+it and nobody else — and the only one rare enough to be an event rather than a thing you have.
 
 ### (d) Two new systems that were never in the plan
 
@@ -172,6 +172,7 @@ Every one of these is in `shared/constants.js`. Nothing is inline.
 | Stamina | 3450 tenths (+750 per stim), empty = half pace until a third is back |
 | Respawn | 10 s, then weighted-random across every legal spawn |
 | Perk drops | 35% base, scaled by what is on the floor and how fast it is taken |
+| Rum | 2.7% of drops. Softens damage, sways your walk, rolls your camera for 20 s |
 | Kegs | ≤6 a round, ≥1 guaranteed, radius 7 |
 | Zoom | fitted to the **island**, floor 0.68, 2 tiles of sea minimum |
 | Levels | 100 hours to Veteran (level 20) |

@@ -31,9 +31,20 @@ function declaredVoices() {
 // the block sounds through `sfx.play(e.e, ...)` where the event name IS the sound name.
 const DYNAMIC = ['boom', 'blockdie', 'blocknew'];
 
-/** Every name main.js asks for, from either play() or playAtUnits(). */
+/**
+ * Every name main.js asks for, from either play() or playAtUnits().
+ *
+ * Reads the whole FIRST ARGUMENT and pulls every quoted string out of it, rather than matching a
+ * bare literal right after the paren. The naive version missed
+ * `sfx.play(mentioned ? 'mention' : 'chat')` entirely and reported both voices as dead code —
+ * which is exactly backwards, and the sort of false positive that gets a test deleted.
+ */
 function requestedVoices() {
-  return new Set([...mainSrc.matchAll(/\bsfx\.play(?:AtUnits)?\('([^']+)'/g)].map(m => m[1]));
+  const names = new Set();
+  for (const m of mainSrc.matchAll(/\bsfx\.play(?:AtUnits)?\(([^,)]*)/g)) {
+    for (const q of m[1].matchAll(/'([a-zA-Z]\w*)'/g)) names.add(q[1]);
+  }
+  return names;
 }
 
 test('the dynamic sound names line up with the events that trigger them', () => {

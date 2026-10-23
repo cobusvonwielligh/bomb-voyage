@@ -191,6 +191,50 @@ Serving them needs an `audio/mpeg` content type **and byte ranges** — Safari w
 Strip ID3 cover art before committing a track. It is about 25% of the file and nobody sees it;
 `test/sources.test.js` fails on a tag.
 
+**The theme plays on the dashboard, always, and nowhere else.** Its file track has `loop: true`,
+which gives it `repeats: Infinity` — so the sequencer can never reach a handover and it owns the
+rotation until something calls `jumpTo`. Starting a round is exactly that: `exclude('theme')`
+then `playFrom`, straight into a bed.
+
+### Explosions
+
+Five layers, in sequence, because a blast is a sequence and that is what carries size:
+
+| Layer | What it is | Why it is there |
+|---|---|---|
+| Crack | highpassed noise, 3 ms | The transient. Without it the blast reads as distant however loud the rest is. |
+| Body | bandpassed noise sweeping down | The bulk of what you hear. |
+| Sub | a sine falling off a cliff | Felt more than heard. The difference between a firework and a bomb. |
+| Rubble | resonant lowpassed noise tail | Half a second of debris. Makes it sound like it happened in a place. |
+| Air | a filtered swell, 12 ms LATE | Stops all five lining up into one click. |
+
+`size` (0..1) scales each one *differently*, which is the point: a bigger blast is not a louder
+blast, it is a longer and deeper one with relatively **less** crack. Taken from the blast radius,
+and a powder keg is radius 7 against a bomb's cap of 6 — so `r > MAX_RADIUS` identifies a keg
+with no new field on the wire and nothing to go stale. Kegs get `kegboom`: the same five at
+size 1, plus a fizz of powder in front and a second sub an octave down behind.
+
+### Ducking
+
+Two kinds, on two different nodes, and that separation is deliberate.
+
+- **`duck(on)`** — chat focus. Writes `musicGain`, through `applyGain`, which is the one writer
+  of it.
+- **`dip(depth, recoverS)`** — explosions and your own death. Writes a **separate `sidechain`
+  node** between the tracks and the bus.
+
+They are different concerns on different clocks: a dip is a 300 ms transient fired by the game,
+a duck is a setting. Sharing one parameter means every dip races every slider move, and a
+`setTargetAtTime` whose start time is already past keeps decaying until some later event
+replaces it — which is how this exact file once produced a session of silence. Two nodes, two
+owners, no race.
+
+The dip is scaled by distance and by blast size, with the same eight-tile falloff as the camera
+shake and for the same reason: it is about blasts you are IN, not blasts you can hear. It never
+undoes an earlier dip that is still recovering, so a chain reaction ducks once and deeply rather
+than stuttering. Down in 20 ms, back over 380 ms — a fast recovery pumps audibly and draws
+attention to the duck itself, which is the one thing it must never do.
+
 **Defaults: music `0.10`, SFX `0.75`.** Persist both to `localStorage` (`bv.music`, `bv.sfx`).
 **One** `AudioContext` for the whole page, created lazily and unlocked on the PLAY click — see
 `public/client/audio/engine.js`. Two contexts means the second never unlocks, and hanging the

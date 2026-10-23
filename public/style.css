@@ -187,9 +187,7 @@ canvas#game {
   -webkit-backdrop-filter: blur(10px) saturate(1.3);
   box-shadow: 0 6px 28px #0009;
   display: flex; align-items: center; gap: 16px;
-  /* The right padding is the width of `#dock`, which floats over this end of the bar rather
-     than sitting inside it. Two 34px buttons plus the gap between them. */
-  padding: 7px 88px 7px 14px;
+  padding: 7px 14px;
   font-size: 13px;
 }
 
@@ -329,27 +327,78 @@ body.observing #who { color: var(--dim); }
 
 .right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
 
-/* The audio dock. One pair of controls, two screens.
+/* The audio dock: both volume controls and what is playing, bottom left, one pill.
  *
- * In game it parks over the right-hand end of the top bar and looks like part of it, which is
- * why it has no background of its own there — `#topbar` reserves the width with padding so
- * nothing slides underneath. On the menu the bar does not exist, so the dock moves to the
- * window corner and grows its own pill. Above `#menu` (z-index 10) in both states. */
+ * One set of elements for both screens. The music starts on the menu, so the control for it has
+ * to be on the menu — and a second set of widgets there, kept in step with these, is two sources
+ * of truth and a sync bug waiting to happen. This just moves. It sits above `#menu` (z-index 10)
+ * so it survives the overlay.
+ *
+ * Bottom left because that is the one corner nothing else wants: the board is centred, the HUD
+ * is along the top, the side panel is right, and the mascot is top right. It is also where every
+ * music player on earth puts this, which is worth more than any argument about it. */
 #dock {
   position: fixed; z-index: 11;
-  top: var(--gap); height: var(--bar);
-  right: calc(var(--side) + var(--gap) * 2 + 14px);
-  display: flex; align-items: center; gap: 6px;
-  transition: right .2s, top .2s;
-}
-#hud:not(.on) ~ #dock {
-  top: var(--gap); right: var(--gap);
-  height: auto; padding: 4px 6px;
-  border-radius: 12px;
-  background: #0d1117b3;
+  left: var(--gap); bottom: var(--gap);
+  display: flex; align-items: center; gap: 2px;
+  padding: 3px 4px;
+  border-radius: 11px;
+  background: #0d1117b8;
   backdrop-filter: blur(10px) saturate(1.3);
   -webkit-backdrop-filter: blur(10px) saturate(1.3);
-  border: 1px solid #ffffff14;
+  border: 1px solid #ffffff12;
+  box-shadow: 0 4px 18px #0007;
+  /* Collapsed it is two icons and a few words. It has to stay out of the way of the board, so
+     nothing in here is allowed to grow it past about a sixth of a 1080-wide window. */
+  max-width: min(42vw, 340px);
+}
+
+/* ─── now playing ─────────────────────────────────────────────────────────────
+ * A three-bar equaliser and the track name. The bars are the only thing that says "this is
+ * audio" without a word of label, and they stop when the music does — which is also the answer
+ * to "is it muted or is it just quiet right now".
+ */
+#nowPlaying {
+  display: flex; align-items: center; gap: 7px;
+  min-width: 0;                         /* or the ellipsis below never triggers */
+  padding: 0 8px 0 5px;
+  font-family: var(--nums); font-size: 10.5px;
+  letter-spacing: .1em; text-transform: uppercase;
+  color: var(--dim);
+  transition: color .2s, opacity .2s;
+}
+#nowPlaying .t {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Playing: the name takes the accent and the bars move. */
+#dock.playing #nowPlaying { color: var(--gold); }
+
+.eq { display: flex; align-items: flex-end; gap: 2px; height: 11px; flex: 0 0 auto; }
+.eq b {
+  display: block; width: 2px; height: 3px;
+  border-radius: 1px;
+  background: currentColor;
+  transform-origin: bottom;
+}
+/* Three bars, three different periods, none a multiple of another — so the pattern never
+   visibly repeats and it reads as level rather than as an animation. */
+#dock.playing .eq b { animation: eq 1.1s ease-in-out infinite; }
+#dock.playing .eq b:nth-child(2) { animation-duration: .74s; animation-delay: -.3s; }
+#dock.playing .eq b:nth-child(3) { animation-duration: 1.37s; animation-delay: -.7s; }
+@keyframes eq { 0%, 100% { height: 3px; } 50% { height: 11px; } }
+
+/* Stopped: the bars hold at their shortest and the whole readout steps back. */
+#dock:not(.playing) #nowPlaying { opacity: .55; }
+
+@media (prefers-reduced-motion: reduce) {
+  #dock.playing .eq b { animation: none; height: 7px; }
+}
+
+/* Narrow windows lose the side panel and the board takes the lot, so the words go and the two
+   controls stay. The icons are the part you need; the title is the part that is nice to have. */
+@media (max-width: 760px) {
+  #nowPlaying .t { display: none; }
+  #nowPlaying { padding-right: 4px; }
 }
 
 button {

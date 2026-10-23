@@ -35,6 +35,18 @@ export function createRenderer(canvas, world) {
   const floaters = [];         // "+1 BOMB" rising off a player — see addFloater
   let seaT = 0;
   let drunk = 0;                       // 0..1, eased, so it fades in and out rather than snapping
+
+  /* Where the aim bracket is DRAWN, in tiles, as a float.
+   *
+   * The tile it is drawn on is not the tile it means. What it means is `bombTile`, which is
+   * exact and changes the instant your centre crosses a boundary — and must, because it is
+   * where the bomb actually goes. What it looks like is this, which chases that.
+   *
+   * Keeping them separate is the whole point: the glide is a lie told to the eye only, and the
+   * game never consults it. Nothing about aiming gets slower, less precise, or dependent on a
+   * frame rate — press the key mid-glide and the bomb lands on the tile the bracket is heading
+   * to, not the one it is passing over. */
+  let aimTx = 0, aimTy = 0, aimSeen = false;
   let depth = null, depthFor = '';     // the depth gradient, rebuilt only when the view changes
 
   // Sun glints on the open water. Cheap, stateless, and most of what makes a surface read wet.
@@ -871,25 +883,14 @@ export function createRenderer(canvas, world) {
     shelf(2, 0.16, PALETTE.seaMid);     // the outer, deeper step
     shelf(1, 0.42, PALETTE.seaLight);   // and the bright water right against the rock
 
-    /* Caustics in the shallows: slow bright ripples where the light reaches the bottom.
+    /* No caustics.
      *
-     * Only against the coast, which is both where they would really be and the only place the
-     * cost is bounded — the shoreline list is a few dozen tiles, not the whole board.
+     * There was a ring of rotated ellipses pulsing along the coast here, meant to read as light
+     * reaching the bottom in the shallows. It did not: at one tile across and on a grid, a
+     * repeating ellipse per shore tile reads as a row of ellipses, and once you have seen it as
+     * a row of ellipses you cannot see it as water again. The two shelf bands above do the same
+     * job — depth against the rock — without drawing a shape the eye can name.
      */
-    ctx.globalCompositeOperation = 'lighter';
-    for (const s of shoreline()) {
-      const dx = (s.e & 1 ? 1 : 0) - (s.e & 4 ? 1 : 0);
-      const dy = (s.e & 8 ? 1 : 0) - (s.e & 2 ? 1 : 0);
-      if (!dx && !dy) continue;
-      const cx = (s.tx + 0.5 + dx * 1.1) * TILE_PX, cy = (s.ty + 0.5 + dy * 1.1) * TILE_PX;
-      const beat = Math.sin(seaT * 0.9 + (s.tx + s.ty) * 0.6);
-      ctx.globalAlpha = 0.05 + 0.045 * (beat * 0.5 + 0.5);
-      ctx.fillStyle = PALETTE.foam;
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, TILE_PX * (0.42 + 0.12 * beat), TILE_PX * 0.2, (s.tx + s.ty) * 0.7, 0, 7);
-      ctx.fill();
-    }
-    ctx.globalCompositeOperation = 'source-over';
     ctx.restore();
     ctx.globalAlpha = 1;
   }
@@ -1073,7 +1074,7 @@ export function createRenderer(canvas, world) {
     for (const p of alive) drawTracer(ctx, p, ox, oy);
     for (const p of alive) drawOne(ctx, p, ox, oy, p.i === world.you);
 
-    drawAim(ox, oy);
+    drawAim(ox, oy, dtMs);
     for (const p of alive) drawTipsy(ctx, p, ox, oy);
     for (const p of alive) drawStamina(ctx, p, ox, oy);
     drawFloaters(ox, oy, dtMs);
@@ -1305,18 +1306,50 @@ export function createRenderer(canvas, world) {
    * corner marks say exactly the same thing while leaving the middle — where the bomb, the
    * wall, or the person you are aiming at actually is — completely clear.
    */
-  function drawAim(ox, oy) {
+  function drawAim(ox, oy, dtMs) {
     const me = world.me();
-    if (!me || !me.alive || world.observing) return;
+    if (!me || !me.alive || world.observing) { aimSeen = false; return; }
     const { tx, ty } = bombTile(world, me);
     // Nothing to show if you are out of bombs: a sight on a shot you cannot take is a lie.
     const live = world.bombs.reduce((n, b) => n + ((b.o ?? b.owner) === world.you ? 1 : 0), 0);
-    if (live >= me.bombs) return;
+    if (live >= me.bombs) { aimSeen = false; return; }
+
+    /* Chase the target tile instead of appearing on it.
+     *
+     * Exponential approach on real elapsed time, not a fixed step per frame, so it looks the
+     * same at 60 and at 144 Hz. AIM_TAU_MS is the time constant: about three frames at 60 Hz,
+     * which is enough to read as a movement and short enough that the bracket has arrived
+     * before you could have pressed the key. Longer than this and it stops being a flourish
+     * and starts being a question about where your bomb is going.
+     *
+     * Two cases skip the glide entirely:
+     *   - the first frame it is shown, or it slides in from wherever it was last round;
+     *   - a jump of more than two tiles, which is a respawn, a map change or a camera cut, and
+     *     a bracket sailing across the whole board is a bug with an animation on it.
+     */
+    const AIM_TAU_MS = 52, AIM_SNAP_TILES = 2;
+    if (!aimSeen || Math.abs(tx - aimTx) > AIM_SNAP_TILES || Math.abs(ty - aimTy) > AIM_SNAP_TILES) {
+      aimTx = tx; aimTy = ty; aimSeen = true;
+    } else {
+      const a = 1 - Math.exp(-(dtMs || 16) / AIM_TAU_MS);
+      aimTx += (tx - aimTx) * a;
+      aimTy += (ty - aimTy) * a;
+      // Below a thousandth of a tile it is on the target for drawing purposes, and leaving it
+      // asymptotic forever means the brackets sit a fraction of a pixel off true for good.
+      if (Math.abs(tx - aimTx) < 0.001) aimTx = tx;
+      if (Math.abs(ty - aimTy) < 0.001) aimTy = ty;
+    }
 
     const k = playerShades(world.you);
-    const x = ox + tx * TILE_PX, y = oy + ty * TILE_PX;
-    const pulse = 0.55 + 0.25 * Math.sin(world.tick / 7);
-    const arm = TILE_PX * 0.3, inset = 3;
+    const x = ox + aimTx * TILE_PX, y = oy + aimTy * TILE_PX;
+    // How far it still has to go, 0 at rest. Used to lean into the move below.
+    const travel = Math.min(1, Math.hypot(tx - aimTx, ty - aimTy));
+    // Brighter while it is moving, so the glide reads as intent rather than as lag, and the
+    // resting pulse is what you see the other 99% of the time.
+    const pulse = Math.min(1, 0.55 + 0.25 * Math.sin(world.tick / 7) + travel * 0.45);
+    // The arms pull IN as it travels and spring back out when it lands — the same trick a
+    // camera reticle uses, and it is what makes a 50 ms move feel deliberate.
+    const arm = TILE_PX * (0.3 - 0.1 * travel), inset = 3 + travel * 2;
 
     ctx.save();
     ctx.lineCap = 'round';

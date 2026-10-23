@@ -115,8 +115,11 @@ test('the server can actually serve the audio', () => {
   assert.match(index, /media-src 'self'/, "the CSP does not allow the page to play its own media");
 
   const music = read('public/client/audio/music.js');
-  assert.match(music, /createTheme\(\{ bus: musicGain \}\)/,
+  assert.match(music, /createTheme\(\{ bus: sidechain \}\)/,
     'the synthesised theme is no longer wired as the fallback');
-  assert.match(music, /createAmbient\(\{ bus: musicGain \}\)/,
+  assert.match(music, /createAmbient\(\{ bus: sidechain \}\)/,
     'the synthesised beds are no longer wired as the fallback');
+  // The dip must never write musicGain — see the comment on applyGain. One owner each.
+  assert.match(music, /sidechain\.connect\(musicGain\)/,
+    'the explosion duck is not on a node of its own any more');
 });

@@ -223,11 +223,20 @@ export const PERK = {
  * and switches back on with one number.
  */
 export const PERK_WEIGHTS = {
-  [PERK.BOMB]: 27, [PERK.FIRE]: 25, [PERK.SKATE]: 18, [PERK.SHIELD]: 12, [PERK.GIFT]: 0,
-  // Rum is one drop in ten and no more. It is the only perk that changes how the game is
-  // played rather than how well, and a mechanic that rare is an event; at twice this it would
-  // be a nuisance everybody has all the time.
-  [PERK.STAMINA]: 18, [PERK.RUM]: 11,
+  /* Every weight but rum is the old one multiplied by four.
+   *
+   * Rum wanted to be a quarter as likely as it was, and the honest way to do that is to make
+   * the denominator bigger rather than to pull one number down to 3 and hope: at these
+   * magnitudes a single step is a quarter of a percent, so the next tweak to it can be as small
+   * as it needs to be. All the OTHER perks keep their exact relative frequencies, which is the
+   * property that matters — this change is about rum and nothing else.
+   *
+   * 11 of 411 is 2.7%, down from 11 of 111, which was 9.9%. It is the only perk that changes
+   * how the game is played rather than how well, so it should be an event you remember rather
+   * than a thing you have.
+   */
+  [PERK.BOMB]: 108, [PERK.FIRE]: 100, [PERK.SKATE]: 72, [PERK.SHIELD]: 48, [PERK.GIFT]: 0,
+  [PERK.STAMINA]: 72, [PERK.RUM]: 11,
   [PERK.KICK]: 0, [PERK.JELLY]: 0, [PERK.DETONATOR]: 0, [PERK.BAT]: 0, [PERK.JETPACK]: 0,
   [PERK.NUKE]: 0, [PERK.BLUE_FIRE]: 0, [PERK.HEART]: 0, [PERK.KEY]: 0,
 };
@@ -295,7 +304,10 @@ export const STATUS_TICKS = {
  * reconciliation. It is a sum of two sines on the tick, seeded per player, so both machines
  * compute the same stagger and it still never repeats in a way anybody notices.
  */
-export const DRUNK_SWAY_UNITS = 34;
+// 20, down from 34. At a third of a tile the sway was not 'drunk', it was 'the controls are
+// broken': you could not hold a corridor at all, so the only thing to do with rum was wait
+// twenty seconds. Enough to be visibly unsteady and still thread a gap is the useful amount.
+export const DRUNK_SWAY_UNITS = 20;
 export const DRUNK_SWAY_RATE_A = 0.09, DRUNK_SWAY_RATE_B = 0.041;
 /* How often a drunk takes a step that was not asked for.
  *
@@ -304,8 +316,10 @@ export const DRUNK_SWAY_RATE_A = 0.09, DRUNK_SWAY_RATE_B = 0.041;
  * the one you pressed. Deterministic in (tick, seat) like everything else here, so the client
  * predicts the stumble rather than being corrected into it.
  */
-export const DRUNK_STAGGER_EVERY = 47;     // ticks between stumbles, prime so it never syncs
-export const DRUNK_STAGGER_TICKS = 7;      // how long one lasts
+// Less often and much shorter. Seven ticks is nearly a quarter of a second of going somewhere
+// you did not ask for, which at four stumbles a second of walking is most of the walking.
+export const DRUNK_STAGGER_EVERY = 79;     // ticks between stumbles, prime so it never syncs
+export const DRUNK_STAGGER_TICKS = 4;      // how long one lasts
 
 export const INVULN_TICKS_SHIELD = 60; // 2 s after a shield breaks
 

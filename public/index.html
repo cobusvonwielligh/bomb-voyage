@@ -193,10 +193,10 @@
   <p class="sub">tab to close</p>
 </div>
 
-<!-- Audio, outside the HUD on purpose.
+<!-- Audio, bottom left, outside the HUD on purpose.
      The music starts on the menu, so the control for it has to be on the menu. The lazy version
-     is a second pair of widgets there, kept in step with these ones — which is two sources of
-     truth and a sync bug waiting to happen. This is the same pair of elements on both screens:
+     is a second set of widgets there, kept in step with these ones — which is two sources of
+     truth and a sync bug waiting to happen. This is the same set of elements on both screens:
      it just moves. Nothing in main.js knows the difference.
 
      Icon and level in one control: the icon is the mute toggle, the slider unrolls out of it on
@@ -214,6 +214,9 @@
     </button>
     <input id="sfxVol" type="range" min="0" max="100" value="75" aria-label="sound effect volume">
   </span>
+  <!-- What is playing. Four tracks that are deliberately hard to tell apart from each other
+       while you are being chased, which is the whole reason it is worth labelling. -->
+  <span id="nowPlaying" aria-live="off"><i class="eq"><b></b><b></b><b></b></i><span class="t"></span></span>
 </div>
 
 <div id="toast"></div>

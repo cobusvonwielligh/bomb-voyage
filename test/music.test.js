@@ -328,6 +328,12 @@ test('music.js still exposes exactly what main.js calls, and nothing less', () =
   // Every track name main.js asks for has to be a track that exists, or the call silently does
   // nothing and the landing page plays whatever happened to be first.
   const asked = new Set([...mainSrc.matchAll(/music\.(?:start|playFrom)\('(\w+)'\)/g)].map(m => m[1]));
+  // Names reached through a list rather than written at the call site. `music.start(BEDS[i])` is
+  // still main.js asking for a track, and a typo in that list is just as silent as one inline.
+  const beds = /const BEDS = \[([^\]]*)\]/.exec(mainSrc);
+  assert.ok(beds, 'main.js no longer declares BEDS; the rotation is named somewhere else now');
+  for (const m of beds[1].matchAll(/'(\w+)'/g)) asked.add(m[1]);
+  assert.ok(!/'theme'/.test(beds[1]), 'the theme is in BEDS — it would play during a round');
   assert.ok(asked.size >= 2, `expected main.js to name tracks; found ${[...asked]}`);
   const ambientSrc = read('public/client/audio/ambient.js');
   for (const name of asked) {

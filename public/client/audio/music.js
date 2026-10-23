@@ -402,7 +402,7 @@ const METADATA_TIMEOUT_MS = 4000;
  *
  * Resolves to null if the file cannot be used, so the caller can fall back to the synth.
  */
-async function createFileTrack({ bus, name }) {
+async function createFileTrack({ bus, name, loop = false }) {
   const ctx = audioContext();
   const src = `${AUDIO_DIR}${name}.mp3`;
   const el = new Audio();
@@ -411,7 +411,9 @@ async function createFileTrack({ bus, name }) {
   // the lot would pull twelve megabytes the moment somebody unmutes, for three tracks they will
   // not hear for the next five minutes. The one that is playing streams, the rest stay idle.
   el.preload = 'metadata';
-  el.loop = false;
+  // The theme loops; the beds do not. A looping track never rotates away, which is exactly
+  // what 'the theme plays on the dashboard, always' means — see `repeats` below.
+  el.loop = loop;
   // The element's own volume stays at 1. The fader is the gain node below, because that is what
   // crossfade() automates and it has to be on the AudioContext clock, not the DOM one.
   el.volume = 1;
@@ -442,7 +444,13 @@ async function createFileTrack({ bus, name }) {
   return {
     name,
     steps: 1,
-    repeats: 1,
+    /* A looping track NEVER hands over.
+     *
+     * `repeats: Infinity` means the sequencer's `loops >= repeats` can never be true, so
+     * crossfade() is never reached and this track owns the rotation until something calls
+     * jumpTo — which is precisely what starting a round does. The element's own `loop` does the
+     * actual repeating, gaplessly; `schedule` below is a no-op while it is already running. */
+    repeats: loop ? Infinity : 1,
 
     /* The crossfade has to OVERLAP the end of the file, not follow it.
      *
@@ -458,6 +466,9 @@ async function createFileTrack({ bus, name }) {
     schedule(step) {
       if (step !== 0) return;
       clearTimeout(pauseTimer);
+      // Already running and looping: leave it alone. Restarting it every `stepDur` would chop
+      // the gapless loop the element is giving us for free.
+      if (loop && !el.paused) return;
       // Close enough: `time` is at most LOOKAHEAD_S away, and a music bed does not need
       // sample-accurate entry the way a hi-hat does.
       try { el.currentTime = 0; } catch { /* not seekable yet; it starts at 0 anyway */ }
@@ -478,8 +489,23 @@ async function createFileTrack({ bus, name }) {
 }
 
 export function createMusic() {
-  let ctx = null, timer = null, tracks = null, musicGain = null;
+  let ctx = null, timer = null, tracks = null, musicGain = null, sidechain = null;
   let step = 0, loops = 0, current = 0, nextTime = 0;
+  /* Which track you can actually HEAR, as opposed to which one is being scheduled.
+   *
+   * They are not the same thing, and the gap between them used to be invisible. The scheduler
+   * works ahead: it queues a step, then advances `current` so the NEXT step comes from the next
+   * track. With synthesised tracks a step is 0.13 s, so `current` was wrong for a frame and
+   * nobody could tell. A produced track is ONE step of about three minutes — so `current`
+   * named the next track for the entire time this one was playing.
+   *
+   * Which broke two things: the now-playing readout showed the wrong title for three minutes,
+   * and `exclude(name)`'s "is that the one playing?" check consulted a track that had not
+   * started, so excluding the theme while the theme was audible did nothing.
+   *
+   * `sounding` flips when the crossfade's start time actually arrives on the audio clock. */
+  let sounding = 0;
+  let pendingAt = 0, pendingIndex = 0;
   // Track names the rotation must not pick. The theme lives here for the whole of a round.
   const excluded = new Set();
   let volume = readVolume();
@@ -495,6 +521,16 @@ export function createMusic() {
     // the music off cannot take the sound effects down with it.
     ctx = audioContext();
     musicGain = createMusicBus(volume);
+    /* A gain node of its own, between the tracks and the bus, for the explosion duck.
+     *
+     * It exists so that `applyGain` stays the ONLY writer of `musicGain` — the property the
+     * comment above it is about, and which a previous bug cost a whole session of silence.
+     * A dip and a volume change are different concerns on different clocks: one is a 300 ms
+     * transient fired by the game, the other is a setting. Sharing a parameter between them
+     * means every dip races every slider move. Two nodes, two owners, no race. */
+    sidechain = ctx.createGain();
+    sidechain.gain.value = 1;
+    sidechain.connect(musicGain);
 
     /* Four slots, each a produced mix if its file is reachable and the synthesised version of
      * itself if it is not.
@@ -506,11 +542,15 @@ export function createMusic() {
      *
      * The theme is first because start() always comes back to the top, and the track somebody
      * turned off is the one they expect back when they turn it on again. */
-    const synth = [createTheme({ bus: musicGain }), ...createAmbient({ bus: musicGain })];
+    const synth = [createTheme({ bus: sidechain }), ...createAmbient({ bus: sidechain })];
     // In parallel: four metadata probes in sequence would be four round trips in front of the
     // first note, on a path that a user gesture is waiting on.
     tracks = await Promise.all(synth.map(async fallback =>
-      await createFileTrack({ bus: musicGain, name: fallback.name }) ?? fallback));
+      await createFileTrack({
+        bus: sidechain, name: fallback.name,
+        // The theme belongs to the dashboard and plays there the whole time you are on it.
+        loop: fallback.name === 'theme',
+      }) ?? fallback));
   }
 
   /**
@@ -544,6 +584,9 @@ export function createMusic() {
     // keeps decoding into a fader that is already at zero for the rest of the session.
     tracks[current].leave?.(at + XFADE_S);
     current = nextTrack();
+    // What is audible does not change until `at`; see `sounding`.
+    pendingAt = at;
+    pendingIndex = current;
     const to = tracks[current].gain.gain;
     loops = 0;
     for (const [p, target] of [[from, 0], [to, 1]]) {
@@ -557,6 +600,8 @@ export function createMusic() {
   /** One track up at full, the rest down, with no pending ramps left over. */
   function resetFaders(startAt = 0) {
     current = startAt;
+    sounding = startAt;
+    pendingAt = 0;
     for (const [i, track] of tracks.entries()) {
       const p = track.gain.gain;
       p.cancelScheduledValues(ctx.currentTime);
@@ -575,10 +620,19 @@ export function createMusic() {
       if (i !== next) track.leave?.(now + XFADE_S);
     }
     current = next;
+    // A jump is immediate by definition, so there is nothing pending about it.
+    sounding = next;
+    pendingAt = 0;
     step = 0;
     loops = 0;
-    // The new track has its own step duration, and nextTime was measured in the old one.
-    nextTime = Math.max(nextTime, now + 0.05);
+    /* Start the new track NOW, not whenever the old one's clock said the next step was due.
+     *
+     * This was `Math.max(nextTime, now + 0.05)`, which was right when every track was a synth
+     * on a 0.13-second grid: the max only ever rounded up by a frame. A produced track has a
+     * step of about three MINUTES, so leaving the menu left `nextTime` stranded that far in the
+     * future and the bed you jumped to was never scheduled at all. The fader came up on
+     * silence, and the game started with no music until the theme's step finally elapsed. */
+    nextTime = now + 0.05;
   }
 
   /**
@@ -597,6 +651,9 @@ export function createMusic() {
   }
 
   function scheduler() {
+    // The handover we queued earlier has now arrived in real time, so what you hear has changed.
+    if (pendingAt && ctx.currentTime >= pendingAt) { sounding = pendingIndex; pendingAt = 0; }
+
     // tracks[current] is read fresh every iteration because crossfade() changes it mid-loop, and
     // the step duration of the track we are moving to is not the one we came from.
     while (nextTime < ctx.currentTime + LOOKAHEAD_S) {
@@ -616,8 +673,8 @@ export function createMusic() {
     get playing() { return playing; },
     get volume() { return volume; },
 
-    /** Which of the four tracks is current. Diagnostics only; nothing in the game reads it. */
-    get track() { return tracks ? tracks[current].name : null; },
+    /** Which of the four tracks you can hear right now. Drives the now-playing readout. */
+    get track() { return tracks ? tracks[sounding].name : null; },
 
     /**
      * Must be called from a user gesture the first time — browsers block audio otherwise.
@@ -660,7 +717,12 @@ export function createMusic() {
      */
     exclude(name, off = true) {
       if (off) excluded.add(name); else excluded.delete(name);
-      if (off && playing && tracks && tracks[current]?.name === name) jumpTo(nextTrack());
+      // `sounding`, not `current`: the question is whether you can hear it, and the scheduler
+      // may already have queued a handover three minutes out.
+      if (off && playing && tracks && tracks[sounding]?.name === name) {
+        current = sounding;
+        jumpTo(nextTrack());
+      }
     },
 
     stop() {
@@ -687,6 +749,34 @@ export function createMusic() {
     duck(on) {
       ducked = !!on;
       applyGain(0.08);
+    },
+
+    /**
+     * Get out of the way of something loud, briefly. A sidechain, in the mixing sense.
+     *
+     * The problem it solves is that an explosion and a bassline occupy the same hundred hertz,
+     * so a blast landing on a downbeat half disappears into it — the music is not loud, but it
+     * is in the way. Pulling the music down for a third of a second makes the blast feel
+     * bigger without making anything louder, which is the whole trick, and it is why a game
+     * mix with ducking sounds expensive and one without sounds flat.
+     *
+     * Down fast and up slow, deliberately: a quick recovery pumps audibly and draws attention
+     * to the duck itself, which is the one thing it must never do.
+     *
+     * @param depth 0..1, how far down. 1 is silence.
+     */
+    dip(depth = 0.45, recoverS = 0.38) {
+      if (!sidechain || !playing) return;
+      const g = sidechain.gain;
+      const now = ctx.currentTime;
+      const floor = Math.max(0, Math.min(1, 1 - depth));
+      // Never dip ABOVE where a still-recovering earlier dip has got to: two blasts in quick
+      // succession must duck further, not reset the first one upwards.
+      const from = Math.min(g.value, 1);
+      g.cancelScheduledValues(now);
+      g.setValueAtTime(from, now);
+      g.linearRampToValueAtTime(Math.min(from, floor), now + 0.02);
+      g.linearRampToValueAtTime(1, now + 0.02 + recoverS);
     },
   };
 }

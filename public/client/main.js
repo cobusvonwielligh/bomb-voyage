@@ -8,7 +8,7 @@ import {
   TICK_MS, TICK_HZ, NAME_MAX_CHARS, UNITS_PER_TILE, IN_BOMB, playerColor,
   MAX_SKATES, MAX_SHIELDS, MAX_STAMINA_LEVELS, IDLE_DISCONNECT_MS, RESPAWN_DELAY_TICKS, TILE_PX,
   MAX_BOMBS_CARRIED, MAX_RADIUS, START_BOMBS, START_RADIUS,
-  STAMINA_SHOW_AT, staminaMaxFor,
+  STAMINA_SHOW_AT, staminaMaxFor, POWDER_RADIUS, PERK, STATUS,
 } from '/shared/constants.js';
 import { createNet } from './net.js';
 import { createInput, typingSomewhere, createTap } from './input.js';
@@ -105,6 +105,42 @@ $('play').addEventListener('focus', showMenuQuip);
 $('play').addEventListener('pointerleave', hideMenuQuip);
 $('play').addEventListener('blur', hideMenuQuip);
 
+/* What each track is called out loud.
+ *
+ * The slot names are for the code — `drift` tells you where a file goes, not what it sounds
+ * like. These are for the person reading the corner of their screen, and they are the mix
+ * titles, because the point of showing a track name is being able to go and find it.
+ */
+/* The three in-game beds, in rotation order. The theme is not one of them: it belongs to the
+ * landing page and is excluded for the whole of a round. */
+const BEDS = ['drift', 'suspend', 'undertow'];
+
+const TRACK_TITLES = {
+  theme: 'High Seas',
+  drift: 'Glowing Pirate Atmosphere',
+  suspend: 'Bioluminescent Seas',
+  undertow: 'Drum & Bass Variation',
+};
+
+/**
+ * The now-playing readout, bottom left.
+ *
+ * Polled rather than pushed. The alternative is a callback out of the sequencer on every
+ * crossfade, which is a second code path through the one piece of this that has already been
+ * subtly wrong twice — and the thing being displayed changes about once every three minutes.
+ * A string compare in a function that already runs once a frame is not worth an event for.
+ */
+let shownTrack = null;
+function syncNowPlaying() {
+  const name = music.playing ? music.track : null;
+  $('dock').classList.toggle('playing', !!name && music.volume > 0);
+  if (name === shownTrack) return;
+  shownTrack = name;
+  const el = $('nowPlaying');
+  el.querySelector('.t').textContent = name ? (TRACK_TITLES[name] ?? name) : 'music off';
+  el.title = name ? `now playing: ${TRACK_TITLES[name] ?? name}` : 'music is off';
+}
+
 /**
  * Both volume controls, kept in step with the two audio buses.
  *
@@ -125,6 +161,7 @@ const syncAudio = () => {
   // miss when you are wondering why the game went quiet.
   $('sfxBtn').firstElementChild.firstElementChild
     .setAttribute('href', sfx.volume === 0 ? '#i-mute' : '#i-spk');
+  syncNowPlaying();
 };
 $('musicBtn').onclick = async () => { await music.toggle(); syncAudio(); };
 $('vol').oninput = e => { music.setVolume(e.target.value / 100); syncAudio(); };
@@ -205,10 +242,12 @@ const net = createNet({
           const p = world.players[e.i];
           if (!p) break;
           const type = perkTypes.get(e.id);
-          sfx.playAtUnits('pickup', p.rx ?? p.x, p.ry ?? p.y, { perk: type });
+          // Rum is the one pickup that might be bad news, so it is the one that does not go up.
+          sfx.playAtUnits(type === PERK.RUM ? 'glug' : 'pickup',
+            p.rx ?? p.x, p.ry ?? p.y, { perk: type });
           if (e.i === world.you) {
             showUpgrade(type);
-            if (type === 16) quips.rum();
+            if (type === PERK.RUM) quips.rum();
           }
           // Say what it was. Four of the five perks are a number going up somewhere in the top
           // bar, which is the last place you are looking while somebody is chasing you.
@@ -259,6 +298,9 @@ const net = createNet({
           { youDied: e.i === world.you, youKilled: e.by === world.you && e.i !== world.you });
           if (e.i === world.you) {
             sfx.play('ownDeath');
+            // Deeper and slower than a blast: this is the one moment the music should get out
+            // of the way completely and come back as you read the card.
+            music.dip(0.75, 1.1);
             renderer?.addFlash(0.8, '220,60,48');     // you, specifically, just died
             renderer?.addShake(0.7);
             showDeadBanner(e.by === e.i ? 'you blew yourself up' : `${nameOf(e.by)} got you`);
@@ -343,11 +385,16 @@ const net = createNet({
     who.textContent = m.i === -1 ? '' : `${m.name}: `;
     if (m.i >= 0) who.style.color = playerColor(m.i);
     li.append(who, document.createTextNode(m.msg));   // textContent only: never innerHTML
+    const mentioned = world.me() && m.msg.toLowerCase().includes(world.me().name.toLowerCase());
     if (m.i === world.you) li.className = 'mine';
-    else if (world.me() && m.msg.toLowerCase().includes(world.me().name.toLowerCase())) {
-      li.className = 'mention';
-    }
+    else if (mentioned) li.className = 'mention';
     pushLine(li);
+    /* Your own line makes no noise — you just typed it, you know.
+     *
+     * Two different sounds, because they are two different events: a message is ambient and a
+     * message with your name in it is addressed to you. The second is louder, three notes rather
+     * than two, and is the only chat sound that will pull your eyes off the board. */
+    if (m.i !== world.you) sfx.play(mentioned ? 'mention' : 'chat');
   },
   /**
    * Turned away. The usual reason is that this browser's identity is already in a game, which is
@@ -398,6 +445,9 @@ let lastMask = 0;
 const fuseStage = new Map();     // bomb id -> how urgent it sounded last time
 let warnedAt = -1;
 let tickedAt = -1;
+// Wall clock, not ticks: a hiccup is presentation, and the sim must never be asked to be
+// irregular about anything.
+let nextHiccupAt = 0;
 
 /**
  * Your own bomb, the instant you press the key.
@@ -512,7 +562,9 @@ function loop(now) {
   world.interpolate(net.serverTickNow(), dt);
   renderer.frame(dt);
 
-  if (now - hudAt > 200) { hudAt = now; drawHud(); }
+  // Five times a second is plenty for a clock, a loadout and a track name, and it keeps a
+  // pile of DOM writes out of the frame that has to draw sixteen players.
+  if (now - hudAt > 200) { hudAt = now; drawHud(); syncNowPlaying(); }
   quips.tick();
   quips.idle();
 }
@@ -643,6 +695,9 @@ function drawRespawn(me) {
   if (diedAtTick < 0) diedAtTick = world.tick;
   const left = Math.max(0, RESPAWN_DELAY_TICKS - (world.tick - diedAtTick));
   const secs = Math.ceil(left / TICK_HZ);
+  // The moment it becomes pressable, once. You have been watching a number for ten seconds;
+  // this is what lets you stop watching it.
+  if (btn.disabled && left === 0) sfx.play('ready');
   btn.disabled = left > 0;
   // Calm: this ticks once a second right in front of you, and the full bump is a strobe.
   setValue(btn, left > 0 ? `respawn in ${secs}\u2026` : 'respawn', { calm: true });
@@ -662,6 +717,23 @@ function drawHud() {
   // cubed, it stays a quiet metronome until about eight seconds out and then climbs hard. The
   // shape is the point: the first half says "time is running out", the last few say "NOW".
   const COUNTDOWN_FROM = 20;
+  /* Drunk, audibly.
+   *
+   * The bubbles and the camera roll say it to whoever is looking at the screen; this says it to
+   * whoever is looking at the board. Irregular on purpose — a hiccup on a timer is a metronome,
+   * and the one thing a hiccup must not be is predictable, so the gap is re-rolled every time
+   * between about one and three seconds.
+   */
+  if (me && (me.status & STATUS.DRUNK)) {
+    if (performance.now() >= nextHiccupAt) {
+      sfx.play('hiccup');
+      nextHiccupAt = performance.now() + 1000 + Math.random() * 2000;
+    }
+  } else {
+    // Sober: the first hiccup of the next bottle comes soon, not after a leftover wait.
+    nextHiccupAt = 0;
+  }
+
   if (secs <= 60 && secs > 57 && warnedAt !== 60) { warnedAt = 60; sfx.play('warn'); }
   if (secs > 61) warnedAt = -1;             // a new round re-arms it
   if (secs <= COUNTDOWN_FROM && secs > 0 && secs !== tickedAt) {
@@ -976,15 +1048,32 @@ function play(observe = false) {
   localStorage.setItem('bv.name', name);
   renderer = createRenderer($('game'), world);
   sfx.start().then(() => sfx.play('click'));
-  // Straight to an ambient bed. The theme has a tune and a backbeat, which is right for reading
-  // a menu and wrong for ten minutes of being hunted.
-  // The theme is a landing-page tune; it may not come back round mid-round.
+  /* Out of the theme and into a bed, immediately and at random.
+   *
+   * The theme has a tune and a backbeat: right for twenty seconds of reading a menu, wrong for
+   * ten minutes of being hunted. `exclude` keeps it out of the rotation for the whole round, so
+   * it cannot come back round mid-firefight; it is let back in when you return to the menu.
+   *
+   * Random rather than always `drift`, because the first thing you hear should not be the same
+   * thing every single time you press PLAY — three rounds in and a fixed opener is the sound of
+   * the menu, not the sound of the game. The rotation carries on from whichever one it picked.
+   */
   music.exclude('theme');
-  music.start('drift').then(syncAudio);
+  music.start(BEDS[(Math.random() * BEDS.length) | 0]).then(syncAudio);
   world.onBoom = bomb => {
+    /* How big did that sound?
+     *
+     * Radius is the only size information a blast carries, and it is enough. A keg is radius 7
+     * against a bomb's cap of 6, so it needs no new field on the wire and no flag to go stale:
+     * anything over the cap can only be a keg.
+     */
+    const r = bomb.r ?? bomb.radius ?? 1;
+    const keg = r >= POWDER_RADIUS;
     // A blast before its own fuse ran out was set off by something else. A bomb we never even
     // saw placed counts too — that only happens when a chain reaches it inside one snapshot.
-    sfx.play('boom', bomb.tx, bomb.ty, { chain: bomb.at === undefined || world.tick < bomb.at });
+    const chain = bomb.at === undefined || world.tick < bomb.at;
+    if (keg) sfx.play('kegboom', bomb.tx, bomb.ty);
+    else sfx.play('boom', bomb.tx, bomb.ty, { chain, size: (r - 1) / (MAX_RADIUS - 1) });
 
     // Shake falls off with distance and is saturating, so a chain reaction across the map rattles
     // once rather than sixteen times. Nothing past eight tiles moves the camera at all.
@@ -992,6 +1081,16 @@ function play(observe = false) {
     if (!me) return;
     const d = Math.hypot(bomb.tx - me.rx / UNITS_PER_TILE, bomb.ty - me.ry / UNITS_PER_TILE);
     if (d >= 8) return;
+
+    /* Pull the music down under anything that went off near you.
+     *
+     * Same falloff as the shake and for the same reason: this is about blasts you are IN, not
+     * blasts you can hear. Scaled by distance and by size, so a keg at your feet takes a big
+     * bite and a small bomb five tiles away barely moves it. dip() itself refuses to undo an
+     * earlier dip that is still recovering, so a chain reaction ducks once and deeply rather
+     * than stuttering.
+     */
+    music.dip((keg ? 0.62 : 0.38) * (1 - d / 8));
     // Yours kicks harder than someone else's at the same distance. You pressed the button; the
     // screen agreeing with you is most of what makes a bomb feel like it went off.
     const mine = (bomb.o ?? bomb.owner) === world.you;

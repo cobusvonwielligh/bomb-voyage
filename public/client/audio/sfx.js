@@ -22,11 +22,19 @@ import { audioContext, createBus, noiseSource, hz, unlock } from './engine.js';
 
 // Per rendered frame. `boom` and `blockdie` are the ones that genuinely need a cap; the rest are
 // belt and braces against a pathological snapshot.
-const MAX_PER_FRAME = { boom: 3, blockdie: 4, blocknew: 2, status: 2, death: 3, fuse: 2 };
+const MAX_PER_FRAME = {
+  boom: 3, blockdie: 4, blocknew: 2, status: 2, death: 3, fuse: 2,
+  // A keg is loud enough that two at once is already a wall. Chat and pickups are one a frame
+  // because more than one is never information.
+  kegboom: 2, chat: 1, mention: 1, glug: 1, hiccup: 1, ready: 1,
+};
 const DEFAULT_MAX_PER_FRAME = 4;
 
 // Sounds that are about you, not about a place. Never panned, never attenuated.
-const CLOSE_UP = new Set(['kill', 'ownDeath', 'ownSpawn', 'fanfare', 'click', 'warn', 'tick', 'streak']);
+const CLOSE_UP = new Set([
+  'kill', 'ownDeath', 'ownSpawn', 'fanfare', 'click', 'warn', 'tick', 'streak',
+  'hiccup', 'chat', 'mention', 'ready',
+]);
 
 // Sounds whose whole job is to say WHERE. Panned to the full width of the field rather than the
 // gentle third the general rolloff gives, because a cue you have to concentrate to place is not
@@ -174,37 +182,132 @@ export function createSfx({ listener }) {
       o.start(t); o.stop(t + 0.06);
     },
 
-    /** Filtered noise burst sweeping 2 kHz -> 200 Hz, plus a sine thump for the body. */
-    boom(c, out, t, level, { chain = false } = {}) {
-      const up = chain ? 1.15 : 1;      // a chain is the same sound, pitched up 15 %
-      const g = voiceGain(c, out, t, { a: 0.004, d: jit(0.3), peak: 0.5 * level, send: 0.5 });
-      const s = noiseSource();
-      s.playbackRate.value = jit(1, 0.08);
-      const f = c.createBiquadFilter();
-      f.type = 'lowpass';
-      f.Q.value = 1.2;
-      f.frequency.setValueAtTime(jit(2000 * up, 0.06), t);
-      f.frequency.exponentialRampToValueAtTime(200 * up, t + 0.3);
-      s.connect(f); f.connect(g);
-      s.start(t); s.stop(t + 0.45);
+    /**
+     * An explosion, in five layers.
+     *
+     * The old one was three — noise sweep, sine thump, a crack — and it sounded like a programmer
+     * explosion: all of it arrived at once and all of it left at once, so a bomb and a powder keg
+     * were the same event at different volumes. Real blasts are a SEQUENCE, and the sequence is
+     * what carries size:
+     *
+     *   1. **Crack.** Highpassed noise, three milliseconds. The transient. Without it the blast
+     *      reads as distant no matter how loud the rest is — this is the layer that says "here".
+     *   2. **Body.** Bandpassed noise sweeping down. The bulk of what you hear.
+     *   3. **Sub.** A sine falling off a cliff. You feel this one more than hear it, and it is
+     *      the single biggest difference between a firework and a bomb.
+     *   4. **Rubble.** A slow noise tail through a resonant lowpass, half a second of debris
+     *      settling. The layer that makes it sound like it happened in a place.
+     *   5. **Air.** A short filtered swell that arrives a few milliseconds LATE, which is what
+     *      stops all five lining up into one click.
+     *
+     * `size` (0..1) scales every one of them differently rather than uniformly: a bigger blast
+     * is not a louder blast, it is a LONGER and DEEPER one with relatively less crack. That is
+     * why a keg at size 1 does not sound like a bomb with the volume up.
+     */
+    boom(c, out, t, level, { chain = false, size = 0.35 } = {}) {
+      const s01 = Math.max(0, Math.min(1, size));
+      // A chain goes off early and without warning, so it is pitched up: brighter reads as
+      // "that was not supposed to happen yet".
+      const up = chain ? 1.15 : 1;
+      const long = 1 + s01 * 1.1;                  // bigger blasts ring longer
+      const deep = 1 - s01 * 0.35;                 // ...and lower
 
-      const tg = voiceGain(c, out, t, { a: 0.002, d: jit(0.22), peak: 0.42 * level, send: 0.3 });
-      const thump = c.createOscillator();
-      thump.type = 'sine';
-      thump.frequency.setValueAtTime(jit(100 * up, 0.07), t);
-      thump.frequency.exponentialRampToValueAtTime(38, t + 0.16);
-      thump.connect(tg);
-      thump.start(t); thump.stop(t + 0.3);
-
-      // A short crack on top. Without it the blast is all body and reads as distant.
-      const cg = voiceGain(c, out, t, { a: 0.001, d: 0.05, peak: 0.2 * level });
+      // 1. crack
+      const cg = voiceGain(c, out, t, { a: 0.0008, d: 0.045 + 0.02 * s01, peak: (0.26 - 0.08 * s01) * level });
       const crack = noiseSource();
-      crack.playbackRate.value = jit(1.6, 0.1);
-      const hpf = c.createBiquadFilter();
-      hpf.type = 'highpass';
-      hpf.frequency.value = 2600;
-      crack.connect(hpf); hpf.connect(cg);
-      crack.start(t); crack.stop(t + 0.1);
+      crack.playbackRate.value = jit(1.7, 0.12);
+      const hp = c.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.setValueAtTime(jit(3000, 0.1), t);
+      hp.frequency.exponentialRampToValueAtTime(900, t + 0.06);
+      crack.connect(hp); hp.connect(cg);
+      crack.start(t); crack.stop(t + 0.12);
+
+      // 2. body
+      const bg = voiceGain(c, out, t, { a: 0.004, d: jit(0.3) * long, peak: 0.46 * level, send: 0.45 });
+      const body = noiseSource();
+      body.playbackRate.value = jit(1, 0.08);
+      const bp = c.createBiquadFilter();
+      bp.type = 'lowpass';
+      bp.Q.value = 1.4;
+      bp.frequency.setValueAtTime(jit(2200 * up, 0.06), t);
+      bp.frequency.exponentialRampToValueAtTime(170 * up * deep, t + 0.3 * long);
+      body.connect(bp); bp.connect(bg);
+      body.start(t); body.stop(t + 0.5 * long);
+
+      // 3. sub
+      const sg = voiceGain(c, out, t, { a: 0.003, d: jit(0.24) * long, peak: (0.34 + 0.18 * s01) * level, send: 0.25 });
+      const sub = c.createOscillator();
+      sub.type = 'sine';
+      sub.frequency.setValueAtTime(jit(110 * up, 0.07), t);
+      sub.frequency.exponentialRampToValueAtTime(jit(32 * deep, 0.08), t + 0.18 * long);
+      sub.connect(sg);
+      sub.start(t); sub.stop(t + 0.36 * long);
+
+      // 4. rubble — only worth the nodes on a blast big enough to throw any
+      if (s01 > 0.15) {
+        const rt = t + 0.05;
+        const rg = voiceGain(c, out, rt, { a: 0.04, d: (0.45 + 0.5 * s01), peak: 0.1 * s01 * level, send: 0.6 });
+        const rub = noiseSource();
+        rub.playbackRate.value = jit(0.55, 0.15);
+        const rf = c.createBiquadFilter();
+        rf.type = 'lowpass';
+        rf.Q.value = 6;                                   // resonant, so it rattles rather than hisses
+        rf.frequency.setValueAtTime(jit(700, 0.2), rt);
+        rf.frequency.exponentialRampToValueAtTime(150, rt + 0.6);
+        rub.connect(rf); rf.connect(rg);
+        rub.start(rt); rub.stop(rt + 1.1);
+      }
+
+      // 5. air, deliberately late
+      const at = t + 0.012;
+      const ag = voiceGain(c, out, at, { a: 0.03, d: 0.18 * long, peak: 0.16 * level, send: 0.3 });
+      const air = noiseSource();
+      air.playbackRate.value = jit(0.8, 0.1);
+      const af = c.createBiquadFilter();
+      af.type = 'bandpass';
+      af.Q.value = 0.7;
+      af.frequency.setValueAtTime(jit(520, 0.15), at);
+      af.frequency.exponentialRampToValueAtTime(190, at + 0.2);
+      air.connect(af); af.connect(ag);
+      air.start(at); air.stop(at + 0.4);
+    },
+
+    /**
+     * A powder keg. The same five layers with the dial turned up, plus the one thing a keg has
+     * that a bomb does not: a split second of fizzing powder before it lets go.
+     *
+     * Radius 7 against a bomb's maximum of 6, and it is the loudest thing in the game. It earns
+     * a sound you can pick out of a chain without looking.
+     */
+    kegboom(c, out, t, level) {
+      // The fizz wants to come BEFORE the blast. It only gets as much head start as the
+      // scheduling margin allows, which is a few milliseconds — enough to read as a fuse
+      // catching rather than as part of the hit, and it cannot be scheduled into the past.
+      const ft = Math.max(c.currentTime, t - 0.07);
+      const fg = voiceGain(c, out, ft, { a: 0.01, d: 0.09, peak: 0.13 * level });
+      const fizz = noiseSource();
+      fizz.playbackRate.value = jit(2.2, 0.1);
+      const fhp = c.createBiquadFilter();
+      fhp.type = 'bandpass';
+      fhp.Q.value = 2;
+      fhp.frequency.setValueAtTime(3800, ft);
+      fhp.frequency.exponentialRampToValueAtTime(6500, ft + 0.08);
+      fizz.connect(fhp); fhp.connect(fg);
+      fizz.start(ft); fizz.stop(ft + 0.12);
+
+      VOICES.boom(c, out, t, level, { size: 1 });
+
+      // And a second sub an octave down, arriving late enough to read as the ground moving
+      // rather than as part of the same hit.
+      const gt = t + 0.06;
+      const gg = voiceGain(c, out, gt, { a: 0.02, d: 0.6, peak: 0.3 * level, send: 0.4 });
+      const ground = c.createOscillator();
+      ground.type = 'sine';
+      ground.frequency.setValueAtTime(jit(54, 0.06), gt);
+      ground.frequency.exponentialRampToValueAtTime(23, gt + 0.5);
+      ground.connect(gg);
+      ground.start(gt); ground.stop(gt + 0.7);
     },
 
     /** Two-note arpeggio. The interval says which perk it was. */
@@ -513,6 +616,93 @@ export function createSfx({ listener }) {
       o.frequency.value = 1400;
       o.connect(g);
       o.start(t); o.stop(t + 0.05);
+    },
+
+    /**
+     * Rum. Three descending glugs and a cork.
+     *
+     * It gets its own voice rather than a pair of notes from PERK_NOTES because it is the one
+     * perk you might not have wanted. Every other pickup goes UP; this one goes down, and it is
+     * the only pickup with a sense of humour, which is the warning.
+     */
+    glug(c, out, t, level) {
+      for (let i = 0; i < 3; i++) {
+        const at = t + i * 0.085;
+        const g = voiceGain(c, out, at, { a: 0.006, d: 0.07, peak: 0.22 * level });
+        const o = c.createOscillator();
+        o.type = 'sine';
+        // Each glug lower than the last, and each one bends down inside itself. A bottle
+        // emptying raises in pitch; a bottle going INTO somebody does the opposite.
+        o.frequency.setValueAtTime(jit(300 - i * 55, 0.05), at);
+        o.frequency.exponentialRampToValueAtTime(jit(150 - i * 30, 0.05), at + 0.07);
+        o.connect(g);
+        o.start(at); o.stop(at + 0.1);
+      }
+      const ct = t + 0.26;
+      const cg = voiceGain(c, out, ct, { a: 0.001, d: 0.04, peak: 0.16 * level });
+      const pop = c.createOscillator();
+      pop.type = 'triangle';
+      pop.frequency.setValueAtTime(700, ct);
+      pop.frequency.exponentialRampToValueAtTime(220, ct + 0.04);
+      pop.connect(cg);
+      pop.start(ct); pop.stop(ct + 0.07);
+    },
+
+    /** You, drunk. A small involuntary noise, occasionally, while the rum is on you. */
+    hiccup(c, out, t) {
+      const g = voiceGain(c, out, t, { a: 0.004, d: 0.1, peak: 0.1 });
+      const o = c.createOscillator();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(jit(360, 0.12), t);
+      o.frequency.exponentialRampToValueAtTime(jit(620, 0.12), t + 0.035);
+      o.frequency.exponentialRampToValueAtTime(jit(240, 0.1), t + 0.1);
+      o.connect(g);
+      o.start(t); o.stop(t + 0.15);
+    },
+
+    /** Somebody said something. Deliberately the quietest voice in here. */
+    chat(c, out, t) {
+      const g = voiceGain(c, out, t, { a: 0.002, d: 0.045, peak: 0.055 });
+      const o = c.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(880, t);
+      o.frequency.setValueAtTime(1175, t + 0.035);
+      o.connect(g);
+      o.start(t); o.stop(t + 0.09);
+    },
+
+    /** Somebody said YOUR name. Same shape, up a fourth and twice as loud, so it cuts through. */
+    mention(c, out, t) {
+      for (const [i, n] of [84, 89, 91].entries()) {
+        const at = t + i * 0.055;
+        const g = voiceGain(c, out, at, { a: 0.003, d: 0.1, peak: 0.16 });
+        const o = c.createOscillator();
+        o.type = 'triangle';
+        o.frequency.value = hz(n);
+        o.connect(g);
+        o.start(at); o.stop(at + 0.16);
+      }
+    },
+
+    /**
+     * The respawn countdown reached zero.
+     *
+     * Worth a sound of its own: you have been watching a number for ten seconds and the moment
+     * it becomes a button is the moment you want to stop watching it.
+     */
+    ready(c, out, t) {
+      for (const [i, n] of [76, 83].entries()) {
+        const at = t + i * 0.08;
+        const g = voiceGain(c, out, at, { a: 0.004, d: 0.22, peak: 0.19, send: 0.25 });
+        const o = c.createOscillator();
+        o.type = 'square';
+        o.frequency.value = hz(n);
+        const f = c.createBiquadFilter();
+        f.type = 'lowpass';
+        f.frequency.value = 2200;
+        o.connect(f); f.connect(g);
+        o.start(at); o.stop(at + 0.3);
+      }
     },
   };
 
