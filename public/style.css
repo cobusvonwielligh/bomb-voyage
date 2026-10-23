@@ -781,7 +781,10 @@ h1 {
      card. background-clip paints only inside the element box: a glyph that overflows it has no
      background to clip, so an overflowing title loses its last letter entirely. */
   font-size: clamp(26px, 3.4vw, 44px);
+  /* fit-content, then centred by its own margins. `text-align` alone would do nothing here: the
+     box is only as wide as the word, so there is no slack inside it to centre against. */
   width: fit-content; max-width: 100%;
+  margin-inline: auto;
   white-space: nowrap;
   background: conic-gradient(from var(--spin) at 100% 100%,
     #ffd21f, #ffb45c, #ff9a7a, #c79bf0, #7fc6ff, #6fe0b8, #ffd21f);
@@ -805,6 +808,9 @@ h1 {
 }
 
 .sub { color: var(--dim); margin: 0 0 24px; font-size: 14.5px; letter-spacing: .04em; }
+/* The two lines that introduce the game are centred; everything below them is a form and stays
+   left-aligned, so the eye still has one edge to run down. */
+#title, #menu > #menuWrap .sub { text-align: center; }
 
 label {
   display: block; color: var(--dim); font-size: 11px; letter-spacing: .2em;
