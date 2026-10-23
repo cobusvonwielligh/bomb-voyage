@@ -30,6 +30,14 @@
   /* Tabular figures for numbers that tick, so the timer does not shuffle sideways every second. */
   --nums: ui-monospace, SFMono-Regular, Menlo, monospace;
 
+  /* The black rim every piece of display type carries, so gold text stays readable over the
+   * card, the gradient border and the sea alike.
+   *
+   * Four zero-blur offsets draw the outline, the wide blur lifts it off whatever is behind.
+   * Only usable where the fill is opaque — #title clips a gradient through transparent glyphs,
+   * so a shadow would show through the inside of every letter and it uses a filter instead. */
+  --rim: 1.5px 0 0 #000, -1.5px 0 0 #000, 0 1.5px 0 #000, 0 -1.5px 0 #000, 0 0 12px #000b;
+
   /* The crown, inline so it can be a CSS mask and take whatever colour it is used in. */
   --crown: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 12h12l1-7-3.5 2.5L8 3 4.5 7.5 1 5z'/%3E%3Crect x='2' y='13' width='12' height='2'/%3E%3C/svg%3E");
 }
@@ -143,7 +151,7 @@ canvas#game {
   font-family: var(--display);
   font-size: 15px;
   color: var(--gold);
-  text-shadow: 0 2px 0 #0008;
+  text-shadow: var(--rim), 0 2px 0 #0008;
   letter-spacing: .06em;
 }
 
@@ -303,7 +311,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 @media (max-width: 1080px) { #avatar { display: none; } }
 #who {
   font-family: var(--display); font-size: 17px; color: var(--gold);
-  text-shadow: 0 2px 0 #0008; letter-spacing: .06em; display: block;
+  text-shadow: var(--rim), 0 2px 0 #0008; letter-spacing: .06em; display: block;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 #rank {
@@ -469,6 +477,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   grid-area: 1 / 1;
   text-align: center;
   font-family: var(--display); letter-spacing: .08em;
+  text-shadow: var(--rim);
   opacity: 0;
 }
 #streak.show { animation: streakIn 1.9s ease-out forwards; }
@@ -534,7 +543,10 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   box-shadow: 0 0 80px #6b21a840, 0 22px 60px #000b;
 }
 .card.small { width: 340px; text-align: center; }
-#deadTitle { font-family: var(--display); color: var(--bad); font-size: 30px; margin-bottom: 8px; }
+#deadTitle {
+  font-family: var(--display); color: var(--bad); font-size: 30px; margin-bottom: 8px;
+  text-shadow: var(--rim);
+}
 #deadText { white-space: pre-line; }
 /* The countdown gets its own face. The display font is for titles you read once, and this is a
  * number that changes every second a few inches from your eyes. */
@@ -594,6 +606,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 #allTime h2 {
   margin: 0 0 8px; font-size: 11px; font-weight: normal; color: var(--gold);
   letter-spacing: .2em; text-transform: uppercase; font-family: var(--display);
+  text-shadow: var(--rim);
 }
 
 /* ─── menu ────────────────────────────────────────────────────────────────────── */
@@ -610,7 +623,9 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 #menuWrap { position: relative; }
 #mascot {
   position: absolute;
-  top: 42px; right: -96px;
+  /* Pinned to two thirds of the way down the card, so he sits beside the controls rather than
+   * over the title no matter how tall the card gets. */
+  top: 66.6%; right: -96px;
   width: 170px; height: 170px;
   z-index: 2;
   pointer-events: none;
@@ -657,7 +672,7 @@ h1 {
   color: var(--gold); line-height: 1; letter-spacing: .05em;
   text-transform: uppercase;
   margin: 0 0 10px;
-  text-shadow: 0 4px 0 #0009, 0 0 34px #ffd21f55;
+  text-shadow: var(--rim), 0 4px 0 #0009, 0 0 34px #ffd21f55;
 }
 
 /* The title on the landing page: one line, never wrapped, and always flowing.
@@ -666,7 +681,11 @@ h1 {
  * the moment the card is a little narrower than the design — and a wrapped title with a
  * background-clip gradient on it looks like a rendering fault rather than a line break. */
 #title {
-  font-size: clamp(30px, 4.6vw, 54px);
+  /* Sized so the longest word fits the card, and the box is grown to the text rather than the
+     card. background-clip paints only inside the element box: a glyph that overflows it has no
+     background to clip, so an overflowing title loses its last letter entirely. */
+  font-size: clamp(26px, 3.4vw, 44px);
+  width: fit-content; max-width: 100%;
   white-space: nowrap;
   background: conic-gradient(from var(--spin) at 100% 100%,
     #ffd21f, #ffb45c, #ff9a7a, #c79bf0, #7fc6ff, #6fe0b8, #ffd21f);
@@ -712,10 +731,12 @@ input[type=text]:focus {
   width: 100%; margin-top: 16px; padding: 15px; font-size: 32px; letter-spacing: .2em;
   font-family: var(--display); line-height: 1;
   color: #130f05;
+  /* Dark text on gold, so the rim is a light one: it thickens the strokes and keeps the word
+     from dissolving into the brightest part of the gradient. */
+  text-shadow: 0 1px 0 #fff6, 0 0 2px #0006, 0 2px 5px #0004;
   background: linear-gradient(180deg, #ffe066, var(--gold) 55%, #e0a800);
   border: none; border-radius: 10px;
   box-shadow: 0 4px 0 #8a6f00, 0 10px 26px #ffd21f33;
-  text-shadow: 0 1px 0 #fff6;
   transition: transform .08s, box-shadow .12s, filter .12s;
 }
 #play:hover { filter: brightness(1.08); box-shadow: 0 4px 0 #8a6f00, 0 12px 34px #ffd21f55; }
