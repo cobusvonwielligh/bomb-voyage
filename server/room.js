@@ -8,7 +8,7 @@ import {
   TILE_PX, UNITS_PER_TILE, FUSE_TICKS, FIRE_TICKS, playerColor, SCORE, ROUND_INTERMISSION_MS,
   RANK_NAMES, RANK_THRESHOLDS, rankForScore,
   STREAK_WINDOW_TICKS, STREAK_NAMES, STREAK_ACE, GAMESPEED_MIN, GAMESPEED_MAX,
-  SPAWN_CANDIDATES, IDLE_KICK_TICKS,
+  SPAWN_CANDIDATES, IDLE_KICK_TICKS, TAKEOVER_LIMIT, TAKEOVER_WINDOW_TICKS,
 } from '../shared/constants.js';
 import { MAPS, encodeCells } from '../shared/maps.js';
 import { createState, createPlayer, expireStatuses, applyStatus, tileCentre } from '../shared/sim/state.js';
@@ -83,24 +83,46 @@ export function createRoom({ onKick, onBroadcast, maxPlayers = MAX_PLAYERS, lead
     streaks[seat] = newStreak();
   }
 
+  /**
+   * Claim a seat held by this same id, whether or not its socket is still up.
+   *
+   * The latest use of an id wins. Moving from laptop to phone, reloading before the old socket
+   * has been noticed as dead, or a half-open connection the server still believes in: all of
+   * them are one person, and all of them should land back in the seat they were already in,
+   * with their score.
+   *
+   * The guard is what stops that becoming a war. If two clients genuinely share an id, each
+   * takeover kicks the other, the kicked one reconnects, and they flap forever — which is
+   * exactly what two tabs sharing a localStorage id used to do. So an id gets a few takeovers
+   * inside a short window and then stops being trusted: the newcomer is handed a fresh id and
+   * sits down somewhere else instead.
+   */
+  function reclaim(seat, name) {
+    const s = seats[seat];
+    const now = state.tick;
+    s.takeovers = (s.takeovers ?? []).filter(t => now - t < TAKEOVER_WINDOW_TICKS);
+    const wasLive = s.connected;
+    if (wasLive) {
+      if (s.takeovers.length >= TAKEOVER_LIMIT) return null;   // flapping, not a person
+      s.takeovers.push(now);
+    }
+    s.connected = true;
+    s.goneSince = 0;
+    s.lastInputAt = now;
+    s.name = name || s.name;
+    if (state.players[seat]) state.players[seat].name = s.name;
+    return { seat, resumed: true, playerId: s.playerId, replaced: wasLive };
+  }
+
   function join(playerId, name) {
     const existing = findSeatByPlayerId(playerId);
 
-    // Resume only a seat whose socket is actually gone. Handing the seat to a second *live*
-    // connection with the same id starts a war: each hello evicts the other, the evicted client
-    // reconnects, and the two of them flap forever. That is what two browser tabs sharing one
-    // stored id used to do.
-    if (existing >= 0 && !seats[existing].connected) {
-      seats[existing].connected = true;
-      seats[existing].goneSince = 0;
-      seats[existing].lastInputAt = state.tick;
-      seats[existing].name = name || seats[existing].name;
-      state.players[existing].name = seats[existing].name;
-      return { seat: existing, resumed: true, playerId };
+    if (existing >= 0) {
+      const taken = reclaim(existing, name);
+      if (taken) return { ...taken, displaced: null };
+      // Too many takeovers too fast: treat this as a second client and give it its own identity.
+      playerId = null;
     }
-    // Same id, still connected: it is a different tab or window. Treat it as a new player and
-    // tell it to use a fresh id.
-    if (existing >= 0) playerId = null;
 
     // A full server that is full of bots is not full. Turning away a real person so a brain we
     // wrote can keep playing is the wrong answer every time, so the newest bot gives up its seat

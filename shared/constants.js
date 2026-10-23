@@ -223,6 +223,12 @@ export const IDLE_DISCONNECT_MS = 45_000;
 // this long is not being played and is given back.
 export const IDLE_KICK_TICKS = 90 * TICK_HZ; // 90 s
 
+// An id may take its own live seat back, but not endlessly. Two clients genuinely sharing an id
+// would otherwise evict each other forever, each reconnect triggering the next — so past this
+// many takeovers inside TAKEOVER_WINDOW_TICKS, the newcomer is given a fresh id instead.
+export const TAKEOVER_LIMIT = 3;
+export const TAKEOVER_WINDOW_TICKS = 20 * TICK_HZ; // 20 s
+
 // ─── Presentation ─────────────────────────────────────────────────────────────
 // Here rather than in art.js because the sim's tracer sampling rate must match the renderer's.
 

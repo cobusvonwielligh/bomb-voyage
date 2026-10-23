@@ -57,9 +57,12 @@ export function createTransport({ onMessage, onOpen, onClose, onNote }) {
     ws.onopen = () => win(c);
     ws.onmessage = e => { if (active === c) onMessage(JSON.parse(e.data)); };
     ws.onerror = () => { c.dead = true; lose('websocket', 'error'); };
-    ws.onclose = () => {
+    ws.onclose = ev => {
       c.dead = true;
-      if (active === c) { active = null; onClose?.(); }
+      // The close code has to travel: 4000 means the server gave our seat to a newer sign-in,
+      // and a client that cannot tell that from a dropped connection will reconnect and take it
+      // straight back.
+      if (active === c) { active = null; onClose?.({ code: ev?.code, reason: ev?.reason }); }
       else lose('websocket', 'closed');
     };
     candidates.push(c);
@@ -119,13 +122,11 @@ export function createTransport({ onMessage, onOpen, onClose, onNote }) {
         }
       })().catch(() => {});
 
-      wt.closed.then(() => {
+      const ended = info => {
         c.dead = true;
-        if (active === c) { active = null; onClose?.(); }
-      }).catch(() => {
-        c.dead = true;
-        if (active === c) { active = null; onClose?.(); }
-      });
+        if (active === c) { active = null; onClose?.({ code: info?.closeCode, reason: info?.reason }); }
+      };
+      wt.closed.then(ended).catch(ended);
 
       win(c);
     })().catch(err => { c.dead = true; lose('webtransport', err.message || 'failed'); });

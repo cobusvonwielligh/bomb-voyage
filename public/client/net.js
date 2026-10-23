@@ -73,7 +73,7 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
         ping();
       },
       onNote: note => console.info(`transport: ${note}`),
-      onClose: () => onDisconnect(),
+      onClose: ev => onDisconnect(ev),
       onMessage: handle,
     });
     ws.connect({ ws: wsUrl, wt: wtUrl });
@@ -135,7 +135,14 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
       const wait = backoff === 0 ? 150 : Math.min(8000, backoff * 2);
       backoff = wait;
       onStatus?.(`reconnecting in ${(wait / 1000).toFixed(1)}s`);
-      if (ev?.code === 4000) console.warn('replaced by another connection:', ev.reason);
+      // 4000 means another sign-in with our id took the seat. Reconnecting would take it back
+      // and the two clients would trade it forever, which is the whole thing the server's
+      // takeover limit exists to stop — so do not make it fight the limit.
+      if (ev?.code === 4000) {
+        closedByUs = true;
+        onStatus?.('signed in somewhere else');
+        return;
+      }
       kind = null;
       setTimeout(open, wait);
     }
