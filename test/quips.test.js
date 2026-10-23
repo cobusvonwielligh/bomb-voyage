@@ -5,7 +5,9 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createQuips, QUIPS, MENU_QUIPS, ON_DEATH, ON_SPAWN, MIN_GAP_MS, SHOW_MS } from '../public/client/quips.js';
+import {
+  createQuips, QUIPS, MENU_QUIPS, ON_DEATH, ON_SPAWN, ON_RUM, MIN_GAP_MS, SHOW_MS,
+} from '../public/client/quips.js';
 
 function harness({ name = 'cobusvw', rolls = [] } = {}) {
   let t = 0;
@@ -81,6 +83,22 @@ test('there are twenty idle lines and none of them are duplicates', () => {
   assert.equal(new Set(QUIPS).size, 20);
   assert.ok(ON_DEATH.every(l => /oof/i.test(l)), 'the death line is meant to be "oof"');
   assert.ok(ON_SPAWN.some(l => /let's go/i.test(l)), 'the spawn line is meant to be "lets go"');
+});
+
+test('the rum has its own lines, and they fill in the name', () => {
+  // Its own pool because it is the only pickup the mascot has an opinion about. A line that
+  // fires on one drop in ten stays funny; the same line on every bomb is wallpaper.
+  assert.ok(ON_RUM.length >= 4, `only ${ON_RUM.length} rum lines`);
+  assert.equal(new Set(ON_RUM).size, ON_RUM.length, 'duplicate rum line');
+  for (const line of ON_RUM) {
+    const { q } = harness({ name: 'cobusvw' });
+    assert.ok(!q.say([line]).includes('{n}'), `"${line}" left a placeholder behind`);
+  }
+  // Forced past the cooldown like the other reactions: it IS the moment.
+  const { q, advance } = harness();
+  q.say(QUIPS);
+  advance(10);
+  assert.ok(q.rum(), 'the rum line was swallowed by the idle cooldown');
 });
 
 test('the menu lines are advice, not heckling, and carry no name placeholder', () => {

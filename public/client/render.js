@@ -12,6 +12,7 @@ import {
 import { cellType, cellHp } from '/shared/maps.js';
 import {
   drawTile, drawFire, drawPerk, drawRock, drawShip, playerShades, PALETTE, bake, bakeSea,
+  PERK_GLOWS,
 } from '/assets/art.js';
 import { bombTile } from '/shared/sim/bombs.js';
 
@@ -1007,6 +1008,27 @@ export function createRenderer(canvas, world) {
       const fade = left >= PERK_FADE_TICKS ? 1 : Math.max(0, left / PERK_FADE_TICKS);
       ctx.save();
       ctx.translate(ox + k.tx * TILE_PX, oy + k.ty * TILE_PX);
+
+      /* Rum glows.
+       *
+       * One drop in ten and the only perk that changes how the game is played rather than how
+       * well you play it, so it is worth crossing a map for — and worth being able to SEE from
+       * across one. A warm halo behind the tile, breathing, drawn before the plinth so it reads
+       * as light coming off the bottle rather than as a ring painted round it.
+       */
+      if (PERK_GLOWS.has(k.type)) {
+        const beat = 0.6 + 0.4 * Math.sin((world.tick + k.id * 11) / 9);
+        const g = ctx.createRadialGradient(
+          TILE_PX / 2, TILE_PX / 2, TILE_PX * 0.12,
+          TILE_PX / 2, TILE_PX / 2, TILE_PX * (0.85 + 0.15 * beat),
+        );
+        g.addColorStop(0, `rgba(255,186,92,${0.42 * beat})`);
+        g.addColorStop(0.5, `rgba(217,154,85,${0.2 * beat})`);
+        g.addColorStop(1, 'rgba(217,154,85,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(-TILE_PX, -TILE_PX, TILE_PX * 3, TILE_PX * 3);
+      }
+
       if (fade < 1) {
         // A slow flicker on top of the ramp. The ramp alone is easy to miss in peripheral
         // vision; something blinking in the corner of your eye is not.

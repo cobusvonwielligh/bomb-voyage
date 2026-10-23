@@ -206,7 +206,10 @@ const net = createNet({
           if (!p) break;
           const type = perkTypes.get(e.id);
           sfx.playAtUnits('pickup', p.rx ?? p.x, p.ry ?? p.y, { perk: type });
-          if (e.i === world.you) showUpgrade(type);
+          if (e.i === world.you) {
+            showUpgrade(type);
+            if (type === 16) quips.rum();
+          }
           // Say what it was. Four of the five perks are a number going up somewhere in the top
           // bar, which is the last place you are looking while somebody is chasing you.
           const label = PERK_LABEL[type];

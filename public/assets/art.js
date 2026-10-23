@@ -697,11 +697,26 @@ export const PERK_ART = {
     c.closePath();
     c.fillStyle = '#6b4327'; c.fill();
     px(c, 10, 12, 2, 13, 'rgba(255,255,255,0.18)');       // the highlight down one side
-    rr(c, 9.5, 17, 13, 7, 1, '#e6dcc2');                  // label
-    px(c, 11.5, 19, 9, 1, '#7a5330');
-    px(c, 11.5, 21.5, 6, 1, '#7a5330');
+    // The label, and the only three letters that have ever meant rum. Drawn as strokes rather
+    // than as text: a 7px font renders differently on every machine, and at this size the
+    // crossed diagonals are more legible than any typeface would be anyway.
+    rr(c, 9, 16.5, 14, 8, 1, '#e6dcc2');
+    c.save();
+    c.strokeStyle = '#6d3f1c';
+    c.lineWidth = 1.3;
+    c.lineCap = 'round';
+    for (const x of [10.5, 15, 19.5]) {
+      c.beginPath();
+      c.moveTo(x - 1.6, 18.4); c.lineTo(x + 1.6, 22.6);
+      c.moveTo(x + 1.6, 18.4); c.lineTo(x - 1.6, 22.6);
+      c.stroke();
+    }
+    c.restore();
   },
 };
+
+/** Perks that announce themselves from across the board. Rum is the only one, for now. */
+export const PERK_GLOWS = new Set([16]);
 
 /** Perk icon on its tile plinth. Unknown/reserved types draw a question mark. */
 export function drawPerk(c, { type = 1, bob = 0 }) {

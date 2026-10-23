@@ -55,6 +55,20 @@ export const MENU_QUIPS = [
   'Press it. The worst that happens is everything.',
 ];
 
+/**
+ * The rum. Its own pool, because it is the only pickup the mascot has an opinion about — and
+ * because a line that fires on one drop in ten stays funny, where the same line on every bomb
+ * would be wallpaper inside a minute.
+ */
+export const ON_RUM = [
+  'Aye, you must be tipsy now!',
+  "That's the good stuff, {n}.",
+  'Steady, {n}. Walls move when you drink.',
+  'Rum! Now try walking in a line.',
+  "Drink up. You'll not feel the next one.",
+  'One for the sea, three for {n}.',
+];
+
 export const ON_DEATH = ['Oof.', 'Oof!', 'Oof… that one hurt.'];
 export const ON_SPAWN = ["Let's go!", "Let's go, {n}!", 'Back at it!'];
 
@@ -114,6 +128,7 @@ export function createQuips({ el, nameOf, now = () => performance.now(), random 
       return null;
     },
     died() { return say(ON_DEATH, { force: true }); },
+    rum() { return say(ON_RUM, { force: true }); },
     spawned() { return say(ON_SPAWN, { force: true }); },
     tick() {
       if (el && hideAt && now() >= hideAt) { el.classList.remove('show'); hideAt = 0; }

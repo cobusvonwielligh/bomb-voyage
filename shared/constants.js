@@ -223,8 +223,11 @@ export const PERK = {
  * and switches back on with one number.
  */
 export const PERK_WEIGHTS = {
-  [PERK.BOMB]: 26, [PERK.FIRE]: 24, [PERK.SKATE]: 18, [PERK.SHIELD]: 12, [PERK.GIFT]: 0,
-  [PERK.STAMINA]: 18, [PERK.RUM]: 10,
+  [PERK.BOMB]: 27, [PERK.FIRE]: 25, [PERK.SKATE]: 18, [PERK.SHIELD]: 12, [PERK.GIFT]: 0,
+  // Rum is one drop in ten and no more. It is the only perk that changes how the game is
+  // played rather than how well, and a mechanic that rare is an event; at twice this it would
+  // be a nuisance everybody has all the time.
+  [PERK.STAMINA]: 18, [PERK.RUM]: 11,
   [PERK.KICK]: 0, [PERK.JELLY]: 0, [PERK.DETONATOR]: 0, [PERK.BAT]: 0, [PERK.JETPACK]: 0,
   [PERK.NUKE]: 0, [PERK.BLUE_FIRE]: 0, [PERK.HEART]: 0, [PERK.KEY]: 0,
 };
