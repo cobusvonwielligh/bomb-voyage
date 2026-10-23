@@ -82,9 +82,12 @@ export function createRenderer(canvas, world) {
                          view.h / ((world.map.h + m) * TILE_PX));
 
     // Quantised. An unrounded scale changes by a hair on every layout settle and on every DPR
-    // report, and a board that resizes by one part in a thousand reads as jitter. Twentieths are
+    // report, and a board that resizes by one part in a thousand reads as jitter. Fortieths are
     // fine enough that nobody sees the step and coarse enough that nothing wobbles.
-    let q = Math.round(fit * 20) / 20;
+    //
+    // Rounded DOWN, not to nearest: rounding up eats into the two tiles of ocean that are the
+    // one rule this function has.
+    let q = Math.floor(fit * 40) / 40;
 
     // Floored. Below MIN_ZOOM a tile is about twenty pixels and a player is a smudge, so the
     // board stops shrinking and the camera starts following instead — which frame() already does
@@ -92,13 +95,18 @@ export function createRenderer(canvas, world) {
     // all of.
     q = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, q));
 
-    // Pixel art upscaled by a non-integer factor gets rows of visibly different widths, so snap
-    // to halves going up and smooth on the way down, where the same artefact reads as aliasing.
-    const z = q >= 1 ? Math.floor(q * 2) / 2 : q;
+    // No half-step snapping. It was there so pixel art upscaled by a non-integer factor would
+    // not get rows of visibly different widths — but flooring to the nearest half THREW AWAY UP
+    // TO A THIRD OF THE SCALE: a window that could take 1.45 was rendered at 1.0, and the
+    // difference went into the sea. Forty-five percent more ocean than asked for is a far worse
+    // artefact than a row of pixels one unit wider than its neighbour, which at these sizes
+    // nobody has ever noticed. Smoothing is switched on above 1 as well, which hides it anyway.
+    const z = q;
     if (!Number.isFinite(z) || z <= 0) return;      // never let a bad measurement blank the board
     if (z === view.zoom) return;
     view.zoom = z;
-    view.smooth = q < 1;
+    // Smooth at any non-integer scale, in both directions, for the reason above.
+    view.smooth = Math.abs(q - Math.round(q)) > 1e-6;
     invalidateAll();
   }
 

@@ -44,10 +44,11 @@ test('a wall growing on top of you does not entomb you', () => {
 
   assert.equal(unstick(s, p), true, 'unstick should report that it intervened');
 
-  // It drifts rather than teleporting, so freedom takes a while — but a bounded while. Half
-  // walking pace clears a tile in about 18 ticks; 40 is generous and still catches a stall.
+  // It drifts rather than teleporting, so freedom takes a while — but a bounded while. A
+  // quarter of walking pace clears a tile in about 39 ticks, or 1.3 s; 90 is generous and still
+  // catches a stall.
   let ticks = 1;
-  while (blocked(s, p, p.x, p.y) && ticks < 40) { unstick(s, p); ticks++; }
+  while (blocked(s, p, p.x, p.y) && ticks < 90) { unstick(s, p); ticks++; }
   assert.ok(!blocked(s, p, p.x, p.y), `still inside a wall after ${ticks} ticks`);
   assert.ok(ticks > 1, 'it teleported — the whole point is that it slides');
 

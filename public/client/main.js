@@ -715,9 +715,9 @@ function showDeadBanner(by) {
  * flash land immediately; the dialog waits for the banner to finish saying who got you, and
  * then another half second on top so the two do not cross-fade into each other.
  */
-// The banner runs for 2.9s (see #deadBanner in style.css); the dialog follows half a second
-// after it clears, so the two never share the screen.
-const DEAD_DIALOG_DELAY_TICKS = Math.round(3.4 * TICK_HZ);
+// The banner runs for 4.4s (see #deadBanner in style.css) and the dialog takes over the instant
+// it clears, so the screen is never empty and the two never overlap.
+const DEAD_DIALOG_DELAY_TICKS = Math.round(4.4 * TICK_HZ);
 
 function showDead(dead) {
   const held = dead && diedAtTick >= 0 && world.tick - diedAtTick < DEAD_DIALOG_DELAY_TICKS;

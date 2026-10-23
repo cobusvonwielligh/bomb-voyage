@@ -167,11 +167,11 @@ canvas#game {
 #topbar .sep { width: 1px; height: 18px; background: #ffffff1f; }
 
 #who {
-  font-family: var(--display);
+  font-family: var(--text); font-weight: 700;
   font-size: 15px;
   color: var(--gold);
   text-shadow: var(--rim), 0 2px 0 #0008;
-  letter-spacing: .06em;
+  letter-spacing: .03em;
 }
 
 #rank { color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: .14em; }
@@ -446,9 +446,11 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 @media (prefers-reduced-motion: reduce) {
   #say.show { animation: none; opacity: 1; transform: none; visibility: visible; }
 }
+/* The text face, not the display one. This is a name read at a glance beside the mascot, and
+   Shotling turns anything with a lowercase 'rn' or a '1' in it into a puzzle at 17px. */
 #who {
-  font-family: var(--display); font-size: 17px; color: var(--gold);
-  text-shadow: var(--rim), 0 2px 0 #0008; letter-spacing: .06em; display: block;
+  font-family: var(--text); font-weight: 700; font-size: 17px; color: var(--gold);
+  text-shadow: var(--rim), 0 2px 0 #0008; letter-spacing: .03em; display: block;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 #rank {
@@ -636,11 +638,14 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 }
 
 #deadBanner .big { color: var(--bad); text-shadow: 0 0 30px #e8655a, 0 5px 0 #0009; }
-#deadBanner.show { animation: deadIn 1.4s ease-out forwards; }
+/* 4.4s, up from 1.4. The old one was gone before you had finished reading who killed you, which
+   made the only piece of information in it useless. The dialog takes over the instant this
+   clears, so the screen is never empty and the two never overlap. */
+#deadBanner.show { animation: deadIn 4.4s ease-out forwards; }
 @keyframes deadIn {
   0%   { opacity: 0; transform: scale(1.5); }
-  14%  { opacity: 1; transform: scale(1); }
-  70%  { opacity: 1; transform: scale(1); }
+  5%   { opacity: 1; transform: scale(1); }
+  90%  { opacity: 1; transform: scale(.98); }
   100% { opacity: 0; transform: scale(.96); }
 }
 

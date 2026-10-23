@@ -22,9 +22,9 @@ const ALIGN_RATE = 2;
 // Deliberately slower than the legs. Walking pace felt like being shoved because it was the same
 // speed as a deliberate move, so the eye read it as the player suddenly sprinting sideways of
 // their own accord. At half pace it reads as drifting out of the way, which is what it is.
-const UNSTICK_MIN_UNITS = 3;
-const UNSTICK_EASE_SHIFT = 3;      // move 1/8 of the remaining gap each tick
-const UNSTICK_PACE_NUM = 1, UNSTICK_PACE_DEN = 2;
+const UNSTICK_MIN_UNITS = 2;
+const UNSTICK_EASE_SHIFT = 4;      // move 1/16 of the remaining gap each tick
+const UNSTICK_PACE_NUM = 1, UNSTICK_PACE_DEN = 4;
 
 export function speedOf(p) {
   let s = SPEED_UNITS_PER_TICK[Math.min(p.speed, SPEED_UNITS_PER_TICK.length - 1)];

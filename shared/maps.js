@@ -28,7 +28,7 @@ import { rng } from './util/rng.js';
 //   cove    one organic island, all bays and headlands, where the coast makes the chokepoints
 //   twins   two round islands joined by a single causeway, so crossing is a decision
 export const MAPS = [
-  { id: 'arena', name: 'Arena', w: 33, h: 23, seed: 1337,
+  { id: 'arena', name: 'Arena', w: 37, h: 23, seed: 1337,
     shape: 'rect', density: 0.62, reinforced: 0.05, shrubs: 0.03 },
   { id: 'cove', name: 'Cove', w: 37, h: 23, seed: 4242,
     shape: 'blob', density: 0.7, reinforced: 0.12, shrubs: 0.04 },
