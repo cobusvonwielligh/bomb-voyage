@@ -6,7 +6,7 @@ import { createState, createPlayer, tileCentre, setTile, tileAt } from '../share
 import { detonate } from '../shared/sim/bombs.js';
 import { stamina, speedOf } from '../shared/sim/movement.js';
 import { regenerate } from '../shared/sim/blocks.js';
-import { MAPS } from '../shared/maps.js';
+import { MAPS, buildMap, cellType } from '../shared/maps.js';
 import {
   BLOCK, BLOCK_HP, POWDER_RADIUS, POWDER_MAX_PER_ROUND, POWDER_GUARANTEE_TICK,
   REGEN_EVERY_TICKS, TICK_HZ, ROUND_TICKS,
@@ -180,4 +180,59 @@ test('being tired halves your pace, and stim raises the ceiling', () => {
   // And the cap holds however many are collected.
   stimmed.staminaLevel = MAX_STAMINA_LEVELS + 5;
   assert.equal(staminaMaxFor(stimmed), staminaMaxFor({ staminaLevel: MAX_STAMINA_LEVELS }));
+});
+
+// ─── maps ─────────────────────────────────────────────────────────────────────
+
+test('every map is one connected island with sixteen reachable spawns', () => {
+  // The two things that have actually gone wrong with a new shape before: an island that
+  // generates as two pieces with half the players stranded on the smaller one, and a spawn
+  // placed on a tile nobody can walk out of. Both are silent — you only find out mid-round.
+  for (const def of MAPS) {
+    const map = buildMap(def);
+    assert.equal(map.spawns.length, 16, `${def.id}: ${map.spawns.length} spawns`);
+
+    const walkable = i => {
+      const t = cellType(map.cells[i]);
+      return t === BLOCK.FLOOR || t === BLOCK.SHRUB_WALK;
+    };
+    for (const [sx, sy] of map.spawns) {
+      assert.ok(walkable(sy * def.w + sx), `${def.id}: spawn ${sx},${sy} is inside something`);
+    }
+
+    // Flood from the first spawn, counting destructible walls as passable — you can always bomb
+    // your way through a crate. What must never happen is a spawn walled off by IRON or cut off
+    // by water, because no amount of bombing fixes either.
+    const passable = i => {
+      const t = cellType(map.cells[i]);
+      return t !== BLOCK.WATER && t !== BLOCK.IRON;
+    };
+    const seen = new Set();
+    const queue = [map.spawns[0][1] * def.w + map.spawns[0][0]];
+    while (queue.length) {
+      const i = queue.pop();
+      if (seen.has(i) || !passable(i)) continue;
+      seen.add(i);
+      const x = i % def.w, y = (i / def.w) | 0;
+      if (x > 0) queue.push(i - 1);
+      if (x < def.w - 1) queue.push(i + 1);
+      if (y > 0) queue.push(i - def.w);
+      if (y < def.h - 1) queue.push(i + def.w);
+    }
+    for (const [sx, sy] of map.spawns) {
+      assert.ok(seen.has(sy * def.w + sx),
+        `${def.id}: spawn ${sx},${sy} is cut off from the rest of the island`);
+    }
+
+    // And enough room to actually play on.
+    assert.ok(seen.size >= 100, `${def.id}: only ${seen.size} reachable tiles`);
+  }
+});
+
+test('there are five maps and the rotation visits all of them', () => {
+  assert.ok(MAPS.length >= 5, `only ${MAPS.length} maps`);
+  assert.equal(new Set(MAPS.map(m => m.id)).size, MAPS.length, 'duplicate map id');
+  for (const m of MAPS) {
+    assert.ok(m.w >= 30 && m.h >= 20, `${m.id} is ${m.w}x${m.h}, too small for sixteen players`);
+  }
 });

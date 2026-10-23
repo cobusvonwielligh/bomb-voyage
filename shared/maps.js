@@ -34,6 +34,14 @@ export const MAPS = [
     shape: 'blob', density: 0.7, reinforced: 0.12, shrubs: 0.04 },
   { id: 'twins', name: 'Twins', w: 39, h: 23, seed: 777,
     shape: 'twin', density: 0.58, reinforced: 0.09, shrubs: 0.08 },
+  // A crescent round a lagoon. The inside of the curve is water, so the two tips are the
+  // furthest-apart places on a board that is not actually very big.
+  { id: 'lagoon', name: 'Lagoon', w: 39, h: 25, seed: 2468,
+    shape: 'horseshoe', density: 0.6, reinforced: 0.1, shrubs: 0.06 },
+  // Four arms off a central plaza: the only map where the middle is the shortest route between
+  // anywhere and anywhere else, which makes it contested by construction.
+  { id: 'crossroads', name: 'Crossroads', w: 37, h: 25, seed: 13579,
+    shape: 'cross', density: 0.66, reinforced: 0.07, shrubs: 0.05 },
 ];
 
 export const mapById = id => MAPS.find(m => m.id === id) || MAPS[0];
@@ -117,6 +125,75 @@ function landMask(def, next) {
           ((x - lx) / r) ** 2 + ((y - ly) / (r * 0.92)) ** 2 <= 1);
         const onBridge = Math.abs(y - cy) <= (BRIDGE - 1) / 2 && x > lobes[0][0] && x < lobes[1][0];
         land[y * w + x] = onLobe || onBridge ? 1 : 0;
+      }
+    }
+    return land;
+  }
+
+  if (shape === 'horseshoe') {
+    /* A crescent round a lagoon, open on one side.
+     *
+     * The lagoon is water, so the inside of the curve is not a shortcut: getting from one tip to
+     * the other means walking the whole arc. That turns a flat map into one with a near side and
+     * a far side without putting a single wall anywhere, and it means the two tips are the
+     * furthest apart places on a board that is physically quite small.
+     *
+     * The mouth faces down, and the arms are thickened at the tips so neither ends in a point
+     * nobody can fight on.
+     */
+    const cx = (w - 1) / 2, cy = h * 0.42;
+    const R = Math.min(w / 2.35, h / 1.5);          // outer radius
+    const r = R * 0.44;                              // the lagoon
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const dx = (x - cx) / R, dy = (y - cy) / (R * 0.82);
+        const d = Math.hypot(dx, dy);
+        const inner = Math.hypot(dx / (r / R), dy / (r / R));
+        // The mouth: a wedge of open water cut out of the bottom of the ring.
+        const ang = Math.atan2(dy, dx);
+        const mouth = ang > 0.72 && ang < Math.PI - 0.72 && inner > 0.35;
+        land[y * w + x] = d <= 1 && inner >= 1 && !mouth ? 1 : 0;
+      }
+    }
+    // Blunt the tips, so each arm ends in somewhere you can stand rather than a spike.
+    for (let pass = 0; pass < 2; pass++) {
+      const add = [];
+      for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+          if (land[y * w + x]) continue;
+          let n = 0;
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            if (land[(y + dy) * w + (x + dx)]) n++;
+          }
+          if (n >= 3) add.push(y * w + x);
+        }
+      }
+      for (const i of add) land[i] = 1;
+    }
+    return land;
+  }
+
+  if (shape === 'cross') {
+    /* Four arms off a central plaza.
+     *
+     * Every map so far rewards running the long way round. This one does the opposite: the
+     * middle is the shortest path between any two arms, so the plaza is contested by
+     * construction and there is nowhere to hide in it. The arms are long enough to be their own
+     * fight and narrow enough that a bomb in one is a real problem.
+     *
+     * The plaza is a disc rather than a square, because four square corners meeting produce four
+     * dead pockets that nothing ever happens in.
+     */
+    const cx = (w - 1) / 2, cy = (h - 1) / 2;
+    const armH = Math.max(5, Math.round(h * 0.34));     // thickness of the horizontal arms
+    const armV = Math.max(5, Math.round(h * 0.42));     // thickness of the vertical arms, in x
+    const plaza = Math.min(w, h) * 0.3;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const inPlaza = Math.hypot((x - cx) * 0.62, y - cy) <= plaza;
+        const inH = Math.abs(y - cy) <= armH / 2 && x >= 1 && x <= w - 2;
+        const inV = Math.abs(x - cx) <= armV / 2 && y >= 1 && y <= h - 2;
+        land[y * w + x] = inPlaza || inH || inV ? 1 : 0;
       }
     }
     return land;
