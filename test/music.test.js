@@ -255,9 +255,22 @@ test('music.js still exposes exactly what main.js calls, and nothing less', () =
     assert.ok(new RegExp(`(^|\\s)(get )?${name}\\s*\\(`, 'm').test(musicSrc),
       `main.js calls music.${name}, which createMusic does not return`);
   }
-  // Cycling is the module's own business: main.js must not have to know about tracks.
+  // main.js names a track to start on — the theme belongs to the landing page and a bed belongs
+  // to a round — but that is the whole extent of what it knows. Everything about how tracks are
+  // built, scheduled and cycled stays behind the music module.
   assert.match(musicSrc, /createAmbient/, 'the ambient beds are not wired into the music module');
-  assert.ok(!mainSrc.includes('ambient'), 'main.js should not know the ambient beds exist');
+  assert.ok(!/from ['"].*ambient/.test(mainSrc), 'main.js imports the ambient module directly');
+  assert.ok(!mainSrc.includes('createAmbient'), 'main.js builds beds itself');
+
+  // Every track name main.js asks for has to be a track that exists, or the call silently does
+  // nothing and the landing page plays whatever happened to be first.
+  const asked = new Set([...mainSrc.matchAll(/music\.(?:start|playFrom)\('(\w+)'\)/g)].map(m => m[1]));
+  assert.ok(asked.size >= 2, `expected main.js to name tracks; found ${[...asked]}`);
+  const ambientSrc = read('public/client/audio/ambient.js');
+  for (const name of asked) {
+    const known = new RegExp(`name: ['"]${name}['"]`).test(musicSrc + ambientSrc);
+    assert.ok(known, `main.js asks for track "${name}", which no module defines`);
+  }
 });
 
 test('the bus gain has exactly one writer, so start() cannot leave it ramping to zero', () => {

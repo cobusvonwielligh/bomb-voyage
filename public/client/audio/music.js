@@ -83,11 +83,14 @@ const CHANK = [
 const ARP_ROLL = [0, 2, 4, 6, 8, 6, 7, 5, 3, 1, 2, 4, 6, 4, 2, 1];
 
 // Back half only. Nulls are rests — a melody needs to breathe.
+// Thinned deliberately. The shape is the same four phrases, but with roughly half the notes: a
+// line that plays on every other beat stops being a melody and becomes a texture, and over a
+// sixteen-minute round a texture is what you end up muting. The rests are the tune.
 const LEAD = [
-  76, null, 74, null, 72, null, null, 74,
-  76, null, 79, null, 76, null, null, null,
-  74, null, 72, null, 71, null, null, 72,
-  74, null, 72, null, 67, null, null, null,
+  76, null, null, null, 72, null, null, null,
+  null, null, 79, null, null, null, 76, null,
+  74, null, null, null, 71, null, null, null,
+  null, null, 72, null, null, null, 67, null,
 ];
 
 /**
@@ -336,14 +339,30 @@ export function createMusic() {
     }
   }
 
-  /** Back to the theme, at full, with the other faders down and no pending ramps left over. */
-  function resetFaders() {
-    current = 0;
+  /** One track up at full, the rest down, with no pending ramps left over. */
+  function resetFaders(startAt = 0) {
+    current = startAt;
     for (const [i, track] of tracks.entries()) {
       const p = track.gain.gain;
       p.cancelScheduledValues(ctx.currentTime);
-      p.setValueAtTime(i === 0 ? 1 : 0, ctx.currentTime);
+      p.setValueAtTime(i === current ? 1 : 0, ctx.currentTime);
     }
+  }
+
+  /** Crossfade to a track immediately, from wherever the scheduler happens to be. */
+  function jumpTo(next) {
+    const now = ctx.currentTime;
+    for (const [i, track] of tracks.entries()) {
+      const p = track.gain.gain;
+      p.cancelScheduledValues(now);
+      p.setValueAtTime(p.value, now);
+      p.linearRampToValueAtTime(i === next ? 1 : 0, now + XFADE_S);
+    }
+    current = next;
+    step = 0;
+    loops = 0;
+    // The new track has its own step duration, and nextTime was measured in the old one.
+    nextTime = Math.max(nextTime, now + 0.05);
   }
 
   function scheduler() {
@@ -369,19 +388,36 @@ export function createMusic() {
     /** Which of the four tracks is current. Diagnostics only; nothing in the game reads it. */
     get track() { return tracks ? tracks[current].name : null; },
 
-    /** Must be called from a user gesture the first time — browsers block audio otherwise. */
-    async start() {
-      if (playing) return true;
+    /**
+     * Must be called from a user gesture the first time — browsers block audio otherwise.
+     *
+     * `from` names where to come in. The theme belongs to the landing page: it has a tune and a
+     * backbeat, which is right for twenty seconds of reading a menu and wrong for ten minutes of
+     * being hunted. Starting a round jumps straight to an ambient bed instead.
+     */
+    async start(from = 'theme') {
       if (!ctx) build();
       if (!await unlock()) return false;
+      const at = Math.max(0, tracks.findIndex(t => t.name === from));
+      if (playing) { if (at !== current) jumpTo(at); return true; }
       playing = true;
       applyGain();
       step = 0;
       loops = 0;
-      resetFaders();
+      resetFaders(at);
       nextTime = ctx.currentTime + 0.08;
       timer = setInterval(scheduler, TIMER_MS);
       return true;
+    },
+
+    /**
+     * Change track now rather than at the next loop boundary. Used when a round starts, because
+     * waiting up to a minute for the theme to come round would be absurd.
+     */
+    playFrom(name) {
+      if (!playing || !tracks) return;
+      const at = tracks.findIndex(t => t.name === name);
+      if (at >= 0 && at !== current) jumpTo(at);
     },
 
     stop() {

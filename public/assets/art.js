@@ -20,9 +20,10 @@ export const PALETTE = {
   outline: '#161b24',
   fireCore: '#fff4c2', fireMid: '#ff9b3d', fireEdge: '#e63f27',
   gold: '#ffd21f', text: '#e8eef7',
-  // The sea, and the rock the island is made of.
+  // The sea, and the rock the island is made of. The rock is brown-grey boulder, not the blue
+  // slate the walls are: the coast has to read as a different material from the level.
   seaDeep: '#0a1a2e', seaMid: '#123252', seaLight: '#1d5176', foam: '#cfe7f5',
-  rock: '#3a4150', rockLit: '#4d5566', rockDark: '#20262f', sand: '#6e6346',
+  rock: '#4a4036', rockLit: '#6b5e4f', rockTop: '#857665', rockDark: '#2b241d', sand: '#6e6346',
 };
 
 /** 16 maximally distinct player colours, plus their light/dark shades. Slots come from
@@ -449,26 +450,33 @@ export function bakeSea() {
  */
 export function drawRock(c, tx, ty, edges) {
   const S = TILE_PX;
-  px(c, 0, 0, S, S, PALETTE.rock);
+  px(c, 0, 0, S, S, PALETTE.rockDark);
 
-  // Two chunks of lighter stone, placed by hash so neighbouring tiles differ but never flicker.
-  const h1 = hash(tx, ty), h2 = hash(ty + 3, tx + 11);
-  px(c, (h1 * 10 | 0) + 2, (h2 * 10 | 0) + 2, 11, 9, PALETTE.rockLit);
-  px(c, (h2 * 12 | 0) + 4, (h1 * 14 | 0) + 12, 9, 8, PALETTE.rockDark);
+  // Boulders, not a brick. Three overlapping rounded lumps of brown-grey stone, sized and placed
+  // by hash — so every tile is a different pile, and the same tile is the same pile every time.
+  // Rounded shapes are what stop a coastline reading as a wall with a different colour.
+  const h = [hash(tx, ty), hash(ty + 3, tx + 11), hash(tx + 7, ty + 5), hash(ty + 13, tx + 2)];
+  const lumps = [
+    [1 + h[0] * 7, 3 + h[1] * 6, 15 + h[2] * 7, 14 + h[3] * 7],
+    [12 + h[2] * 9, 1 + h[3] * 8, 13 + h[0] * 7, 13 + h[1] * 6],
+    [3 + h[3] * 10, 13 + h[0] * 9, 14 + h[1] * 8, 13 + h[2] * 7],
+  ];
+  for (const [x, y, w, hh] of lumps) {
+    rr(c, x | 0, y | 0, w | 0, hh | 0, 5, PALETTE.rock);
+    // One light cap per boulder, top-left, matching the project's single light direction.
+    rr(c, (x + 2) | 0, (y + 1) | 0, ((w * 0.5) | 0), ((hh * 0.38) | 0), 3, PALETTE.rockLit);
+  }
+  // A few dry highlights so the pile has grain rather than three flat blobs.
+  px(c, (h[1] * 24 | 0) + 3, (h[2] * 24 | 0) + 3, 2, 2, PALETTE.rockTop);
+  px(c, (h[3] * 22 | 0) + 5, (h[0] * 22 | 0) + 6, 2, 2, PALETTE.rockTop);
 
-  // A lit edge wherever the sea is, because that is where the light gets in.
-  if (edges & 1) px(c, S - 3, 0, 3, S, PALETTE.rockLit);
-  if (edges & 2) px(c, 0, 0, S, 3, PALETTE.rockLit);
-  if (edges & 4) px(c, 0, 0, 3, S, PALETTE.rockLit);
-  if (edges & 8) px(c, 0, S - 3, S, 3, PALETTE.rockDark);
-
-  // A thin band of wet sand on the seaward side, so the join is not a hard line.
+  // A thin band of wet sand on the seaward side, so the join to the water is not a hard line.
   if (edges) {
-    c.globalAlpha = 0.5;
-    if (edges & 1) px(c, S - 2, 2, 2, S - 4, PALETTE.sand);
-    if (edges & 2) px(c, 2, 0, S - 4, 2, PALETTE.sand);
-    if (edges & 4) px(c, 0, 2, 2, S - 4, PALETTE.sand);
-    if (edges & 8) px(c, 2, S - 2, S - 4, 2, PALETTE.sand);
+    c.globalAlpha = 0.45;
+    if (edges & 1) px(c, S - 3, 2, 3, S - 4, PALETTE.sand);
+    if (edges & 2) px(c, 2, 0, S - 4, 3, PALETTE.sand);
+    if (edges & 4) px(c, 0, 2, 3, S - 4, PALETTE.sand);
+    if (edges & 8) px(c, 2, S - 3, S - 4, 3, PALETTE.sand);
     c.globalAlpha = 1;
   }
 }

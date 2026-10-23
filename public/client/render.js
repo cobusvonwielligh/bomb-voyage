@@ -88,7 +88,9 @@ export function createRenderer(canvas, world) {
   // the side panel, or the HUD appearing when a round starts.
   if (typeof ResizeObserver === 'function') new ResizeObserver(resize).observe(canvas);
 
-  const invalidateAll = () => { chunks = new Map(); shore = null; splashes.length = 0; };
+  const invalidateAll = () => {
+    chunks = new Map(); shore = null; splashes.length = 0; dropsFor = null;
+  };
   const mapChanged = () => { recomputeZoom(); };
 
   /** Mark the chunk holding a tile dirty, plus neighbours when it sits on a border. */
@@ -176,6 +178,80 @@ export function createRenderer(canvas, world) {
    * is not allowed to compete with sixteen players and a chain reaction for the frame budget.
    * Thirty short-lived circles, spawned a couple a second, reads as a coast.
    */
+  // ─── the sea, as particles ──────────────────────────────────────────────────
+  //
+  // A real simulation, not a scrolling texture: a fixed pool of drifting particles advected by a
+  // flow field, recycled when they leave the visible water. Fixed pool and no allocation per
+  // frame — a particle system that grows is a particle system that eventually drops frames, and
+  // the sea is scenery that may never compete with sixteen players and a chain reaction.
+  //
+  // The flow field is two crossed sine waves sampled at the particle's position. It costs two
+  // sin() per particle per frame and produces swirls, eddies and a slow prevailing drift, which
+  // is everything the eye needs to read it as water.
+  const DROPS = 220;
+  const drops = [];
+  let dropsFor = null;              // the map they were seeded for
+
+  function seedDrops() {
+    drops.length = 0;
+    const W = world.map.w * TILE_PX, H = world.map.h * TILE_PX;
+    const M = SEA_MARGIN_TILES * TILE_PX * 2;
+    for (let i = 0; i < DROPS; i++) {
+      drops.push({
+        x: -M + Math.random() * (W + M * 2),
+        y: -M + Math.random() * (H + M * 2),
+        len: 3 + Math.random() * 9,          // drawn as a short streak along its own velocity
+        a: 0.12 + Math.random() * 0.3,
+        vx: 0, vy: 0,
+      });
+    }
+    dropsFor = world.map;
+  }
+
+  /** The current at a point. Two crossed waves plus a constant drift. */
+  const flowX = (x, y, t) => Math.sin(y * 0.012 + t * 0.7) * 16 + 7;
+  const flowY = (x, y, t) => Math.cos(x * 0.009 - t * 0.5) * 12 + 3;
+
+  function drawDrops(vw, vh, ox, oy, dt) {
+    if (dropsFor !== world.map) seedDrops();
+    const W = world.map.w * TILE_PX, H = world.map.h * TILE_PX;
+    const M = SEA_MARGIN_TILES * TILE_PX * 2;
+    const map = world.map;
+
+    ctx.save();
+    ctx.translate(ox, oy);
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = PALETTE.foam;
+    for (const d of drops) {
+      const fx = flowX(d.x, d.y, seaT), fy = flowY(d.x, d.y, seaT);
+      // Ease toward the current rather than snapping to it, so particles have momentum and the
+      // field reads as water being pushed rather than as dots teleporting along a curve.
+      d.vx += (fx - d.vx) * 0.08;
+      d.vy += (fy - d.vy) * 0.08;
+      d.x += d.vx * dt;
+      d.y += d.vy * dt;
+
+      // Wrap round the visible sea. Cheaper than respawning and keeps the density even.
+      if (d.x < -M) d.x += W + M * 2; else if (d.x > W + M) d.x -= W + M * 2;
+      if (d.y < -M) d.y += H + M * 2; else if (d.y > H + M) d.y -= H + M * 2;
+
+      // Hidden behind the island: skip it rather than drawing a wave on top of the level.
+      const tx = (d.x / TILE_PX) | 0, ty = (d.y / TILE_PX) | 0;
+      if (tx >= 0 && ty >= 0 && tx < map.w && ty < map.h
+          && cellType(map.cells[ty * map.w + tx]) !== BLOCK.WATER) continue;
+
+      const sp = Math.hypot(d.vx, d.vy) || 1;
+      ctx.globalAlpha = d.a;
+      ctx.lineWidth = sp > 18 ? 1.6 : 1;
+      ctx.beginPath();
+      ctx.moveTo(d.x, d.y);
+      ctx.lineTo(d.x - (d.vx / sp) * d.len, d.y - (d.vy / sp) * d.len);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
   const MAX_SPLASHES = 30;
   function spawnSplash() {
     const edges = shoreline();
@@ -215,7 +291,7 @@ export function createRenderer(canvas, world) {
     // A band of lighter shallows hugging the island, drawn in world space over the open sea.
     ctx.save();
     ctx.translate(ox, oy);
-    ctx.globalAlpha = 0.5;
+    ctx.globalAlpha = 0.45;
     ctx.fillStyle = PALETTE.seaMid;
     for (const s of shoreline()) {
       if (s.e & 1) ctx.fillRect((s.tx + 1) * TILE_PX, s.ty * TILE_PX, TILE_PX, TILE_PX);
@@ -292,6 +368,7 @@ export function createRenderer(canvas, world) {
     const ox = -Math.round(cam.x) + Math.round(sx), oy = -Math.round(cam.y) + Math.round(sy);
 
     drawSea(vw, vh, ox, oy, dtMs);
+    drawDrops(vw, vh, ox, oy, Math.min(0.05, dtMs / 1000));
 
     const cx0 = Math.floor(cam.x / CHUNK_PX), cx1 = Math.floor((cam.x + vw) / CHUNK_PX);
     const cy0 = Math.floor(cam.y / CHUNK_PX), cy1 = Math.floor((cam.y + vh) / CHUNK_PX);

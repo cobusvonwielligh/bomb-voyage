@@ -84,6 +84,30 @@ export function collect(state) {
   });
 }
 
+/**
+ * Fire destroys anything lying on the ground.
+ *
+ * Without this a perk in a blast is simply immune, which makes a tile with a Fire on it the
+ * safest square on the map and turns every contested drop into a standoff nobody can break. It
+ * also means blowing a wall open can take the very perk out again, which is a real decision:
+ * open it from a distance and you might lose what is inside.
+ *
+ * Runs AFTER collect in the tick, deliberately. Reaching a perk on the tick it burns should
+ * count — you got there first — and the alternative punishes the player who took the risk.
+ */
+export function burnPerks(state) {
+  if (!state.perks.length || !state.fires.length) return;
+  const burning = new Set();
+  for (const f of state.fires) if (f.until > state.tick) burning.add(f.ty * state.map.w + f.tx);
+  if (!burning.size) return;
+
+  state.perks = state.perks.filter(k => {
+    if (!burning.has(k.ty * state.map.w + k.tx)) return true;
+    state.events.push({ e: 'perkburn', tick: state.tick, id: k.id, x: k.tx, y: k.ty });
+    return false;
+  });
+}
+
 /** A good kill should be worth something: scatter a few of the dead player's upgrades. */
 export function scatterOnDeath(state, p) {
   const carried = [];

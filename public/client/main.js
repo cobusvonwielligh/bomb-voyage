@@ -120,6 +120,10 @@ const net = createNet({
           break;
         }
 
+        case 'perkburn':
+          sfx.play('blockdie', e.x, e.y);
+          break;
+
         case 'perkget': {
           const p = world.players[e.i];
           if (p) sfx.playAtUnits('pickup', p.rx ?? p.x, p.ry ?? p.y, { perk: perkTypes.get(e.id) });
@@ -151,9 +155,11 @@ const net = createNet({
         case 'died': {
           const who = world.players[e.i];
           const by = world.players[e.by];
+          const nameOf = i => (i === world.you ? 'you' : world.players[i]?.name ?? '?');
           killFeed(e.i === e.by
-            ? `${who?.name ?? '?'} blew themselves up`
-            : `${by?.name ?? '?'} bombed ${who?.name ?? '?'}`);
+            ? `${nameOf(e.i)} blew ${e.i === world.you ? 'yourself' : 'themselves'} up`
+            : `${nameOf(e.by)} bombed ${nameOf(e.i)}`,
+          { youDied: e.i === world.you, youKilled: e.by === world.you && e.i !== world.you });
           if (e.i === world.you) {
             sfx.play('ownDeath');
             renderer?.addFlash(0.8, '220,60,48');     // you, specifically, just died
@@ -168,10 +174,9 @@ const net = createNet({
     }
   },
   onRoundEnd: m => {
-    const list = m.standings.map((p, n) =>
-      `${n + 1}. ${p.name}  ${p.s} pts  ${p.k}/${p.d}`).join('\n');
+    renderRoundTable(m);
     $('deadTitle').textContent = 'round over';
-    $('deadText').textContent = `${list}\n\nnext: ${m.nextMap}`;
+    $('dead').firstElementChild.classList.add('round');
     $('dead').style.display = 'grid';
     sfx.play('fanfare');
     $('respawn').style.display = 'none';
@@ -181,7 +186,9 @@ const net = createNet({
       $('dead').style.display = 'none';
       $('respawn').style.display = '';
       $('deadTitle').textContent = 'you died';
-      $('deadText').textContent = 'space to respawn · esc to leave';
+      $('dead').firstElementChild.classList.remove('round');
+      $('roundRows').textContent = '';
+      $('roundNext').textContent = '';
     }, m.startsInMs);
   },
   // Lifetime rank, once a second. See the comment on emitScores in server/room.js for why this
@@ -210,7 +217,8 @@ const net = createNet({
       sfx.play(m.ace ? 'fanfare' : 'kill');
       renderer?.addFlash(m.ace ? 0.45 : 0.3, m.ace ? '179,107,255' : '255,210,31');
     }
-    killFeed(`${m.i === world.you ? 'you' : m.name} — ${m.kind}`);
+    killFeed(`${m.i === world.you ? 'you' : m.name} — ${m.kind}`,
+      { youKilled: m.i === world.you });
   },
   onChat: m => {
     const li = document.createElement('li');
@@ -218,10 +226,11 @@ const net = createNet({
     who.textContent = m.i === -1 ? '' : `${m.name}: `;
     if (m.i >= 0) who.style.color = playerColor(m.i);
     li.append(who, document.createTextNode(m.msg));   // textContent only: never innerHTML
-    const list = $('chatList');
-    list.append(li);
-    while (list.children.length > 50) list.firstChild.remove();
-    list.scrollTop = list.scrollHeight;
+    if (m.i === world.you) li.className = 'mine';
+    else if (world.me() && m.msg.toLowerCase().includes(world.me().name.toLowerCase())) {
+      li.className = 'mention';
+    }
+    pushLine(li);
   },
   // The connection readout lives in the HUD, which is hidden until you are in a game. Before
   // that, a full server or an unreachable one has to say so somewhere you can actually see it.
@@ -411,18 +420,60 @@ function drawHud() {
 
 // ─── death, scoreboard, leaving ───────────────────────────────────────────────
 
+/**
+ * The end-of-round standings, as a table.
+ *
+ * It was a block of pre-formatted text, which meant the columns only lined up by luck and your
+ * own row was indistinguishable from the other fifteen. The one thing anyone wants from this
+ * screen is "where did I come", so that row is marked, coloured and scrolled to.
+ */
+function renderRoundTable(m) {
+  const body = $('roundRows');
+  body.textContent = '';
+  let mine = null;
+  for (const [n, p] of (m.standings || []).entries()) {
+    const tr = document.createElement('tr');
+    const you = p.i === world.you;
+    cell(tr, n === 0 ? '1st' : `${n + 1}`, n === 0 ? 'var(--gold)' : null, n !== 0);
+    cell(tr, you ? `${p.name} (you)` : p.name, playerColor(p.i));
+    num(cell(tr, p.k));
+    num(cell(tr, p.d));
+    num(cell(tr, p.s));
+    if (you) { tr.className = 'me'; mine = tr; }
+    body.append(tr);
+  }
+  $('roundNext').textContent = `next map: ${m.nextMap}`;
+  $('roundEmpty').style.display = body.children.length ? 'none' : '';
+  // Sixteen rows can overflow the card on a short window; make sure yours is the one on screen.
+  mine?.scrollIntoView({ block: 'nearest' });
+}
+
 function showDead(dead) {
   $('dead').style.display = dead ? 'grid' : 'none';
 }
 
-function killFeed(text) {
-  const li = document.createElement('li');
-  li.style.color = '#8b97a8';
-  li.textContent = text;
+/** One place that appends to the log, so trimming and scrolling cannot drift apart. */
+function pushLine(li) {
   const list = $('chatList');
+  const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 24;
   list.append(li);
-  while (list.children.length > 50) list.firstChild.remove();
-  list.scrollTop = list.scrollHeight;
+  while (list.children.length > 60) list.firstChild.remove();
+  // Only follow if they were already at the bottom — yanking the view while someone is reading
+  // back through a fight is worse than missing the newest line.
+  if (atBottom) list.scrollTop = list.scrollHeight;
+}
+
+/**
+ * The kill feed, with you picked out of it.
+ *
+ * In a sixteen-player free-for-all the log scrolls constantly, and the only lines that matter to
+ * you are the ones you are in. Those get your colour and a marker; everything else stays grey.
+ */
+function killFeed(text, { youDied = false, youKilled = false } = {}) {
+  const li = document.createElement('li');
+  li.className = 'feed' + (youKilled ? ' kill' : youDied ? ' death' : '');
+  li.textContent = text;
+  pushLine(li);
 }
 
 /**
@@ -520,11 +571,24 @@ function leave() {
   scoresOpen = false;
   roundOverUntil = 0;
   input.clear();
+  music.playFrom('theme');          // back to the landing page, back to the theme
   $('play').disabled = false;
   $('name').focus();
 }
 
 // ─── menu ─────────────────────────────────────────────────────────────────────
+
+// The theme plays on the landing page, from the first gesture the browser will accept — a click
+// anywhere on the card, or the first keystroke in the name box. Audio cannot start before one.
+let menuAudioTried = false;
+function startMenuAudio() {
+  if (menuAudioTried || running) return;
+  menuAudioTried = true;
+  music.start('theme').then(syncAudio);
+}
+for (const ev of ['pointerdown', 'keydown']) {
+  $('menu').addEventListener(ev, startMenuAudio, { once: true });
+}
 
 const nameInput = $('name');
 nameInput.maxLength = NAME_MAX_CHARS;
@@ -537,10 +601,10 @@ function play() {
   $('play').disabled = true;
   localStorage.setItem('bv.name', name);
   renderer = createRenderer($('game'), world);
-  // The click that got us here is the gesture that unlocks audio. Both buses share one context,
-  // so sfx must be started too — and started first, so the join sounds are audible.
   sfx.start().then(() => sfx.play('click'));
-  music.start().then(syncAudio);
+  // Straight to an ambient bed. The theme has a tune and a backbeat, which is right for reading
+  // a menu and wrong for ten minutes of being hunted.
+  music.start('drift').then(syncAudio);
   world.onBoom = bomb => {
     // A blast before its own fuse ran out was set off by something else. A bomb we never even
     // saw placed counts too — that only happens when a chain reaches it inside one snapshot.

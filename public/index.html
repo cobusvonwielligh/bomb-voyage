@@ -43,7 +43,7 @@
 
 <div id="hud">
   <div id="topbar" class="edge">
-    <span class="stat" id="clock"><span class="k">left</span><span class="v" id="vClock">--:--</span></span>
+    <span id="clock"><span class="v" id="vClock">--:--</span><span class="k">left</span></span>
     <span class="stat"><span class="k">ping</span><span class="v" id="vPing">&mdash;</span></span>
     <span class="stat"><span class="k">alive</span><span class="v" id="vOnline">&mdash;</span></span>
     <span class="stat"><span class="k">map</span><span class="v" id="vMap">&mdash;</span></span>
@@ -112,6 +112,14 @@
   <div class="card small edge">
     <h1 id="deadTitle">you died</h1>
     <p class="sub" id="deadText">space to respawn &middot; esc to leave</p>
+    <div id="roundTable">
+      <table>
+        <thead><tr><th>#</th><th>name</th><th>k</th><th>d</th><th>score</th></tr></thead>
+        <tbody id="roundRows"></tbody>
+      </table>
+      <p class="sub" id="roundEmpty">no scores</p>
+      <p class="sub" id="roundNext"></p>
+    </div>
     <button id="respawn">respawn</button>
   </div>
 </div>
