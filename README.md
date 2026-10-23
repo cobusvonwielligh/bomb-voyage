@@ -65,15 +65,26 @@ everything else. See [docs/NETCODE.md](docs/NETCODE.md) §7.
 
 ## Deploy
 
-**Push to `main`.** GitHub Actions runs the tests, then pokes `POST /deploy` on the server,
-which pulls from git and restarts itself. Deployment is pull-based so GitHub never holds an SSH
-key and port 22 stays locked to one IP. [docs/DEPLOY.md](docs/DEPLOY.md) §6.
-
-For iterating on uncommitted work, push your working tree straight up:
+Manual, and quick — about **4 seconds** end to end. Pushes your working tree, uncommitted work
+included.
 
 ```bash
-npm run deploy      # reads [deploy] from config.ini
+npm run deploy        # tests, then deploy          ~5s
+npm run deploy:fast   # skip the tests              ~4s
+npm run rollback      # back to the previous deploy ~2s
+npm run logs          # follow the server journal
 ```
+
+Ctrl-C is safe at any point: if it lands before `sync`, the server has not been touched.
+
+What makes it fast — one multiplexed SSH connection for every remote step instead of a handshake
+each, `npm ci` only when `package-lock.json` actually changed, and a hardlinked snapshot so
+rollback is a directory swap rather than a transfer. Rollback is its own undo: run it twice and
+you are back where you started.
+
+GitHub Actions runs the tests on every push but **does not deploy**. The server still has a
+token-gated `POST /deploy`, so switching automatic deploys on later is a job block plus two
+repo secrets — [docs/DEPLOY.md](docs/DEPLOY.md) §6.
 
 First-time server setup, the domain switch, and operations:
 [docs/DEPLOY.md](docs/DEPLOY.md).

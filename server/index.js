@@ -144,10 +144,20 @@ function handle(req, res) {
   fs.createReadStream(file).pipe(res);
 }
 
-/** Short git sha when deployed from a clone, so /healthz says what is actually running. */
+/**
+ * What is actually running, for /healthz.
+ *
+ * `.version` is written by infra/deploy.sh and wins, because a manual deploy rsyncs the working
+ * tree without touching `.git` — reading the git sha alone would report the last *pulled*
+ * commit, not the code on disk. Falls back to .git/HEAD for a self-update, and to null locally.
+ */
 let cachedVersion;
 function version() {
   if (cachedVersion !== undefined) return cachedVersion;
+  try {
+    cachedVersion = fs.readFileSync(path.join(ROOT, '.version'), 'utf8').trim() || null;
+    return cachedVersion;
+  } catch { /* not a manual deploy; try git */ }
   try {
     const head = fs.readFileSync(path.join(ROOT, '.git/HEAD'), 'utf8').trim();
     const ref = head.startsWith('ref: ') ? head.slice(5) : null;

@@ -10,7 +10,10 @@
     "dev": "LAG=200 JITTER=40 node server/index.js",
     "test": "node --test",
     "preview": "node -e \"require('child_process').spawn(process.platform==='darwin'?'open':'xdg-open',['http://localhost:8080/art-preview.html'])\"",
-    "deploy": "./infra/deploy.sh"
+    "deploy": "./infra/deploy.sh",
+    "deploy:fast": "SKIP_TESTS=1 ./infra/deploy.sh",
+    "rollback": "./infra/rollback.sh",
+    "logs": "./infra/logs.sh"
   },
   "dependencies": {
     "ws": "^8.18.0"
