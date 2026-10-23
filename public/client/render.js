@@ -389,8 +389,32 @@ export function createRenderer(canvas, world) {
    * moves side to side while the crest moves forward. Pushing along the heading would make the
    * particles race the wave and the whole field would shear apart.
    */
+  /* How much the boulders push the water aside at a point.
+   *
+   * A simple radial repulsion that dies off with distance: close in it is strong enough to steer
+   * particles round the rock, and past a few radii it is nothing. Not fluid dynamics — the eye
+   * is not checking for conservation of mass, it is checking that the water does not sail
+   * straight through a rock.
+   */
+  const ROCK_PUSH = 46;
+  function rockFlow(x, y, out) {
+    out.x = 0; out.y = 0;
+    for (const k of (rocksFor === world.map ? seaRocks : waterRocks())) {
+      const dx = x - k.x, dy = y - k.y;
+      const d2 = dx * dx + dy * dy;
+      const reach = k.r * 3.2;
+      if (d2 > reach * reach || d2 < 1) continue;
+      const d = Math.sqrt(d2);
+      const f = (1 - d / reach) ** 2 * ROCK_PUSH;
+      out.x += (dx / d) * f;
+      out.y += (dy / d) * f;
+    }
+  }
+  const rockPush = { x: 0, y: 0 };
+
   const flowX = (x, y, t) => {
-    let v = Math.cos(current.angle) * current.speed;
+    rockFlow(x, y, rockPush);
+    let v = Math.cos(current.angle) * current.speed + rockPush.x;
     for (const s of current.trains) {
       const a = s.amp * envelopeAt(s, x, y, t);
       v += Math.sin((x * s.dx + y * s.dy) * s.k - t * s.w + s.phase) * a * -s.dy;
@@ -398,7 +422,8 @@ export function createRenderer(canvas, world) {
     return v;
   };
   const flowY = (x, y, t) => {
-    let v = Math.sin(current.angle) * current.speed;
+    // rockPush was filled by the flowX call for this same point, one line earlier in drawDrops.
+    let v = Math.sin(current.angle) * current.speed + rockPush.y;
     for (const s of current.trains) {
       const a = s.amp * envelopeAt(s, x, y, t);
       v += Math.sin((x * s.dx + y * s.dy) * s.k - t * s.w + s.phase) * a * s.dx;
@@ -453,8 +478,26 @@ export function createRenderer(canvas, world) {
   const SPLASH_EVERY_MS = 8000;
 
   function spawnSplash() {
+    if (splashes.length >= MAX_SPLASHES) return;
+
+    // One in three breaks on a boulder rather than on the island. They are small and far out,
+    // so without their own share of the foam they would be the only still thing in the water.
+    const rocks = waterRocks();
+    if (rocks.length && Math.random() < 0.34) {
+      const k = rocks[(Math.random() * rocks.length) | 0];
+      const a = Math.random() * Math.PI * 2;
+      splashes.push({
+        x: k.x + Math.cos(a) * k.r * 1.1,
+        y: k.y + Math.sin(a) * k.r * 1.1,
+        life: 1,
+        r: 6 + Math.random() * 6,
+        rate: 0.18 + Math.random() * 0.14,
+      });
+      return;
+    }
+
     const edges = shoreline();
-    if (!edges.length || splashes.length >= MAX_SPLASHES) return;
+    if (!edges.length) return;
     const s = edges[(Math.random() * edges.length) | 0];
     // Push the swell out onto the water side, so it breaks against the rock rather than on it.
     const dx = (s.e & 1 ? 1 : 0) - (s.e & 4 ? 1 : 0);
@@ -525,6 +568,80 @@ export function createRenderer(canvas, world) {
     ctx.scale(SHIP_SCALE, SHIP_SCALE);
     drawShip(ctx);
     ctx.restore();
+  }
+
+  /* Two boulders out in the water, per map.
+   *
+   * Deterministic in the map like everything else out here, placed outside the island's bounding
+   * box so they never touch the playfield, and allowed to sit half off the edge of the board —
+   * a rock that is politely fully visible looks placed, one that runs off the edge looks like
+   * the island carried on under the water.
+   *
+   * They are not just paint: the flow field is deflected round them (see flowX/flowY) and the
+   * shoreline foam spawns off them, so the water acknowledges they are there. A static rock in a
+   * moving current is the one thing that would make the sea look fake.
+   */
+  const SEA_ROCKS = 2;
+  let rocksFor = null, seaRocks = [];
+  function waterRocks() {
+    if (rocksFor === world.map) return seaRocks;
+    rocksFor = world.map;
+    const [lx, ly, lw, lh] = landBounds();
+    const cx = (lx + lw / 2) * TILE_PX, cy = (ly + lh / 2) * TILE_PX;
+    // Hash the map's own numbers for the angles, so the pair differs between maps and never
+    // moves within one.
+    const seed = world.map.w * 2654435761 + world.map.h * 40503;
+    seaRocks = [];
+    for (let i = 0; i < SEA_ROCKS; i++) {
+      const a = ((seed >>> (i * 7)) % 360) * (Math.PI / 180);
+      const out = 0.52 + ((seed >>> (i * 5 + 3)) % 23) / 100;     // 0.52-0.75 of the half-span
+      seaRocks.push({
+        x: cx + Math.cos(a) * (lw * TILE_PX * out + 2.2 * TILE_PX),
+        y: cy + Math.sin(a) * (lh * TILE_PX * out + 2.2 * TILE_PX),
+        r: TILE_PX * (0.8 + ((seed >>> (i * 3 + 1)) % 9) / 14),
+        seed: seed + i * 977,
+      });
+    }
+    return seaRocks;
+  }
+
+  function drawWaterRocks(ox, oy) {
+    for (const k of waterRocks()) {
+      const x = ox + k.x, y = oy + k.y;
+      ctx.save();
+
+      // The water piling up on the upstream side, drawn first so the rock sits in it.
+      ctx.globalAlpha = 0.18 + 0.05 * Math.sin(seaT * 1.3 + k.seed);
+      ctx.strokeStyle = PALETTE.foam;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.ellipse(x, y, k.r * 1.9, k.r * 1.45, 0, 0, 7); ctx.stroke();
+      ctx.globalAlpha = 0.09;
+      ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.ellipse(x, y, k.r * 2.6, k.r * 2, 0, 0, 7); ctx.stroke();
+
+      // Three overlapping lumps, same brown-grey as the shoreline rock so the island and its
+      // outliers are obviously the same stone.
+      ctx.globalAlpha = 1;
+      const lump = (dx, dy, rr, fill) => {
+        ctx.beginPath();
+        ctx.ellipse(x + dx, y + dy, rr, rr * 0.84, 0, 0, 7);
+        ctx.fillStyle = fill;
+        ctx.fill();
+      };
+      lump(2, 3, k.r * 1.05, '#000');                 // its own shadow in the water
+      lump(0, 0, k.r, PALETTE.rock);
+      lump(-k.r * 0.3, -k.r * 0.3, k.r * 0.62, PALETTE.rockLit);
+      lump(-k.r * 0.42, -k.r * 0.45, k.r * 0.3, PALETTE.rockTop);
+      lump(k.r * 0.45, k.r * 0.4, k.r * 0.4, PALETTE.rockDark);
+
+      // A wet collar where it enters the water.
+      ctx.globalAlpha = 0.5;
+      ctx.strokeStyle = PALETTE.seaLight;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(x, y + k.r * 0.2, k.r * 0.95, k.r * 0.72, 0, 0, 7); ctx.stroke();
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
   }
 
   function drawSea(vw, vh, ox, oy, dtMs) {
@@ -647,6 +764,7 @@ export function createRenderer(canvas, world) {
     const ox = -Math.round(cam.x) + Math.round(sx), oy = -Math.round(cam.y) + Math.round(sy);
 
     drawSea(vw, vh, ox, oy, dtMs);
+    drawWaterRocks(ox, oy);
     // Before the flow field, so the water runs across her and she sits down in the sea rather
     // than on it. Combined with the alpha this is what pushes her into the background: a
     // foreground object does not have the ocean drifting over the top of it.
