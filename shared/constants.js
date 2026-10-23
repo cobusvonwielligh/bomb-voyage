@@ -166,7 +166,7 @@ export const PERK_EXPIRE_TICKS = 45 * TICK_HZ;
  * from across the map. Fading it out turns the same event into information you can act on: a
  * perk you can see going translucent is one you have a few seconds left to reach. Purely a
  * render concern — the sim still removes it on the exact tick. */
-export const PERK_FADE_TICKS = 5 * TICK_HZ;
+export const PERK_FADE_TICKS = 15 * TICK_HZ;
 export const PERKS_DROPPED_ON_DEATH = 3;
 export const MAX_SHIELDS = 1;
 
