@@ -610,7 +610,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 #menuWrap { position: relative; }
 #mascot {
   position: absolute;
-  top: -16px; right: -58px;
+  top: 42px; right: -96px;
   width: 170px; height: 170px;
   z-index: 2;
   pointer-events: none;
@@ -674,7 +674,19 @@ h1 {
   -webkit-text-fill-color: transparent; color: transparent;
   text-shadow: none;
   animation: spin 24s linear infinite;
-  filter: drop-shadow(0 3px 0 #0009) drop-shadow(0 0 26px #ffd21f44);
+  /* A black rim, then a black glow, then the gold bloom.
+   *
+   * text-shadow cannot do this: the fill is transparent so the glyph interior would show the
+   * shadow straight through it. A filter works on the composited pixels instead, so four tight
+   * zero-blur drop-shadows build an outline that follows the letterforms, and the wider blurred
+   * one lifts the whole word off the card. Order matters — each shadow is applied to the result
+   * of the last, so the rim has to come before the glow. */
+  filter:
+    drop-shadow(1.5px 0 0 #000) drop-shadow(-1.5px 0 0 #000)
+    drop-shadow(0 1.5px 0 #000) drop-shadow(0 -1.5px 0 #000)
+    drop-shadow(0 0 10px #000c)
+    drop-shadow(0 4px 0 #000a)
+    drop-shadow(0 0 26px #ffd21f44);
 }
 
 .sub { color: var(--dim); margin: 0 0 24px; font-size: 14.5px; letter-spacing: .04em; }

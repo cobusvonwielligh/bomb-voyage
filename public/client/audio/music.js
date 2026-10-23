@@ -283,6 +283,8 @@ function createTheme({ bus }) {
 export function createMusic() {
   let ctx = null, timer = null, tracks = null, musicGain = null;
   let step = 0, loops = 0, current = 0, nextTime = 0;
+  // Track names the rotation must not pick. The theme lives here for the whole of a round.
+  const excluded = new Set();
   let volume = readVolume();
   let playing = false, ducked = false;
 
