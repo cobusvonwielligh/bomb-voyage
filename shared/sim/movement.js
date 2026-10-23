@@ -110,7 +110,22 @@ function bombSolid(state, p, tx, ty) {
   if (!state.bombs) return false;
   for (const b of state.bombs) {
     if (b.tx !== tx || b.ty !== ty) continue;
-    return !((p.x >> 8) === tx && (p.y >> 8) === ty);
+    /* Still touching it? Then it is not solid to you yet.
+     *
+     * The test used to be whether your CENTRE had left the tile, and that is where the shove
+     * came from: the instant the centre crossed the line, eighty units of hitbox were suddenly
+     * inside a solid tile, and `unstick` had to push all of it back out. A third of a tile of
+     * movement you did not ask for, every single time you walked off a bomb you had just
+     * placed — which is the most common thing anybody does in this game.
+     *
+     * Testing the HITBOX instead means the bomb becomes solid at the exact moment you are
+     * clear of it, so there is nothing left to push out and the unstick never fires at all.
+     * The rule stays observable from the bomb record alone, so both machines still agree.
+     */
+    const half = halfBox(p);
+    const overlaps = ((p.x - half) >> 8) <= tx && ((p.x + half - 1) >> 8) >= tx
+                  && ((p.y - half) >> 8) <= ty && ((p.y + half - 1) >> 8) >= ty;
+    return !overlaps;
   }
   return false;
 }

@@ -4,8 +4,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createState, createPlayer, tileCentre, setTile } from '../shared/sim/state.js';
 import { step, blocked, unstick, speedOf } from '../shared/sim/movement.js';
+import { place } from '../shared/sim/bombs.js';
 import { tick } from '../shared/sim/round.js';
-import { BLOCK, BLOCK_HP, IN_RIGHT, IN_BOMB, FUSE_TICKS } from '../shared/constants.js';
+import { BLOCK, BLOCK_HP, IN_RIGHT, IN_LEFT, IN_BOMB, FUSE_TICKS } from '../shared/constants.js';
 
 // A hand-authored empty room. The generated maps put an indestructible pillar on every even/even
 // tile, so a clear 3x3 does not exist on any of them by construction — and these tests need room
@@ -151,3 +152,41 @@ test('lane centring is imperceptible, and corner assist is not', () => {
   assert.ok(ticks <= 40, `corner assist took ${ticks} ticks to line up — that is a stuck player`);
 });
 
+
+test('walking off your own bomb never pushes you', () => {
+  /* The commonest action in the game, and it used to shove you a third of a tile.
+   *
+   * A bomb became solid the instant your CENTRE left its tile, which left eighty units of
+   * hitbox suddenly inside a solid square for `unstick` to push back out. Testing the hitbox
+   * instead means it becomes solid exactly when you are clear of it, so there is nothing to
+   * push and the unstick never runs.
+   */
+  const { s, tx, ty } = world();
+  const p = seat(s, 0, tx, ty);
+  place(s, p, IN_BOMB);
+  assert.equal(s.bombs.length, 1, 'setup failed: no bomb');
+
+  const pace = speedOf(p);
+  let biggest = 0;
+  for (let n = 0; n < 60; n++) {
+    const before = p.x;
+    step(s, p, IN_RIGHT);
+    biggest = Math.max(biggest, p.x - before);
+    assert.ok(!blocked(s, p, p.x, p.y), `ended up inside something on tick ${n}`);
+  }
+  assert.ok(biggest <= pace, `moved ${biggest} units in a tick against a walking pace of ${pace}`);
+  assert.ok(p.x > tileCentre(tx), 'did not actually walk away');
+});
+
+test('a bomb is still solid once you are clear of it', () => {
+  // The other half: it has to become a wall, or you could walk back onto your own bomb and
+  // stand on it indefinitely.
+  const { s, tx, ty } = world();
+  const p = seat(s, 0, tx, ty);
+  place(s, p, IN_BOMB);
+  for (let n = 0; n < 60; n++) step(s, p, IN_RIGHT);
+  const away = p.x;
+  for (let n = 0; n < 60; n++) step(s, p, IN_LEFT);
+  assert.ok(p.x < away, 'did not walk back at all');
+  assert.ok((p.x >> 8) > tx, 'walked onto a bomb it should have been stopped by');
+});

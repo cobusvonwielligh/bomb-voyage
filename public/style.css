@@ -391,8 +391,8 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * overlaps; the menu is higher still, so it does not float over the landing page.
  */
 #avatar {
-  position: fixed; top: 2px; right: 6px;
-  width: 92px; height: 92px;
+  position: fixed; top: 10px; right: 20px;
+  width: 106px; height: 106px;
   object-fit: contain;
   /* Above the bar it overlaps, below the menu. pointer-events:none is what keeps it from eating
      the leave button and the volume sliders underneath it. */
@@ -997,9 +997,11 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   #menuSay::after { left: auto; right: 20px; }
 }
 
+/* Half the travel it had. A sixteen-pixel bob on a face in the corner of the screen is movement
+   in your peripheral vision during a firefight, which is exactly where you do not want any. */
 @keyframes bob {
-  0%, 100% { transform: translateY(0) rotate(-1deg); }
-  50%      { transform: translateY(-16px) rotate(1deg); }
+  0%, 100% { transform: translateY(0) rotate(-0.5deg); }
+  50%      { transform: translateY(-8px) rotate(0.5deg); }
 }
 @media (prefers-reduced-motion: reduce) { #mascot { animation: none; } }
 @media (max-width: 860px) { #mascot { display: none; } }

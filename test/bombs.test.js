@@ -10,7 +10,7 @@ import { tick } from '../shared/sim/round.js';
 import { drop, maybeDrop } from '../shared/sim/perks.js';
 import {
   BLOCK, BLOCK_HP, IN_BOMB, IN_RIGHT, FUSE_TICKS, STATUS, PERK, MAX_RADIUS, SCORE,
-  PERK_WEIGHTS,
+  PERK_WEIGHTS, FIRE_LETHAL_TICKS, FIRE_TICKS,
 } from '../shared/constants.js';
 
 function room(w = 15, h = 15) {
@@ -320,4 +320,31 @@ test('a blast arm stops at another bomb', async t => {
     const { cells } = spread(st.map, a);
     assert.ok(cells.some(c => c.tx === 9 && c.ty === 7), 'the optional argument is not optional');
   });
+});
+
+test('fire stops killing before it stops being drawn', () => {
+  // Dying to the last frame of an explosion you watched finish feels like the game cheating.
+  // The tail is embers: drawn, not lethal.
+  const st = createState({ id: 't', name: 't', w: 9, h: 9, seed: 1, density: 0, reinforced: 0, shrubs: 0 });
+  for (let y = 0; y < 9; y++) for (let x = 0; x < 9; x++) {
+    setTile(st.map, x, y, (x === 0 || y === 0 || x === 8 || y === 8) ? BLOCK.IRON : BLOCK.FLOOR);
+  }
+  const p = createPlayer(0, 'p');
+  p.alive = true;
+  p.x = tileCentre(4); p.y = tileCentre(4);
+  st.players[0] = p;
+
+  const grace = FIRE_TICKS - FIRE_LETHAL_TICKS;
+  assert.ok(grace >= 1, 'there is no grace window at all');
+
+  // A fire tile with only the embers left: still on screen, no longer lethal.
+  st.fires.push({ tx: 4, ty: 4, kind: 'core', rot: 0, until: st.tick + grace, owner: 1 });
+  tick(st, []);
+  assert.equal(p.alive, true, 'killed by the tail of a blast');
+
+  // And one with a tick of real fire left still kills, or this is just a nerf.
+  st.fires.length = 0;
+  st.fires.push({ tx: 4, ty: 4, kind: 'core', rot: 0, until: st.tick + grace + 1, owner: 1 });
+  tick(st, []);
+  assert.equal(p.alive, false, 'live fire stopped killing');
 });

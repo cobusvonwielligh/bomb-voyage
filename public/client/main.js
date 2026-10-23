@@ -11,7 +11,7 @@ import {
   STAMINA_SHOW_AT, staminaMaxFor,
 } from '/shared/constants.js';
 import { createNet } from './net.js';
-import { createInput, typingSomewhere } from './input.js';
+import { createInput, typingSomewhere, createTap } from './input.js';
 import { createWorld } from './world.js';
 import { createRenderer } from './render.js';
 import { createMusic } from './audio/music.js';
@@ -977,30 +977,55 @@ nameInput.onkeydown = e => { if (e.key === 'Enter') play(); };
 
 // ─── chat ─────────────────────────────────────────────────────────────────────
 
+/* Every one-shot gets its own cooldown.
+ *
+ * Its OWN, not a shared one: a single guard across all of them would mean opening the
+ * scoreboard swallowed the Escape that closes it. Each action only has to be protected from
+ * itself.
+ */
+const tapChat = createTap();
+const tapEscape = createTap();
+const tapScores = createTap();
+const tapRespawn = createTap();
+
+const toggleScores = tapScores(() => {
+  scoresOpen = !scoresOpen;
+  $('scores').style.display = scoresOpen ? 'block' : 'none';
+  if (scoresOpen) renderScores();
+});
+
+const openChat = tapChat(() => { $('chatInput').focus(); music.duck(true); });
+
+const onEscape = tapEscape(() => {
+  if (chatHasFocus()) { $('chatInput').blur(); music.duck(false); }
+  else if (scoresOpen) { scoresOpen = false; $('scores').style.display = 'none'; }
+  else if (running) leave();                 // there has to be a way out of the game
+});
+
+// The one place a respawn is actually asked for. Both the button and the spacebar come through
+// here, because they are the same action and a held Space is otherwise both at once — thirty
+// synthetic button clicks a second on top of thirty keypresses.
+const askRespawn = tapRespawn(() => net.send({ t: 'respawn' }));
+
 addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !chatHasFocus() && running) {
-    e.preventDefault();
-    $('chatInput').focus();
-    music.duck(true);
-    return;
-  }
-  if (e.key === 'Escape') {
-    e.preventDefault();
-    if (chatHasFocus()) { $('chatInput').blur(); music.duck(false); }
-    else if (scoresOpen) { scoresOpen = false; $('scores').style.display = 'none'; }
-    else if (running) leave();                 // there has to be a way out of the game
-    return;
-  }
-  if (e.code === 'Tab' && running && !typingSomewhere()) {
-    e.preventDefault();
-    scoresOpen = !scoresOpen;
-    $('scores').style.display = scoresOpen ? 'block' : 'none';
-    if (scoresOpen) renderScores();
+  // Auto-repeat is never a second press. Holding Tab used to toggle the scoreboard thirty times
+  // a second, and holding Escape left the game.
+  if (e.repeat) return;
+
+  if (e.key === 'Enter' && !chatHasFocus() && running) { e.preventDefault(); openChat(); return; }
+  if (e.key === 'Escape') { e.preventDefault(); onEscape(); return; }
+  if (e.code === 'Tab' && running && !typingSomewhere()) { e.preventDefault(); toggleScores(); return; }
+
+  // Space is respawn while you are dead, and nothing else: the browser would otherwise fire it
+  // at whatever button happens to hold focus.
+  if ((e.code === 'Space' || e.code === 'KeyK') && running && !typingSomewhere()) {
+    const me = world.me();
+    if (me && !me.alive) { e.preventDefault(); askRespawn(); }
   }
 });
 
-$('leave').onclick = leave;
-$('respawn').onclick = () => net.send({ t: 'respawn' });
+$('leave').onclick = createTap()(leave);
+$('respawn').onclick = askRespawn;
 
 // Ducking hangs off focus, not off the keys that usually cause it — clicking into the chat box
 // with the mouse is the same thing to the person doing it.

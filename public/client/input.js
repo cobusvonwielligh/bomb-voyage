@@ -37,6 +37,35 @@ export const typingSomewhere = () => {
   return el.tagName === 'INPUT' && !NON_TEXT_INPUT.test(el.type);
 };
 
+/**
+ * One-shot guard for anything that must happen on a PRESS rather than while a key is held.
+ *
+ * Two separate things are being defended against and they need different answers:
+ *
+ *   1. **Auto-repeat.** Hold a key and the browser fires `keydown` thirty times a second. That
+ *      is correct for walking and catastrophic for anything that toggles: a held Tab opens and
+ *      closes the scoreboard thirty times, a held Escape leaves the game, a held Space sends a
+ *      respawn request every frame. Dealt with by refusing `event.repeat`.
+ *   2. **Chatter and double-fire.** Two paths can reach the same action — Space while the
+ *      respawn button has focus is both a keypress and a synthetic click — and a key can bounce.
+ *      Dealt with by a short cooldown per action.
+ *
+ * Deliberately NOT applied to movement or to placing bombs. Debouncing those would be adding
+ * latency to fix a problem they do not have: movement is a held state, not an event, and
+ * hold-to-drop is how Bomberman has always worked.
+ */
+export const TAP_COOLDOWN_MS = 250;
+
+export function createTap(ms = TAP_COOLDOWN_MS, now = () => performance.now()) {
+  let last = -Infinity;
+  return fn => (...args) => {
+    const t = now();
+    if (t - last < ms) return undefined;
+    last = t;
+    return fn(...args);
+  };
+}
+
 export function createInput({ onReserved, isTyping = typingSomewhere }) {
   let mask = 0;
   const down = new Set();
@@ -48,6 +77,10 @@ export function createInput({ onReserved, isTyping = typingSomewhere }) {
 
   addEventListener('keydown', e => {
     if (isTyping?.()) return;
+    // Auto-repeat carries no information here: the key is already in `down`, so the mask is
+    // already right. Swallowing it early keeps the reserved-key hint from firing thirty times a
+    // second at somebody leaning on Shift.
+    if (e.repeat) { if (BINDINGS[e.code] || RESERVED[e.code]) e.preventDefault(); return; }
     if (RESERVED[e.code]) { e.preventDefault(); onReserved?.(RESERVED[e.code]); return; }
     if (!BINDINGS[e.code]) return;
     e.preventDefault();
@@ -66,5 +99,10 @@ export function createInput({ onReserved, isTyping = typingSomewhere }) {
   // Losing focus mid-stride would otherwise leave you walking into a wall forever.
   addEventListener('blur', () => { down.clear(); recompute(); });
 
-  return { get mask() { return mask; }, clear() { down.clear(); recompute(); } };
+  return {
+    get mask() { return mask; },
+    /** Is this physical key down right now? Edge detection lives with the caller. */
+    isDown(code) { return down.has(code); },
+    clear() { down.clear(); recompute(); },
+  };
 }

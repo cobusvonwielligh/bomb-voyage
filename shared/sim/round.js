@@ -7,6 +7,7 @@
 import {
   IN_BOMB, SCORE, STATUS, STATUS_TICKS, INVULN_TICKS_SHIELD, HITBOX_UNITS,
   HITBOX_REDUCED_UNITS, START_BOMBS, START_RADIUS, RESPAWN_DELAY_TICKS,
+  FIRE_TICKS, FIRE_LETHAL_TICKS,
 } from '../constants.js';
 import { expireStatuses, applyStatus, has, toTile } from './state.js';
 import { stepAll } from './movement.js';
@@ -62,7 +63,10 @@ export function tick(state, inputs, { onRespawn } = {}) {
  */
 function killInFire(state) {
   if (!state.fires.length) return;
-  const fresh = state.fires.filter(f => f.until > state.tick);
+  // Only fire that is still in its lethal window, not merely still on screen. A blast is drawn
+  // for FIRE_TICKS and kills for the first two thirds of that; the tail is embers.
+  const deadline = state.tick + (FIRE_TICKS - FIRE_LETHAL_TICKS);
+  const fresh = state.fires.filter(f => f.until > deadline);
   if (!fresh.length) return;
 
   for (const p of state.players) {

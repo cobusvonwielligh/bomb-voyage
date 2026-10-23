@@ -73,7 +73,19 @@ export const DIR_R = 0, DIR_U = 1, DIR_L = 2, DIR_D = 3;
 
 export const FUSE_TICKS = 72;      // 2.4 s. TUNE
 export const FUSE_TICKS_FAST = 36; // Fast Detonation
-export const FIRE_TICKS = 15;      // 0.5 s
+export const FIRE_TICKS = 15;      // 0.5 s — how long a blast is DRAWN
+
+/* How long a blast actually kills for, as a fraction of how long it is drawn.
+ *
+ * Fire that is visibly dying should not still be lethal. The tail of the animation is a puff of
+ * smoke and a few embers, and dying to it feels like the game cheating — you watched the
+ * explosion finish and then died anyway. Lethal for the first two thirds, decorative for the
+ * last third, which is about five ticks of grace at the end of every blast.
+ *
+ * The other direction is worse and is why this is a fraction rather than a flat subtraction: if
+ * the kill window ever outlived the drawing, people would die to fire that was not on screen. */
+export const FIRE_LETHAL_NUM = 2, FIRE_LETHAL_DEN = 3;
+export const FIRE_LETHAL_TICKS = Math.round((FIRE_TICKS * FIRE_LETHAL_NUM) / FIRE_LETHAL_DEN);
 export const MAX_BOMBS = 16;        // hard ceiling on bombs alive anywhere, a safety valve
 
 // What one player can have out at once. Separate from MAX_BOMBS and much lower: sixteen bombs in
