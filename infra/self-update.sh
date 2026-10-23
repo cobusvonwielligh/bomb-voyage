@@ -7,11 +7,19 @@
 set -euo pipefail
 
 APP=/opt/bomb-voyage
+DATA=/var/lib/bomb-voyage
 UNIT=/etc/systemd/system/bomb-voyage.service
 
+# This script is spawned by the server, so it inherits the unit's sandbox — and the unit sets
+# ProtectHome=true. /home is therefore invisible: ssh cannot read ~/.ssh and npm cannot write
+# ~/.npm. Everything this needs lives under $DATA instead, which is in ReadWritePaths.
+export HOME="$DATA"
+export GIT_SSH_COMMAND="ssh -i $DATA/ssh/deploy_key -o IdentitiesOnly=yes \
+  -o UserKnownHostsFile=$DATA/ssh/known_hosts -o StrictHostKeyChecking=yes"
+
+mkdir -p "$DATA"
 cd "$APP"
-mkdir -p /var/lib/bomb-voyage
-exec >>/var/lib/bomb-voyage/self-update.log 2>&1
+exec >>"$DATA/self-update.log" 2>&1
 echo "=== $(date -Is) self-update ==="
 
 git fetch --quiet origin main
@@ -25,7 +33,7 @@ if [ "$BEFORE" != "$AFTER" ] || [ ! -d node_modules ]; then
 fi
 
 # The unit file can change with the code. These three commands are exactly what sudoers allows.
-sudo /usr/bin/cp "$APP/infra/bomb-voyage.service" "$UNIT"
-sudo /usr/bin/systemctl daemon-reload
-sudo /usr/bin/systemctl restart bomb-voyage
+sudo -n /usr/bin/cp "$APP/infra/bomb-voyage.service" "$UNIT"
+sudo -n /usr/bin/systemctl daemon-reload
+sudo -n /usr/bin/systemctl restart bomb-voyage
 echo "restarted"

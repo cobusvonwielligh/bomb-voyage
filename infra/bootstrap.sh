@@ -45,17 +45,32 @@ sudo mkdir -p "$APP_DIR" "$DATA_DIR" "$CERT_DIR"
 sudo chown -R ec2-user:ec2-user "$APP_DIR" "$DATA_DIR"
 
 echo "==> deploy key"
-if [ ! -f ~/.ssh/bomb_voyage_deploy ]; then
-  ssh-keygen -t ed25519 -N "" -C "bomb-voyage deploy key (read-only)" -f ~/.ssh/bomb_voyage_deploy -q
+# The key lives under $DATA_DIR, not ~/.ssh, because self-update.sh runs inside the unit's
+# sandbox where ProtectHome=true makes /home invisible. See infra/self-update.sh.
+SSH_DIR="$DATA_DIR/ssh"
+mkdir -p "$SSH_DIR"
+if [ ! -f "$SSH_DIR/deploy_key" ]; then
+  if [ -f ~/.ssh/bomb_voyage_deploy ]; then
+    # Reuse a key already registered on GitHub rather than making the user add a second one.
+    cp ~/.ssh/bomb_voyage_deploy "$SSH_DIR/deploy_key"
+  else
+    ssh-keygen -t ed25519 -N "" -C "bomb-voyage deploy key (read-only)" -f "$SSH_DIR/deploy_key" -q
+  fi
 fi
-install -m 600 /dev/null ~/.ssh/config.tmp
-cat > ~/.ssh/config.tmp <<SSHCFG
+chmod 700 "$SSH_DIR"; chmod 600 "$SSH_DIR/deploy_key"
+ssh-keygen -y -f "$SSH_DIR/deploy_key" > "$SSH_DIR/deploy_key.pub"
+ssh-keyscan -t ed25519,rsa github.com > "$SSH_DIR/known_hosts" 2>/dev/null
+
+# A matching config for interactive git as ec2-user, which is outside the sandbox.
+mkdir -p ~/.ssh && chmod 700 ~/.ssh
+cat > ~/.ssh/config <<SSHCFG
 Host github.com
-  IdentityFile ~/.ssh/bomb_voyage_deploy
+  IdentityFile $SSH_DIR/deploy_key
   IdentitiesOnly yes
+  UserKnownHostsFile $SSH_DIR/known_hosts
   StrictHostKeyChecking accept-new
 SSHCFG
-mv ~/.ssh/config.tmp ~/.ssh/config
+chmod 600 ~/.ssh/config
 
 echo "==> source"
 # A failed clone must not abort the run: TLS, config.ini and the unit still need installing, and
@@ -73,7 +88,7 @@ if [ ! -d "$APP_DIR/.git" ]; then
     echo "    !! clone failed. Add this public key as a read-only deploy key at"
     echo "       https://github.com/cobusvonwielligh/bomb-voyage/settings/keys/new"
     echo
-    sed 's/^/       /' ~/.ssh/bomb_voyage_deploy.pub
+    sed 's/^/       /' "$SSH_DIR/deploy_key.pub"
     echo
     echo "    Continuing without git. Push code with 'npm run deploy' until it is added;"
     echo "    re-run this script afterwards to enable CI deploys."
