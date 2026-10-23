@@ -18,6 +18,7 @@ import { rng } from './util/rng.js';
 //   rect   the whole bounding box is playable, walled with iron
 //   blob   one organic island with bays and headlands
 //   atoll  a blob with a lagoon bitten out of the middle, so the map is a ring
+//   poly   an explicit polygon in normalised -1..1 coordinates, for a deliberate silhouette
 export const MAPS = [
   { id: 'arena', name: 'Arena', w: 31, h: 25, seed: 1337,
     shape: 'rect', density: 0.62, reinforced: 0.05, shrubs: 0.03 },
@@ -25,7 +26,25 @@ export const MAPS = [
     shape: 'blob', density: 0.74, reinforced: 0.14, shrubs: 0.02 },
   { id: 'islands', name: 'Islands', w: 39, h: 37, seed: 777,
     shape: 'atoll', density: 0.5, reinforced: 0.08, shrubs: 0.12 },
+  // A six-armed starfish. Long arms meeting at a hub is the most interesting shape a bomber map
+  // can have: every arm is a corridor with one way in, the hub is the only crossroads, and the
+  // sea between the arms means a blast that escapes an arm is simply gone. Nothing like it comes
+  // out of a noise function, which is why this one is written down by hand.
+  { id: 'starfish', name: 'Starfish', w: 45, h: 45, seed: 9001,
+    shape: 'poly', points: star(6, 1.0, 0.34, -Math.PI / 2),
+    density: 0.58, reinforced: 0.1, shrubs: 0.06 },
 ];
+
+/** Alternating outer and inner radii, which is all a star is. */
+function star(arms, outer, inner, phase) {
+  const pts = [];
+  for (let i = 0; i < arms * 2; i++) {
+    const a = phase + (i * Math.PI) / arms;
+    const r = i % 2 ? inner : outer;
+    pts.push([Math.cos(a) * r, Math.sin(a) * r]);
+  }
+  return pts;
+}
 
 export const mapById = id => MAPS.find(m => m.id === id) || MAPS[0];
 
@@ -75,10 +94,32 @@ function radiusAt(r, ang) {
  * the corners instead of tapering to a diamond, which matters because the corners are where the
  * spawns want to be.
  */
+/** Ray casting. Odd crossings means inside, and it does not care if the polygon is concave. */
+function inPolygon(pts, x, y) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [xi, yi] = pts[i], [xj, yj] = pts[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
 function landMask(def, next) {
   const { w, h, shape } = def;
   const land = new Uint8Array(w * h);
   if (shape === 'rect' || !shape) { land.fill(1); return land; }
+
+  if (shape === 'poly') {
+    const cx = (w - 1) / 2, cy = (h - 1) / 2;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        // Normalised with a one-tile margin, matching the other shapes, so the polygon never
+        // touches the bounding box and the shoreline always has somewhere to be drawn.
+        land[y * w + x] = inPolygon(def.points, (x - cx) / (cx - 1), (y - cy) / (cy - 1)) ? 1 : 0;
+      }
+    }
+    return land;
+  }
 
   const cx = (w - 1) / 2, cy = (h - 1) / 2;
   const outer = coastline(next, 0.74, 1.0);
@@ -213,10 +254,21 @@ export function buildMap(def) {
 
   // Anything the coastline cut off from the main body is a sandbar nobody can reach. Drown it,
   // rather than leaving an island with a perk on it that no player can ever collect.
-  let seed = -1;
-  for (let i = 0; i < cells.length && seed < 0; i++) if (cellType(cells[i]) === BLOCK.FLOOR) seed = i;
-  if (seed >= 0) {
-    const main = reachable(cells, w, h, seed);
+  //
+  // The component has to be the LARGEST one, not the first one found. Seeding from the first
+  // floor tile in scan order means a single stranded tile at the top of the map becomes "the
+  // island" and the entire real map is drowned — which is exactly what a star-shaped mask did,
+  // leaving one playable tile out of two thousand.
+  const visited = new Set();
+  let main = null;
+  for (let i = 0; i < cells.length; i++) {
+    const t = cellType(cells[i]);
+    if (t === BLOCK.IRON || t === BLOCK.WATER || visited.has(i)) continue;
+    const comp = reachable(cells, w, h, i);
+    for (const j of comp) visited.add(j);
+    if (!main || comp.size > main.size) main = comp;
+  }
+  if (main) {
     for (let i = 0; i < cells.length; i++) {
       const t = cellType(cells[i]);
       if (t === BLOCK.IRON || t === BLOCK.WATER) continue;

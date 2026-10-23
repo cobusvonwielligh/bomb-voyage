@@ -43,8 +43,15 @@ test('a wall growing on top of you does not entomb you', () => {
   assert.ok(blocked(s, p, p.x, p.y), 'setup failed: the player should be inside a wall');
 
   assert.equal(unstick(s, p), true, 'unstick should report that it intervened');
-  assert.ok(!blocked(s, p, p.x, p.y), 'still standing in a solid tile');
-  // And it is a neighbour, not a teleport across the map.
+
+  // It slides rather than teleporting, so freedom takes a few ticks — but a bounded few. One
+  // tile at a quarter tile a tick is four; ten is generous and still catches a stall.
+  let ticks = 1;
+  while (blocked(s, p, p.x, p.y) && ticks < 10) { unstick(s, p); ticks++; }
+  assert.ok(!blocked(s, p, p.x, p.y), `still inside a wall after ${ticks} ticks`);
+  assert.ok(ticks > 1, 'it teleported — the whole point is that it slides');
+
+  // And it is a neighbour, not a jump across the map.
   assert.ok(Math.abs((p.x >> 8) - tx) <= 1 && Math.abs((p.y >> 8) - ty) <= 1);
 });
 
@@ -63,8 +70,7 @@ test('both machines unstick the same way', () => {
   const pa = seat(a.s, 0, a.tx, a.ty), pb = seat(b.s, 0, b.tx, b.ty);
   setTile(a.s.map, a.tx, a.ty, BLOCK.SOFT, 1);
   setTile(b.s.map, b.tx, b.ty, BLOCK.SOFT, 1);
-  unstick(a.s, pa);
-  unstick(b.s, pb);
+  for (let i = 0; i < 6; i++) { unstick(a.s, pa); unstick(b.s, pb); }
   assert.deepEqual({ x: pa.x, y: pa.y }, { x: pb.x, y: pb.y });
 });
 
@@ -94,6 +100,6 @@ test('step() unsticks before it reads the position', () => {
   const { s, tx, ty } = world();
   const p = seat(s, 0, tx, ty);
   setTile(s.map, tx, ty, BLOCK.SOFT, 1);
-  step(s, p, IN_RIGHT);
+  for (let i = 0; i < 8; i++) step(s, p, IN_RIGHT);
   assert.ok(!blocked(s, p, p.x, p.y));
 });

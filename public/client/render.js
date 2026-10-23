@@ -6,7 +6,7 @@
 
 import {
   TILE_PX, CHUNK_TILES, UNITS_PER_TILE, TRACER_SAMPLES, FUSE_TICKS, FIRE_TICKS, STATUS,
-  BLOCK, BLOCK_HP,
+  BLOCK, BLOCK_HP, SEA_MARGIN_TILES,
 } from '/shared/constants.js';
 import { cellType, cellHp } from '/shared/maps.js';
 import {
@@ -26,7 +26,8 @@ export function createRenderer(canvas, world) {
   let shake = 0;
   let flash = 0, flashColour = '255,255,255';
   let sea = null, seaNear = null, seaFar = null;
-  let zoom = 1;
+  // Everything about the drawing surface, measured on resize and never from the frame loop.
+  const view = { dpr: 1, w: 0, h: 0, zoom: 1, smooth: false };
   const splashes = [];         // shoreline foam, capped — see spawnSplash
   let seaT = 0;
 
@@ -38,36 +39,57 @@ export function createRenderer(canvas, world) {
     seaFar = ctx.createPattern(sea.far, 'repeat');
   }
 
-  /**
-   * How much of a tile fits on screen.
-   *
-   * The whole map on screen beats a camera that follows you: on an island you want to see the
-   * coast, and a 16-player game is mostly about reading where everyone is. So scale to fit the
-   * box the layout gives us, and only fall back to a following camera when even the minimum zoom
-   * cannot get the map in.
-   *
-   * Scaling up snaps to halves and keeps nearest-neighbour, because this is pixel art and a 1.37x
-   * nearest-neighbour upscale gives you rows of pixels that are visibly different widths. Scaling
-   * down is left unsnapped with smoothing on, where the same artefact reads as aliasing instead.
-   */
-  function fitZoom(vw, vh) {
-    const fit = Math.min(vw / (world.map.w * TILE_PX), vh / (world.map.h * TILE_PX));
-    if (fit >= 1) return { z: Math.max(1, Math.floor(fit * 2) / 2), smooth: false };
-    return { z: Math.max(0.42, fit), smooth: true };
-  }
 
+  /**
+   * Measure, and work out the scale. Called when the box changes, never from the frame loop.
+   *
+   * Reading clientWidth forces the browser to flush layout. Doing that once per frame — which is
+   * what the first version did — makes every frame wait on a layout pass, and because the number
+   * it returns settles over several frames while the panels lay out, the zoom crept and the
+   * whole board visibly shimmered. Measuring on resize only is both faster and stable.
+   */
   function resize() {
     const dpr = Math.min(2, devicePixelRatio || 1);
     const { clientWidth: w, clientHeight: h } = canvas;
     if (!w || !h) return;                   // laid out but not measured yet
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
-    // The transform and the smoothing flag belong to frame(), which recomputes the zoom every
-    // frame. Setting them here too would just mean two places to keep in step.
+    view.dpr = dpr;
+    view.w = w;
+    view.h = h;
+    recomputeZoom();
   }
+
+  /**
+   * Fill the box with the island, keeping a strip of sea all the way round.
+   *
+   * The fit is computed against the map plus SEA_MARGIN_TILES on every side, so there is always
+   * visible ocean and the island reads as an island rather than as a diagram that ran out of
+   * paper. Beyond that the board is as large as it can possibly be.
+   */
+  function recomputeZoom() {
+    if (!world.map || !view.w) return;
+    const m = SEA_MARGIN_TILES * 2;
+    const fit = Math.min(view.w / ((world.map.w + m) * TILE_PX),
+                         view.h / ((world.map.h + m) * TILE_PX));
+    // Quantised. An unrounded scale changes by a hair on every layout settle and on every DPR
+    // report, and a board that resizes by one part in a thousand reads as jitter. Twentieths are
+    // fine enough that nobody sees the step and coarse enough that nothing wobbles.
+    const q = Math.max(0.3, Math.round(fit * 20) / 20);
+    // Pixel art upscaled by a non-integer factor gets rows of visibly different widths, so snap
+    // to halves going up and smooth on the way down, where the same artefact reads as aliasing.
+    view.zoom = q >= 1 ? Math.floor(q * 2) / 2 : q;
+    view.smooth = q < 1;
+    invalidateAll();
+  }
+
   addEventListener('resize', resize);
+  // The panels change the box without the window changing at all — a narrow viewport dropping
+  // the side panel, or the HUD appearing when a round starts.
+  if (typeof ResizeObserver === 'function') new ResizeObserver(resize).observe(canvas);
 
   const invalidateAll = () => { chunks = new Map(); shore = null; splashes.length = 0; };
+  const mapChanged = () => { recomputeZoom(); };
 
   /** Mark the chunk holding a tile dirty, plus neighbours when it sits on a border. */
   function invalidateTile(tx, ty) {
@@ -231,14 +253,14 @@ export function createRenderer(canvas, world) {
     ensureBaked();
 
     const me = world.me();
-    const dpr = Math.min(2, devicePixelRatio || 1);
-    const fit = fitZoom(canvas.clientWidth, canvas.clientHeight);
-    zoom = fit.z;
+    if (!view.w) resize();
+    if (!view.w) return;
+    const zoom = view.zoom;
     // Everything below works in world pixels; the transform turns them into device pixels.
-    ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, 0, 0);
-    ctx.imageSmoothingEnabled = fit.smooth;
+    ctx.setTransform(view.dpr * zoom, 0, 0, view.dpr * zoom, 0, 0);
+    ctx.imageSmoothingEnabled = view.smooth;
 
-    const vw = canvas.clientWidth / zoom, vh = canvas.clientHeight / zoom;
+    const vw = view.w / zoom, vh = view.h / zoom;
     const worldW = world.map.w * TILE_PX, worldH = world.map.h * TILE_PX;
 
     // Follow, then clamp. When the whole map fits — which it now does on most screens — the
@@ -391,7 +413,7 @@ export function createRenderer(canvas, world) {
 
   resize();
   return {
-    frame, resize, invalidateAll, invalidateTile,
+    frame, resize, invalidateAll, invalidateTile, mapChanged,
     /** @param amount 0..1. Clamped and saturating: ten bombs at once must not throw the camera off. */
     addShake(amount) { shake = Math.min(1, shake + Math.max(0, amount)); },
     addFlash(amount, colour = '255,255,255') { flash = Math.min(1, flash + amount); flashColour = colour; },

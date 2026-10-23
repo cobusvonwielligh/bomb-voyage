@@ -12,7 +12,12 @@ export const TICK_HZ = 30;
 export const TICK_MS = 1000 / TICK_HZ;
 export const SNAP_EVERY_TICKS = 2; // → 15 Hz snapshots
 
-export const ROUND_TICKS = 16 * 60 * TICK_HZ; // 28800
+export const ROUND_TICKS = 10 * 60 * TICK_HZ; // 18000
+
+// Tiles of open sea kept visible on every side of the island. The board is scaled so the map
+// plus this margin fits exactly — without it an island can sit flush against the panel edge and
+// stop reading as an island.
+export const SEA_MARGIN_TILES = 2;
 export const ROUND_INTERMISSION_MS = 20_000;
 
 export const CHUNK_TILES = 8; // renderer chunk size

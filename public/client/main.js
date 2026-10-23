@@ -77,6 +77,7 @@ const net = createNet({
   onWelcome: m => {
     world.applyWelcome(m);
     renderer?.invalidateAll();
+    renderer?.mapChanged();          // a different map size means a different scale
     if (!m.mapOnly) {
       $('menu').style.display = 'none';
       $('hud').classList.add('on');

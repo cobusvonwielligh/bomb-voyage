@@ -16,6 +16,11 @@ const HALF_TILE = UNITS_PER_TILE >> 1;
 // drift is assistance, not travel, so it is allowed to outrun the legs.
 const ALIGN_RATE = 2;
 
+// How fast being shoved out of a solid tile goes. A quarter tile a tick clears one in four ticks
+// — fast enough that nobody dies waiting, slow enough that it reads as motion rather than as the
+// game glitching.
+const UNSTICK_UNITS_PER_TICK = UNITS_PER_TILE >> 2;
+
 export function speedOf(p) {
   let s = SPEED_UNITS_PER_TICK[Math.min(p.speed, SPEED_UNITS_PER_TICK.length - 1)];
   if (has(p, STATUS.SLOWDOWN)) s = ((s * SLOWDOWN_NUM) / SLOWDOWN_DEN) | 0;
@@ -178,7 +183,21 @@ export function unstick(state, p) {
   for (const [dx, dy] of ring) {
     const nx = tileCentre(tx + dx), ny = tileCentre(ty + dy);
     if (blocked(state, p, nx, ny)) continue;
-    p.x = nx; p.y = ny;
+
+    // Slide out, do not teleport out.
+    //
+    // Snapping straight to the target was correct and felt awful: a wall growing on you threw you
+    // a whole tile in one frame, and the rendered position had to be hard-cut to follow. Walking
+    // out over a few ticks reads as being shoved, which is what it is. It stays deterministic —
+    // same state, same arithmetic, same answer on both machines — so prediction still agrees.
+    //
+    // One axis at a time, matching the rest of movement, and the larger gap first so the escape
+    // always makes progress rather than dithering between two half-steps.
+    const gx = nx - p.x, gy = ny - p.y;
+    const horizontal = Math.abs(gx) >= Math.abs(gy);
+    const gap = horizontal ? gx : gy;
+    const move = Math.sign(gap) * Math.min(Math.abs(gap), UNSTICK_UNITS_PER_TICK);
+    if (horizontal) p.x += move; else p.y += move;
     return true;
   }
   return false;     // boxed in on all nine tiles; the blast that caused it will resolve it
