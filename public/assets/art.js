@@ -113,19 +113,109 @@ export function drawTile(c, type, tx = 0, ty = 0, dmg = 0) {
   if (dmg > 0) drawCracks(c, dmg, tx, ty);
 }
 
-/** Damage must read at a glance — a monolith takes nine hits. */
+/**
+ * Damage must read at a glance — a monolith takes nine hits, so there need to be enough
+ * distinguishable steps between pristine and about-to-go.
+ *
+ * Three layers, each appearing at a different damage level, so the eye has something new to
+ * notice at every stage rather than just "more scribble":
+ *   1. fractures  — jagged multi-segment lines radiating from an off-centre origin, with branches
+ *   2. chips      — bitten-out corners, from 45% damage
+ *   3. shatter    — a bright rim on the cracks plus a dark core, from 75%, so it reads as deep
+ *
+ * Deterministic in (tx, ty): the same tile always cracks the same way, which matters because
+ * the chunk renderer may redraw a tile at any time and a reshuffling crack pattern looks like
+ * a glitch.
+ */
 function drawCracks(c, dmg, tx, ty) {
-  const S = TILE_PX, n = Math.ceil(dmg * 5);
-  c.strokeStyle = `rgba(0,0,0,${0.25 + dmg * 0.45})`;
-  c.lineWidth = 2; c.lineCap = 'round';
-  c.beginPath();
-  for (let i = 0; i < n; i++) {
-    const a = hash(tx + i * 13, ty) * Math.PI * 2;
-    const x = S / 2 + Math.cos(a) * 4, y = S / 2 + Math.sin(a) * 4;
+  const S = TILE_PX;
+  const rnd = (a, b) => hash(tx * 31 + a * 17 + 7, ty * 19 + b * 23 + 3);
+
+  // Origin sits off-centre; dead-centre starbursts look synthetic.
+  const ox = S / 2 + (rnd(0, 0) - 0.5) * 8;
+  const oy = S / 2 + (rnd(0, 1) - 0.5) * 8;
+
+  const fractures = Math.max(2, Math.round(2 + dmg * 5)); // 2 → 7
+  const reach = 5 + dmg * 13;
+
+  /** One jagged run of 3 segments that wanders as it travels. */
+  const fracture = (angle, len, seed, depth) => {
+    let x = ox, y = oy, a = angle;
+    const segs = 3;
     c.moveTo(x, y);
-    c.lineTo(x + Math.cos(a) * (6 + dmg * 8), y + Math.sin(a) * (6 + dmg * 8));
+    for (let s = 0; s < segs; s++) {
+      a += (rnd(seed, s + 10) - 0.5) * 0.9;     // wander
+      const step = len / segs * (0.6 + rnd(seed, s + 20) * 0.8);
+      x += Math.cos(a) * step;
+      y += Math.sin(a) * step;
+      c.lineTo(x, y);
+      // Branch off the middle segment once, on the more damaged tiles.
+      if (depth === 0 && s === 1 && dmg > 0.3 && rnd(seed, 40) > 0.45) {
+        const ba = a + (rnd(seed, 41) > 0.5 ? 1 : -1) * (0.5 + rnd(seed, 42) * 0.6);
+        const bl = len * (0.35 + rnd(seed, 43) * 0.3);
+        let bx = x, by = y;
+        for (let k = 0; k < 2; k++) {
+          bx += Math.cos(ba + (rnd(seed, 50 + k) - 0.5) * 0.7) * (bl / 2);
+          by += Math.sin(ba + (rnd(seed, 55 + k) - 0.5) * 0.7) * (bl / 2);
+          c.lineTo(bx, by);
+        }
+        c.moveTo(x, y); // return to the trunk
+      }
+    }
+  };
+
+  const drawAll = () => {
+    for (let i = 0; i < fractures; i++) {
+      const angle = (i / fractures) * Math.PI * 2 + rnd(i, 2) * 0.8;
+      fracture(angle, reach * (0.7 + rnd(i, 3) * 0.6), i, 0);
+    }
+  };
+
+  c.lineCap = 'round';
+  c.lineJoin = 'round';
+
+  // Highlight pass first, offset down-right, so the crack reads as a groove with a lit lower lip.
+  if (dmg > 0.75) {
+    c.save();
+    c.translate(0.9, 0.9);
+    c.strokeStyle = 'rgba(255,255,255,0.14)';
+    c.lineWidth = 2;
+    c.beginPath(); drawAll(); c.stroke();
+    c.restore();
   }
-  c.stroke();
+
+  c.strokeStyle = `rgba(0,0,0,${0.3 + dmg * 0.5})`;
+  c.lineWidth = dmg > 0.6 ? 2.2 : 1.6;
+  c.beginPath(); drawAll(); c.stroke();
+
+  // Chips: bitten-out wedges on the tile edge. These are what sell "nearly gone".
+  if (dmg > 0.45) {
+    const chips = Math.round((dmg - 0.45) * 7);
+    c.fillStyle = `rgba(0,0,0,${0.3 + dmg * 0.35})`;
+    for (let i = 0; i < chips; i++) {
+      const edge = Math.floor(rnd(i, 60) * 4);
+      const along = 4 + rnd(i, 61) * (S - 8);
+      const d = 3 + rnd(i, 62) * 5;
+      const [px0, py0] = edge === 0 ? [along, 0] : edge === 1 ? [S, along]
+                       : edge === 2 ? [along, S] : [0, along];
+      const inx = edge === 1 ? -1 : edge === 3 ? 1 : 0;
+      const iny = edge === 2 ? -1 : edge === 0 ? 1 : 0;
+      c.beginPath();
+      c.moveTo(px0 - (iny ? d : 0), py0 - (inx ? d : 0));
+      c.lineTo(px0 + inx * d * 1.6, py0 + iny * d * 1.6);
+      c.lineTo(px0 + (iny ? d : 0), py0 + (inx ? d : 0));
+      c.closePath();
+      c.fill();
+    }
+  }
+
+  // The last stage: a dark hollow at the origin. Reads as "one more hit".
+  if (dmg > 0.85) {
+    c.beginPath();
+    c.arc(ox, oy, 3 + (dmg - 0.85) * 14, 0, 7);
+    c.fillStyle = 'rgba(0,0,0,0.45)';
+    c.fill();
+  }
 }
 
 // ─── player ───────────────────────────────────────────────────────────────────
