@@ -9,7 +9,7 @@ import {
   TILE_PX, UNITS_PER_TILE, FUSE_TICKS, FIRE_TICKS, playerColor, SCORE, ROUND_INTERMISSION_MS,
   progressFor,
   STREAK_WINDOW_TICKS, STREAK_NAMES, STREAK_ACE, GAMESPEED_MIN, GAMESPEED_MAX,
-  SPAWN_CANDIDATES, IDLE_KICK_TICKS,
+  IDLE_KICK_TICKS,
 } from '../shared/constants.js';
 import { MAPS, encodeCells } from '../shared/maps.js';
 import { createState, createPlayer, expireStatuses, applyStatus, tileCentre } from '../shared/sim/state.js';
@@ -204,27 +204,45 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     const legal = spawns.filter(([tx, ty]) => !blocked(state, p, tileCentre(tx), tileCentre(ty)));
     const pool = legal.length ? legal : spawns;
 
-    // Score every legal spawn by how far the nearest living player is, then pick at RANDOM from
-    // the best handful rather than always taking the single best.
-    //
-    // Always taking the best is deterministic, and deterministic means every death sends you to
-    // the same two corners for sixteen minutes — which is both boring and exploitable, because
-    // anyone can learn where you are about to appear. Choosing among the top few keeps the
-    // "nobody lands in a firefight" guarantee and makes it a genuine shuffle. Math.random is fine
-    // here: respawn position is decided by the server and shipped in a snapshot, so it is not
-    // part of the deterministic simulation the client replays.
-    const scored = pool.map(([tx, ty]) => {
+    /* Every legal spawn is a candidate, weighted by how far the nearest living player is.
+     *
+     * Not "the best five, shuffled". That kept sending everyone back to the same handful of
+     * corners, and a corner you can predict is a corner somebody can camp. Weighting the whole
+     * list instead means any spot on the map can come up — a busy one is simply unlikely rather
+     * than impossible — so there is no set of tiles to watch.
+     *
+     * Weight is the SQUARE of the distance to the nearest player, which is what makes it a
+     * preference rather than a rule: twice as far away is four times as likely, so the far side
+     * of the island dominates without the near side ever being ruled out. A floor keeps a map
+     * where everybody is bunched together from dividing by nothing.
+     *
+     * Math.random is fine here: respawn position is decided by the server and shipped in a
+     * snapshot, so it is not part of the deterministic simulation the client replays.
+     */
+    const FLOOR = UNITS_PER_TILE * 2;            // two tiles: nowhere is weight zero
+    let total = 0;
+    const weights = pool.map(([tx, ty]) => {
       let nearest = Infinity;
       for (const q of state.players) {
         if (!q || !q.alive || q === p) continue;
         const d = Math.abs(q.x - tileCentre(tx)) + Math.abs(q.y - tileCentre(ty));
         if (d < nearest) nearest = d;
       }
-      return { tx, ty, nearest };
-    }).sort((a, b) => b.nearest - a.nearest);
+      // Nobody else alive: every spawn is equally good, and the loop below still works.
+      const reach = (Number.isFinite(nearest) ? nearest : UNITS_PER_TILE * 20) + FLOOR;
+      const w = (reach / UNITS_PER_TILE) ** 2;
+      total += w;
+      return w;
+    });
 
-    const top = scored.slice(0, Math.max(1, Math.min(SPAWN_CANDIDATES, scored.length)));
-    const pick = top[(Math.random() * top.length) | 0];
+    let roll = Math.random() * total;
+    let idx = pool.length - 1;
+    for (let i = 0; i < pool.length; i++) {
+      roll -= weights[i];
+      if (roll <= 0) { idx = i; break; }
+    }
+    const pick = { tx: pool[idx][0], ty: pool[idx][1] };
+
     p.x = tileCentre(pick.tx);
     p.y = tileCentre(pick.ty);
     p.alive = true;
@@ -706,6 +724,8 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     start, stop, join, disconnect, input, requestRespawn, welcomeFor, roundInfo, stats,
     setBots, botCount, restartRound, toggleGod, logout, hostSeat,
     kickSeat, seatOfName, setMap, setGameSpeed, setRoundTime,
+    // Exposed for tests: respawn placement is a rule worth asserting on directly.
+    respawn,
     roundMinutes: () => Math.round((roundTicks / TICK_HZ / 60) * 10) / 10,
     isBot: seat => !!seats[seat]?.isBot,
     maps: () => MAPS.map(m => m.id),

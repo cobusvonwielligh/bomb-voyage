@@ -56,7 +56,11 @@ class SessionSocket extends EventEmitter {
       this.stats.tooBig++;
     }
     this.stats.streamed++;
-    this.writer.write(encoder.encode(encodeFrame(msg))).catch(() => this._gone());
+    if (this.stats.streamed === 1) this.emit('firstsend', msg.t);
+    this.writer.write(encoder.encode(encodeFrame(msg))).catch(err => {
+      this.emit('writefail', err?.message);
+      this._gone();
+    });
   }
 
   /** QUIC has its own keepalive and reports a dead path itself, so this only has to not throw. */
@@ -140,7 +144,11 @@ export async function startWebTransport({ port, cert, privKey, path = '/wt', onS
     try { socket.datagramWriter = session.datagrams.writable.getWriter(); }
     catch { /* no datagram support: everything falls back to the stream, which still works */ }
 
-    const push = createFramer(msg => socket.emit('message', JSON.stringify(msg)));
+    let heard = 0;
+    const push = createFramer(msg => {
+      if (heard++ === 0) log.log?.(`webtransport: first message in (${msg.t})`);
+      socket.emit('message', JSON.stringify(msg));
+    });
 
     /* Hand the socket over BEFORE anything can be read off the wire.
      *
@@ -173,6 +181,8 @@ export async function startWebTransport({ port, cert, privKey, path = '/wt', onS
       }
     })().catch(() => {});
 
+    socket.on('firstsend', t => log.log?.(`webtransport: first message out (${t})`));
+    socket.on('writefail', m => log.warn?.(`webtransport: stream write failed (${m})`));
     session.closed.then(() => socket._gone()).catch(() => socket._gone());
     socket.once('close', () => { open--; });
   }

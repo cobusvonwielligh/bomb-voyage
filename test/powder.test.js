@@ -3,6 +3,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createState, createPlayer, tileCentre, setTile, tileAt } from '../shared/sim/state.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { createRoom } from '../server/room.js';
 import { detonate } from '../shared/sim/bombs.js';
 import { stamina, speedOf } from '../shared/sim/movement.js';
 import { regenerate } from '../shared/sim/blocks.js';
@@ -234,5 +238,52 @@ test('there are five maps and the rotation visits all of them', () => {
   assert.equal(new Set(MAPS.map(m => m.id)).size, MAPS.length, 'duplicate map id');
   for (const m of MAPS) {
     assert.ok(m.w >= 30 && m.h >= 20, `${m.id} is ${m.w}x${m.h}, too small for sixteen players`);
+  }
+});
+
+// ─── respawn ──────────────────────────────────────────────────────────────────
+
+test('respawn can land anywhere, but lands away from people far more often', () => {
+  // Two properties at once, and they pull against each other: no tile may be impossible (a
+  // predictable spawn is a campable spawn), and the far side of the island must dominate.
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bv-spawn-'));
+  const room = createRoom({ onBroadcast: () => {}, dataDir });
+  try {
+    const map = room.state.map;
+    const spawns = map.spawns;
+
+    // One player parked on the first spawn. Everyone else respawns around them.
+    const camper = room.state.players[0] ?? (room.state.players[0] = createPlayer(0, 'camper'));
+    camper.alive = true;
+    camper.x = tileCentre(spawns[0][0]);
+    camper.y = tileCentre(spawns[0][1]);
+
+    const victim = room.state.players[1] ?? (room.state.players[1] = createPlayer(1, 'victim'));
+    const hits = new Map();
+    let nearCamper = 0;
+    const RUNS = 600;
+    for (let n = 0; n < RUNS; n++) {
+      victim.alive = false;
+      room.respawn(victim);
+      const key = `${victim.x >> 8},${victim.y >> 8}`;
+      hits.set(key, (hits.get(key) ?? 0) + 1);
+      const d = Math.abs(victim.x - camper.x) + Math.abs(victim.y - camper.y);
+      if (d < 6 * 256) nearCamper++;
+    }
+
+    // Spread: most of the spawn list should have come up at least once in 600 rolls.
+    assert.ok(hits.size >= Math.min(spawns.length, 8) * 0.7,
+      `only ${hits.size} distinct spawns in ${RUNS} respawns`);
+
+    // Preference: landing in the camper's lap should be rare.
+    assert.ok(nearCamper / RUNS < 0.12,
+      `${((nearCamper / RUNS) * 100).toFixed(1)}% of respawns landed next to a living player`);
+
+    // And no single spot may dominate, which is what "the best five, shuffled" used to do.
+    const worst = Math.max(...hits.values()) / RUNS;
+    assert.ok(worst < 0.5, `one spawn took ${(worst * 100).toFixed(0)}% of respawns`);
+  } finally {
+    room.stop();
+    fs.rmSync(dataDir, { recursive: true, force: true });
   }
 });
