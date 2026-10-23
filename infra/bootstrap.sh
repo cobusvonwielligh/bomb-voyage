@@ -22,7 +22,9 @@ HOST="${HOST:?set HOST to the public hostname, e.g. bombvoyage.co.za}"
 ALT_HOSTS="${ALT_HOSTS:-}"
 SKIP_TLS="${SKIP_TLS:-0}"
 EMAIL="${EMAIL:-}"
-REPO="${REPO:-https://github.com/cobusvonwielligh/bomb-voyage.git}"
+# SSH form, because the repo is private. The box authenticates with a read-only deploy key that
+# this script generates; add the printed public key under GitHub > Settings > Deploy keys.
+REPO="${REPO:-git@github.com:cobusvonwielligh/bomb-voyage.git}"
 [ "$SKIP_TLS" = 1 ] || : "${EMAIL:?set EMAIL for certificate expiry notices}"
 
 APP_DIR=/opt/bomb-voyage
@@ -42,18 +44,45 @@ echo "==> directories"
 sudo mkdir -p "$APP_DIR" "$DATA_DIR" "$CERT_DIR"
 sudo chown -R ec2-user:ec2-user "$APP_DIR" "$DATA_DIR"
 
+echo "==> deploy key"
+if [ ! -f ~/.ssh/bomb_voyage_deploy ]; then
+  ssh-keygen -t ed25519 -N "" -C "bomb-voyage deploy key (read-only)" -f ~/.ssh/bomb_voyage_deploy -q
+fi
+install -m 600 /dev/null ~/.ssh/config.tmp
+cat > ~/.ssh/config.tmp <<SSHCFG
+Host github.com
+  IdentityFile ~/.ssh/bomb_voyage_deploy
+  IdentitiesOnly yes
+  StrictHostKeyChecking accept-new
+SSHCFG
+mv ~/.ssh/config.tmp ~/.ssh/config
+
 echo "==> source"
+# A failed clone must not abort the run: TLS, config.ini and the unit still need installing, and
+# the tree can arrive by rsync in the meantime. Only the self-update webhook needs git.
+GIT_OK=1
 if [ ! -d "$APP_DIR/.git" ]; then
-  # Clone into a temp dir and move the contents, because $APP_DIR may already hold an rsync.
+  # Clone into a temp dir and move only .git across, because $APP_DIR may already hold an rsync.
   rm -rf /tmp/bv-clone
-  git clone --quiet --depth 50 "$REPO" /tmp/bv-clone
-  mv /tmp/bv-clone/.git "$APP_DIR/.git"
-  rm -rf /tmp/bv-clone
-  cd "$APP_DIR" && git reset --hard --quiet origin/main
+  if git clone --quiet --depth 50 "$REPO" /tmp/bv-clone; then
+    mv /tmp/bv-clone/.git "$APP_DIR/.git"
+    rm -rf /tmp/bv-clone
+    cd "$APP_DIR" && git reset --hard --quiet origin/main
+  else
+    GIT_OK=0
+    echo "    !! clone failed. Add this public key as a read-only deploy key at"
+    echo "       https://github.com/cobusvonwielligh/bomb-voyage/settings/keys/new"
+    echo
+    sed 's/^/       /' ~/.ssh/bomb_voyage_deploy.pub
+    echo
+    echo "    Continuing without git. Push code with 'npm run deploy' until it is added;"
+    echo "    re-run this script afterwards to enable CI deploys."
+  fi
 else
   cd "$APP_DIR" && git fetch --quiet origin main && git reset --hard --quiet origin/main
 fi
-cd "$APP_DIR" && npm ci --omit=dev --silent
+cd "$APP_DIR"
+[ -f package.json ] && npm ci --omit=dev --silent || true
 
 echo "==> sudoers for self-update (three exact commands, nothing broader)"
 sudo tee /etc/sudoers.d/bomb-voyage >/dev/null <<SUDO
@@ -67,7 +96,12 @@ sudo visudo -c -f /etc/sudoers.d/bomb-voyage >/dev/null
 
 # config.ini is never in git and never rsynced, so a deploy cannot clobber it. Preserve an
 # existing deploy token across re-runs — regenerating it would silently break CI.
-TOKEN=$(sed -n 's/^ *token *= *//p' "$APP_DIR/config.ini" 2>/dev/null | head -1)
+# Guard the file test rather than relying on 2>/dev/null: with `set -o pipefail` a missing file
+# makes the whole pipeline fail and takes the script with it.
+TOKEN=""
+if [ -f "$APP_DIR/config.ini" ]; then
+  TOKEN=$(sed -n 's/^ *token *= *//p' "$APP_DIR/config.ini" | head -1 || true)
+fi
 [ -n "$TOKEN" ] || TOKEN=$(openssl rand -hex 32)
 
 write_config() {
