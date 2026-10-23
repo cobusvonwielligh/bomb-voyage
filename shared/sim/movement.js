@@ -49,7 +49,14 @@ const ASSIST_MIN_UNITS = 12;
 const ASSIST_RATE = 2;           // and it may outrun the legs, because it is not travel
 
 // Being shoved out of a solid tile eases rather than running at a constant rate: a fraction of
-// whatever is left each tick, capped well below walking pace and floored so it still terminates.
+// whatever is left each tick, capped far below walking pace and floored so it still terminates.
+//
+// A fifteenth of walking pace, with a floor of three units a tick so a player with no boots is
+// not left crawling out of a wall for seven seconds. Three units is a ninth of base pace: slow
+// enough to read as drifting, fast enough that being entombed costs about a second. The far
+// commoner case — a partial overlap from a wall regrowing beside you — is over in a few ticks.
+//
+// Bombs cannot reach this code at all; see the note in `unstick`.
 //
 // Deliberately much slower than the legs. Walking pace felt like being shoved, because it was
 // the same speed as a deliberate move and the eye read it as the player suddenly sprinting
@@ -57,8 +64,9 @@ const ASSIST_RATE = 2;           // and it may outrun the legs, because it is no
 // what it is — and the commonest case by far is stepping off your own bomb, where any visible
 // snap feels like the game taking the controls off you.
 const UNSTICK_MIN_UNITS = 1;
-const UNSTICK_EASE_SHIFT = 5;      // move 1/32 of the remaining gap each tick
-const UNSTICK_PACE_NUM = 1, UNSTICK_PACE_DEN = 12;
+const UNSTICK_MIN_PACE = 4;
+const UNSTICK_EASE_SHIFT = 4;      // move 1/16 of the remaining gap each tick
+const UNSTICK_PACE_NUM = 1, UNSTICK_PACE_DEN = 15;
 
 export function speedOf(p) {
   let s = SPEED_UNITS_PER_TICK[Math.min(p.speed, SPEED_UNITS_PER_TICK.length - 1)];
@@ -302,7 +310,7 @@ export function unstick(state, p) {
     const horizontal = Math.abs(gx) >= Math.abs(gy);
     const gap = horizontal ? gx : gy;
     const left = Math.abs(gap);
-    const pace = Math.max(1, ((speedOf(p) * UNSTICK_PACE_NUM) / UNSTICK_PACE_DEN) | 0);
+    const pace = Math.max(UNSTICK_MIN_PACE, ((speedOf(p) * UNSTICK_PACE_NUM) / UNSTICK_PACE_DEN) | 0);
     const rate = Math.min(Math.max(left >> UNSTICK_EASE_SHIFT, UNSTICK_MIN_UNITS), pace);
     const move = Math.sign(gap) * Math.min(left, rate);
     if (horizontal) p.x += move; else p.y += move;
