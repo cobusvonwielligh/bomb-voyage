@@ -14,6 +14,7 @@ import { createWorld } from './world.js';
 import { createRenderer } from './render.js';
 import { createMusic } from './audio/music.js';
 import { createSfx } from './audio/sfx.js';
+import { createQuips } from './quips.js';
 
 const $ = id => document.getElementById(id);
 
@@ -35,6 +36,13 @@ const sfx = createSfx({
     const me = world.me();
     return me ? { tx: me.rx / UNITS_PER_TILE, ty: me.ry / UNITS_PER_TILE } : null;
   },
+});
+
+// The mascot in the corner, with something to say. He takes the name from the world rather than
+// from the join form, so a name the server changed (a collision, a trim) is the one he uses.
+const quips = createQuips({
+  el: $('say'),
+  nameOf: () => world.me()?.name ?? '',
 });
 
 const syncAudio = () => {
@@ -135,7 +143,7 @@ const net = createNet({
           world.markSpawn(e.i);
           // Panned and attenuated by where it happened, so the sound alone tells you which side
           // of you somebody just appeared on. Your own is centred, because you are not elsewhere.
-          if (e.i === world.you) sfx.play('ownSpawn');
+          if (e.i === world.you) { sfx.play('ownSpawn'); quips.spawned(); }
           else sfx.playAtUnits('spawn', e.x, e.y);
           break;
 
@@ -154,6 +162,7 @@ const net = createNet({
             renderer?.addFlash(0.8, '220,60,48');     // you, specifically, just died
             renderer?.addShake(0.7);
             showDeadBanner(e.by === e.i ? 'you blew yourself up' : `${nameOf(e.by)} got you`);
+            quips.died();
           } else if (e.by === world.you) {
             sfx.play('kill');
             renderer?.addFlash(0.22, '255,210,31');    // a gold blink: that one was yours
@@ -359,6 +368,8 @@ function loop(now) {
   renderer.frame(dt);
 
   if (now - hudAt > 200) { hudAt = now; drawHud(); }
+  quips.tick();
+  quips.idle();
 }
 
 // ─── HUD ──────────────────────────────────────────────────────────────────────
