@@ -469,62 +469,60 @@ export function createRenderer(canvas, world) {
     });
   }
 
-  /* Where the ship is moored, and which way she lies.
+  /* The ship, anchored out in open water.
    *
-   * Deterministic in the map, not random: she is scenery, and scenery that moves when you
-   * respawn is a bug as far as the eye is concerned. The spot is picked from the shoreline list
-   * at an index derived from the map's own dimensions, which is stable for a given map and
-   * different between maps.
+   * Scenery, and deliberately in the background: half the size she was, well off the coast, and
+   * painted down into the colour of the sea so she never competes with a bomb or a player for
+   * attention. The test for a piece of set dressing is whether you notice it when you are NOT
+   * looking for it — if you do, it is too loud.
    *
-   * She lies ALONGSIDE the coast rather than bow-on, because that is how a ship is moored, and
-   * close enough in that the rocks drawn over her cut off part of the hull — you see a ship
-   * parked behind the headland, not a model floating in open water.
+   * Deterministic in the map, never random. Scenery that moves when you respawn is a bug as far
+   * as the eye is concerned.
    */
+  const SHIP_SCALE = 2;
+  const SHIP_ALPHA = 0.42;
+  // Her centre sits this far outside the island's bounding box. The visible ocean margin is two
+  // or three tiles, so at two and a half she is half in frame and half past the edge of the
+  // board — present, cut off, and obviously not something you can interact with.
+  const SHIP_OFFSHORE_TILES = 2.5;
+
   let mooredFor = null, moored = null;
   function mooring() {
     if (mooredFor === world.map) return moored;
     mooredFor = world.map;
-    moored = null;
-    const edges = shoreline();
-    if (!edges.length) return null;
+    const [lx, ly, lw, lh] = landBounds();
 
-    // Prefer a stretch of coast facing left or right: the ship is three times longer than she
-    // is wide, and lying her along a north or south shore puts her across the map.
-    const side = edges.filter(e => (e.e & 1) || (e.e & 4));
-    const pool = side.length ? side : edges;
-    const pick = pool[(world.map.w * 7919 + world.map.h * 104729) % pool.length];
+    // Which side of the island she sits off, chosen from the map's own dimensions so it is
+    // stable for a given map and different between maps.
+    const side = (world.map.w * 31 + world.map.h * 17) % 4;      // 0 right, 1 up, 2 left, 3 down
+    const cx = (lx + lw / 2) * TILE_PX, cy = (ly + lh / 2) * TILE_PX;
+    const outX = (lw / 2 + SHIP_OFFSHORE_TILES) * TILE_PX;
+    const outY = (lh / 2 + SHIP_OFFSHORE_TILES) * TILE_PX;
+    // Offset along the shore as well as away from it, so she is never dead level with the
+    // middle of the island — which would look placed rather than anchored.
+    const drift = ((world.map.w % 7) - 3) * TILE_PX * 1.5;
 
-    const dx = (pick.e & 1 ? 1 : 0) - (pick.e & 4 ? 1 : 0);
-    const dy = (pick.e & 8 ? 1 : 0) - (pick.e & 2 ? 1 : 0);
-    const out = Math.hypot(dx, dy) || 1;
-    moored = {
-      // 1.7 tiles off the rock: far enough to float, close enough to be partly hidden by it.
-      x: (pick.tx + 0.5 + (dx / out) * 1.7) * TILE_PX,
-      y: (pick.ty + 0.5 + (dy / out) * 1.7) * TILE_PX,
-      // Perpendicular to the way the shore faces, so she lies along it.
-      angle: Math.atan2(dx, -dy),
-    };
+    const spots = [
+      { x: cx + outX, y: cy + drift, angle: Math.PI / 2 },
+      { x: cx + drift, y: cy - outY, angle: 0 },
+      { x: cx - outX, y: cy + drift, angle: Math.PI / 2 },
+      { x: cx + drift, y: cy + outY, angle: 0 },
+    ];
+    moored = spots[side];
     return moored;
   }
-
-  /* Four times the drawn size.
-   *
-   * At 1:1 she was about four tiles long, which next to a 32px pirate made her a dinghy. A real
-   * ship dwarfs the crew, and the fact that she runs off the edge of the island — and sometimes
-   * off the edge of the screen — is the thing that sells the scale rather than a problem with
-   * it. The detail holds up because none of it is a bitmap. */
-  const SHIP_SCALE = 4;
 
   function drawMoored(ox, oy) {
     const m = mooring();
     if (!m) return;
     ctx.save();
+    ctx.globalAlpha = SHIP_ALPHA;
     ctx.translate(ox + m.x, oy + m.y);
     ctx.rotate(m.angle);
-    ctx.scale(SHIP_SCALE, SHIP_SCALE);
-    // A slow roll at anchor. Tiny — a degree and a half — but a ship that is perfectly still on
-    // water that is not reads as a sprite rather than as a boat.
+    // A slow roll at anchor. Tiny — a degree and a half — but a ship perfectly still on water
+    // that is not reads as a sprite rather than as a boat.
     ctx.rotate(Math.sin(seaT * 0.45) * 0.026);
+    ctx.scale(SHIP_SCALE, SHIP_SCALE);
     drawShip(ctx);
     ctx.restore();
   }
@@ -649,11 +647,11 @@ export function createRenderer(canvas, world) {
     const ox = -Math.round(cam.x) + Math.round(sx), oy = -Math.round(cam.y) + Math.round(sy);
 
     drawSea(vw, vh, ox, oy, dtMs);
-    drawDrops(vw, vh, ox, oy, Math.min(0.05, dtMs / 1000));
-    // After the water, before the island. The flow field runs UNDER her — streaks of foam
-    // crossing the deck would be nonsense — while the shoreline rocks are still drawn over her,
-    // so part of the hull disappears behind the headland she is moored against.
+    // Before the flow field, so the water runs across her and she sits down in the sea rather
+    // than on it. Combined with the alpha this is what pushes her into the background: a
+    // foreground object does not have the ocean drifting over the top of it.
     drawMoored(ox, oy);
+    drawDrops(vw, vh, ox, oy, Math.min(0.05, dtMs / 1000));
 
     const cx0 = Math.floor(cam.x / CHUNK_PX), cx1 = Math.floor((cam.x + vw) / CHUNK_PX);
     const cy0 = Math.floor(cam.y / CHUNK_PX), cy1 = Math.floor((cam.y + vh) / CHUNK_PX);
