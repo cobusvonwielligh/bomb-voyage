@@ -166,24 +166,57 @@ timer, connection dot), **TAB scoreboard**, **Q map overview**, **round-end scor
 
 All synthesised with WebAudio. No files.
 
-**Defaults, as requested: music `0.25`, SFX `0.75`.** Persist both to `localStorage`. The audio
-context must be created on the first user gesture (the PLAY click) or browsers will block it.
+**Defaults: music `0.10`, SFX `0.75`.** Persist both to `localStorage` (`bv.music`, `bv.sfx`).
+**One** `AudioContext` for the whole page, created lazily and unlocked on the PLAY click — see
+`public/client/audio/engine.js`. Two contexts means the second never unlocks, and hanging the
+effects off the music's context means muting the music mutes the game.
 
 ### SFX
 
-| Sound | Recipe |
-|---|---|
-| Place bomb | Short square blip, 220 Hz, 60 ms, fast decay |
-| Explosion | Filtered white noise burst, 300 ms, low-pass sweeping 2 kHz → 200 Hz |
-| Chain explosion | Same, pitched up 15 %, max 3 per tick so a chain does not become a wall of sound |
-| Pickup | Two-note triangle arpeggio up, 80 ms |
-| Death | Descending saw, 400 ms |
-| Respawn | Rising triangle, 300 ms |
-| Status caught | Wobbly detuned pair, 250 ms |
-| Round end | Four-note gold fanfare |
+Implemented in `public/client/audio/sfx.js`. Each voice is a function that schedules itself; the
+caller has already decided when, where and how loud.
 
-**Pan and attenuate by distance from the camera.** With 16 players, unpanned explosions are
-exhausting. Beyond 12 tiles, do not play the sound at all.
+| Sound | When | Recipe |
+|---|---|---|
+| `place` | a bomb is placed | square blip 220 → 180 Hz, 60 ms |
+| `fuse` | a bomb within earshot has < 1 s left | dry triangle tick, 1.2–1.9 kHz, four accelerating stages |
+| `boom` | explosion | noise burst low-passed 2 kHz → 200 Hz + sine thump 100 → 38 Hz + a 2.6 kHz crack |
+| `boom {chain}` | a bomb set off by another | same, pitched up 15 %, capped at 3 per frame |
+| `blockdie` | a wall is destroyed | band-passed noise 900 → 420 Hz, quiet — several fire per blast |
+| `blocknew` | a wall grows back | low sine thud 150 → 70 Hz. Your escape route just changed |
+| `pickup` | a perk is collected | two-note triangle; **the interval says which perk** (Gift goes *down*) |
+| `shield` | a shield eats a blast | glassy sine pair, a fifth apart |
+| `status` | a disease is caught | detuned triangle pair with a 7 Hz wobble |
+| `death` | someone else dies | descending saw 330 → 70 Hz, positional |
+| `ownDeath` | **you** die | two detuned saws 300 → 52 Hz, 750 ms, close up |
+| `kill` | **you** killed someone | bright two-note stab up a fourth, with a click on front |
+| `spawn` / `ownSpawn` | a respawn | rising triangle; yours gets a fifth under it |
+| `warn` | 60 s and 10 s left in the round | two dry 880 Hz ticks |
+| `fanfare` | round end | C–E–G–C across three waveforms |
+| `click` | UI | one 1.4 kHz tick |
+
+Four rules do more for how this feels than any individual recipe:
+
+1. **Positional.** Panned and attenuated by distance from your own *rendered* position, with the
+   top end rolled off with distance too — that is what actually reads as far away. Past
+   `SFX_MAX_DISTANCE_TILES` the sound is not played at all. Rolloff is **linear, not
+   inverse-square**: physically wrong, and correct here, because a bomb four tiles away matters
+   nearly as much as one at your feet.
+2. **Budgeted.** `MAX_PER_FRAME` per voice. A chain can set off a dozen bombs on one tick; past
+   the third, the sound stops being information.
+3. **Jittered.** Every instance is a few percent off in pitch and length. Identical repeats are
+   the loudest tell that a game's audio was made by a programmer.
+4. **About you.** Anything that happened *to* you is non-positional, longer and louder than the
+   same thing happening to someone else, and `kill` is its own sound. That confirmation is the
+   most important noise in a deathmatch.
+
+Explosions, the fanfare and both death sounds feed a shared send — one low-passed feedback delay,
+not a real reverb — so a blast sounds like it happened in a stone corridor.
+
+**Your own bomb is triggered locally, not from the server event.** The `bomb` event is two ticks
+behind, and 66 ms of lag on the one sound you trigger yourself is the difference between
+responsive and mushy. `localBombFeedback` in `main.js` re-checks every reason a placement would be
+refused — dead, pacifist, out of bombs, tile occupied — so it is honest rather than optimistic.
 
 ### Music
 

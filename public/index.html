@@ -62,7 +62,8 @@
                padding: 5px 8px; opacity: .45; }
   #chatInput:focus { outline: none; opacity: 1; border-color: var(--gold); }
   .right { margin-left: auto; display: flex; gap: 8px; align-items: center; pointer-events: auto; }
-  input[type=range] { width: 90px; accent-color: var(--gold); }
+  input[type=range] { width: 72px; accent-color: var(--gold); }
+  .vlabel { color: var(--dim); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
   .gear { display: block; margin-top: 6px; color: var(--gold); font-size: 13px;
           text-shadow: 0 1px 2px #000; letter-spacing: .08em; }
 
@@ -97,6 +98,8 @@
     <span class="right">
       <button id="musicBtn">♪ off</button>
       <input id="vol" type="range" min="0" max="100" value="10" title="music volume">
+      <span class="vlabel">sfx</span>
+      <input id="sfxVol" type="range" min="0" max="100" value="75" title="sound effect volume">
       <button id="leave" title="esc">leave</button>
     </span>
   </div>

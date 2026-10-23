@@ -10,6 +10,7 @@
 // drifts audibly within seconds.
 
 import { VOLUME_MUSIC_DEFAULT } from '/shared/constants.js';
+import { audioContext, unlock, noiseSource } from './engine.js';
 
 const BPM = 77;
 const STEPS_PER_BAR = 16;          // sixteenth notes
@@ -59,7 +60,9 @@ export function createMusic() {
   }
 
   function build() {
-    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // Shared with the sound effects. One context, so one user gesture unlocks both and turning
+    // the music off cannot take the sound effects down with it.
+    ctx = audioContext();
 
     // A gentle limiter on the end of the chain. Five voices plus a delay stack up, and clipping
     // is the fastest way to make a soft loop sound nasty.
@@ -176,17 +179,7 @@ export function createMusic() {
     o.start(t); o.stop(t + 0.3);
   }
 
-  let noiseBuf = null;
-  function noise() {
-    if (!noiseBuf) {
-      noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 0.4, ctx.sampleRate);
-      const d = noiseBuf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    }
-    const s = ctx.createBufferSource();
-    s.buffer = noiseBuf;
-    return s;
-  }
+  const noise = noiseSource;   // engine.js owns the buffer; the sfx bus shares it
 
   function snare(t, gain = 0.12) {
     const s = noise(), f = ctx.createBiquadFilter(), g = ctx.createGain();
@@ -261,8 +254,7 @@ export function createMusic() {
     async start() {
       if (playing) return true;
       if (!ctx) build();
-      if (ctx.state === 'suspended') await ctx.resume();
-      if (ctx.state !== 'running') return false;
+      if (!await unlock()) return false;
       step = 0;
       nextTime = ctx.currentTime + 0.08;
       timer = setInterval(scheduler, TIMER_MS);
