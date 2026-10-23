@@ -852,8 +852,8 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * reads as resting against the card; one sitting squarely on top reads as a sticker stuck over
  * the controls, and one too far below looks like it fell off. */
 #propBarrels {
-  width: 190px; height: auto;
-  left: -104px; bottom: -54px;
+  width: 285px; height: auto;          /* half again the old size */
+  left: -215px; bottom: -40px;         /* clear of the card, off to its left */
   transform: rotate(-6deg);
   animation: propA 9s ease-in-out infinite;
 }
