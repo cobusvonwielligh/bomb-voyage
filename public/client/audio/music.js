@@ -116,35 +116,43 @@ const ARP_ROLL = [0, 2, 4, 7, 5, 4, 6, 8, 7, 5, 3, 4, 2, 5, 3, 1];
  * D natural minor throughout, over Dm-Bb-F-C. The raised 7th (C#) is deliberately absent: the
  * flat 7 is the whole difference between a sea shanty and a vampire film.
  */
-/* The hook, rebuilt around the one figure everybody already knows from a pirate film.
+/* The hook, written as a straight homage to the one everybody means when they say "pirate".
  *
- * That figure is a PAIR OF REPEATED NOTES CLIMBING BY STEP — "da-da DA-DA, da-da DA-DA" —
- * answered by a leap. It is not subtle and it is not supposed to be: the repeated note is what
- * makes it singable after one listen, and the step up each time is what stops it being a
- * drone. Three statements of the cell, each a step higher, then a fall home.
+ * That tune is built from one idea repeated three times: FOUR of the same note, then a
+ * two-note climb off the top of them. Each repeat starts where the climb before it landed, so
+ * the line walks up the scale a third at a time without ever doing anything clever — and that
+ * is exactly why it sticks. The fourth bar turns round and falls home.
  *
- * It enters two eighths into the bar rather than on the downbeat. A melody that starts exactly
- * where the section does arrives with the section; two beats of arpeggio first and it arrives
- * ON TOP of something, which is the difference between a chorus and a change of track.
+ *   D D D D  F G        ← the cell
+ *   G G G G  A Bb       ← same cell, starting where the last one ended
+ *   Bb Bb Bb Bb  C D    ← and again
+ *   D C Bb G  D         ← down and home
+ *
+ * Written an octave above where this started. Down at D4 it sat inside the arpeggio and read
+ * as another moving part; at D5 it is clear of everything else in the mix and sounds like a
+ * melody rather than a harmony line. Top note is D6, about 1.2 kHz — bright, not shrill.
+ *
+ * It still enters two eighths late, so it arrives on top of the arpeggio instead of alongside
+ * it. D natural minor throughout.
  */
 const LEAD = [
-  null, null, 62, 62, 65, 67, null, null,   // Dm — late pickup: D D up to F G
-  69, null, 69, 67, 65, null, null, null,   // Bb — leap to the fifth, fall back, breathe
-  69, 69, 70, 72, 74, null, 74, null,       // F  — the cell again, a step up, landing high
-  72, 70, 69, 65, 62, null, null, null,     // C  — down the scale and home to the tonic
+  null, null, 74, 74, 74, 74, 77, 79,   // Dm — pickup, four Ds, climb F G
+  79, 79, 79, 79, 81, 82, null, null,   // Bb — four Gs, climb A Bb
+  82, 82, 82, 82, 84, 86, null, null,   // F  — four B flats, climb C D
+  86, 84, 82, 79, 74, null, null, null, // C  — turn round and fall home to the tonic
 ];
 
-/* An octave shout on the strong beats of bars 1 and 3.
+/* The octave shout sits on the CLIMBS, not on the repeated notes.
  *
- * Doubling a melody an octave up on its accents is the oldest trick in synthwave and the only
- * one that turns a line into a chorus. Restricted to the two bars that carry the hook: double
- * everything and it stops being an accent.
+ * Doubling the repeats would make the loudest part of the bar the part that is standing still.
+ * The two-note rise is the thing the ear follows out of each cell, so that is what gets the
+ * extra octave — and the last D, because a hook should land on something.
  */
 const LEAD_OCTAVE = [
-  0, 0, 0, 0, 0, 0, 0, 0,
-  1, 0, 1, 0, 0, 0, 0, 0,
-  0, 0, 0, 1, 1, 0, 1, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 1, 1,
+  0, 0, 0, 0, 1, 1, 0, 0,
+  0, 0, 0, 0, 1, 1, 0, 0,
+  0, 0, 0, 0, 1, 0, 0, 0,
 ];
 
 /**

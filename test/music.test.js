@@ -154,7 +154,10 @@ test('the hook is a repeated-note cell that climbs, and it enters late', () => {
   // The cell: somewhere in the line, the same note twice running, at least twice over.
   const notes = LEAD.filter(n => n !== null);
   const pairs = notes.filter((n, i) => i > 0 && n === notes[i - 1]).length;
-  assert.ok(pairs >= 2, `only ${pairs} repeated-note pairs; that is not the hook`);
+  assert.ok(pairs >= 6, `only ${pairs} repeated-note pairs; the cell is four of the same note`);
+
+  // High enough to be a melody rather than another moving part inside the arpeggio.
+  assert.ok(Math.min(...notes) >= 72, `the hook bottoms out at ${Math.min(...notes)}, under D5`);
 
   // And it climbs: the high point of the third bar is above the high point of the first.
   const peak = i => Math.max(...bar(i).filter(n => n !== null));
@@ -163,7 +166,8 @@ test('the hook is a repeated-note cell that climbs, and it enters late', () => {
   for (const i of [1, 3]) {
     assert.ok(bar(i).slice(-2).every(n => n === null), `bar ${i} never stops to breathe`);
   }
-  assert.equal(LEAD.filter(n => n !== null).at(-1), 62, 'the phrase does not land on the tonic');
+  const last = LEAD.filter(n => n !== null).at(-1);
+  assert.equal(last % 12, 2, `the phrase lands on ${last}, which is not a D`);
   // And the accent is an accent, not a second melody.
   const doubled = LEAD_OCTAVE.filter(Boolean).length;
   assert.ok(doubled > 0 && doubled < LEAD.filter(n => n !== null).length / 2,
