@@ -13,9 +13,13 @@
 // which is what lets four bars repeat without ever sounding finished. There is no lead here and
 // no arpeggio: in funk the guitar is the movement, and anything else on top of it is clutter.
 //
-// Bars 5-8 are the older half, unchanged — C G F G, the three-octave arpeggio and the only
-// singable line in the project. Holding both back until bar 5 is what makes the melody an event
-// rather than something that was always there.
+// Bars 5-8 are the pirate half: Dm Bb F C, a three-octave sixteenth arpeggio, and a hook built
+// like a shanty — one rhythmic cell stated, answered, then restated a fourth higher, landing on
+// the tonic with a bar of air after it. D natural minor, flat 7, no raised leading note: that
+// one accidental is the whole difference between a sea shanty and a vampire film.
+//
+// Holding both back until bar 5 is what makes the melody an event rather than something that
+// was always there.
 //
 // Scheduling uses the standard look-ahead pattern — a timer that only ever queues notes a little
 // way into the future, with the AudioContext clock doing the actual timing. setTimeout per note
@@ -81,9 +85,14 @@ const CHANK = [
   [0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0, 1],
 ];
 
-// Back half only. A full arpeggio runs the chord across three octaves rather than noodling on
-// three notes; this one climbs and comes back down.
-const ARP_ROLL = [0, 2, 4, 6, 8, 6, 7, 5, 3, 1, 2, 4, 6, 4, 2, 1];
+/* The synthwave engine room. Indices into a three-octave stack of the bar's chord.
+ *
+ * Sixteenths, never repeating a note two steps running, and shaped as a long climb with a
+ * stumble back on the way up. A pure up-down ramp is an exercise; the small reversals are what
+ * make it a riff you can follow — your ear tracks the pattern, is wrong twice a bar, and that
+ * is what keeps it interesting on the fortieth loop.
+ */
+const ARP_ROLL = [0, 2, 4, 7, 5, 4, 6, 8, 7, 5, 3, 4, 2, 5, 3, 1];
 
 /* The hook. Eight eighth-notes a bar, four bars, nulls are rests.
  *
@@ -102,10 +111,23 @@ const ARP_ROLL = [0, 2, 4, 6, 8, 6, 7, 5, 3, 1, 2, 4, 6, 4, 2, 1];
  * flat 7 is the whole difference between a sea shanty and a vampire film.
  */
 const LEAD = [
-  62, 62, 65, 69, null, 69, 67, 65,     // Dm   — up to the fifth and lean on it
-  65, null, 67, 65, 62, null, null, null, // Bb  — fall back, breathe
-  60, 62, 65, 69, null, 72, 69, null,   // F    — same cell, carried a step higher
-  74, 72, 69, 67, 65, null, null, null, // C    — down the scale and home
+  null, 62, 62, 69, null, 69, 67, 69,   // Dm — pickup, then hammer the fifth. This is the hook.
+  null, 70, 69, 67, 65, null, null, null, // Bb — answer it falling, and leave a bar of air
+  null, 60, 60, 69, null, 69, 72, 69,   // F  — the SAME cell a fourth up: repetition is the hook
+  74, 72, 69, 67, 65, null, 62, null,   // C  — run home down the scale, land on the tonic
+];
+
+/* An octave shout on the strong beats of bars 1 and 3.
+ *
+ * Doubling a melody an octave up on its accents is the oldest trick in synthwave and the only
+ * one that turns a line into a chorus. Restricted to the two bars that carry the hook: double
+ * everything and it stops being an accent.
+ */
+const LEAD_OCTAVE = [
+  0, 0, 0, 1, 0, 1, 0, 1,
+  0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 1, 0, 1, 1, 1,
+  0, 0, 0, 0, 0, 0, 0, 0,
 ];
 
 /**
@@ -198,17 +220,30 @@ function createTheme({ bus }) {
     o.stop(t + 0.25);
   }
 
-  function lead(t, note) {
+  /**
+   * @param level quieter for the octave doubling, which is an accent and not a second melody.
+   *
+   * Two detuned saws rather than a triangle and a saw: the beating between them is the entire
+   * synthwave lead sound, and at eight cents it was too narrow to hear. Eighteen is wide enough
+   * to shimmer and narrow enough not to sound broken.
+   */
+  function lead(t, note, level = 0.085) {
     const o = ctx.createOscillator(), o2 = ctx.createOscillator();
     const f = ctx.createBiquadFilter(), g = ctx.createGain();
-    o.type = 'triangle';
+    o.type = 'sawtooth';
     o2.type = 'sawtooth';
     o.frequency.value = hz(note);
     o2.frequency.value = hz(note);
-    o2.detune.value = 8;
+    o.detune.value = -9;
+    o2.detune.value = 18;
     f.type = 'lowpass';
-    f.frequency.value = 2600;
-    envelope(g, t, { a: 0.02, d: 0.1, s: 0.8, hold: 0.18, r: 0.22, peak: 0.075 });
+    // A filter that opens on the attack: the brightness arriving a moment after the note is
+    // what a real synth lead does and what a fixed cutoff never sounds like.
+    f.frequency.setValueAtTime(900, t);
+    f.frequency.linearRampToValueAtTime(3400, t + 0.07);
+    f.frequency.linearRampToValueAtTime(1800, t + 0.4);
+    f.Q.value = 3;
+    envelope(g, t, { a: 0.012, d: 0.1, s: 0.8, hold: 0.18, r: 0.26, peak: level });
     o.connect(f);
     o2.connect(f);
     f.connect(g);
@@ -282,8 +317,12 @@ function createTheme({ bus }) {
       if (n % 2 === 0) bass(t, chord.bass + (n === 6 || n === 14 ? 12 : 0), STEP_DUR * 1.6);
       const idx = ARP_ROLL[n];
       arp(t, chord.notes[idx % 3] + Math.floor(idx / 3) * 12);
-      const note = LEAD[(bar - 4) * 8 + (n >> 1)];
-      if (note && n % 2 === 0) lead(t, note);
+      const slot = (bar - 4) * 8 + (n >> 1);
+      const note = LEAD[slot];
+      if (note && n % 2 === 0) {
+        lead(t, note);
+        if (LEAD_OCTAVE[slot]) lead(t, note + 12, 0.045);
+      }
     }
 
     // A fill at the end of each half, so the loop has a shape instead of a seam.
