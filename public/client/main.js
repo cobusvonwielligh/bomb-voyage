@@ -232,7 +232,10 @@ const net = createNet({
         }
 
         case 'spawn':
-          world.markSpawn(e.i);
+          // Only your own. Sixteen players respawning at ten seconds apiece meant something was
+          // ballooning across the board every few seconds, which buried the thing the effect is
+          // for — finding YOURSELF. Everyone else still gets the panned arrival sound.
+          if (e.i === world.you) world.markSpawn(e.i);
           // Panned and attenuated by where it happened, so the sound alone tells you which side
           // of you somebody just appeared on. Your own is centred, because you are not elsewhere.
           if (e.i === world.you) { sfx.play('ownSpawn'); quips.spawned(); }
@@ -834,6 +837,10 @@ function renderLive() {
     pos.textContent = n + 1;
     nm.textContent = p.name;
     nm.style.color = playerColor(p.i);
+    // A robot beside anything that is not a person. `bot` comes from the scores broadcast, which
+    // is the only place the server says so — the snapshot has no idea what a bot is, and it
+    // should not: the simulation treats them identically on purpose.
+    li.classList.toggle('bot', !!ranks.get(p.i)?.bot);
     // A crown on whoever can restart the round, change the map or set the speed. It passes down
     // the moment they leave, so the room is never left without somebody who can run it.
     li.classList.toggle('host', p.i === hostSeat);
