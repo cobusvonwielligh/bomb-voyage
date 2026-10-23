@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createState, createPlayer, tileCentre, setTile } from '../shared/sim/state.js';
-import { step, blocked, unstick } from '../shared/sim/movement.js';
+import { step, blocked, unstick, speedOf } from '../shared/sim/movement.js';
 import { tick } from '../shared/sim/round.js';
 import { BLOCK, BLOCK_HP, IN_RIGHT, IN_BOMB, FUSE_TICKS } from '../shared/constants.js';
 
@@ -104,4 +104,35 @@ test('step() unsticks before it reads the position', () => {
   setTile(s.map, tx, ty, BLOCK.SOFT, 1);
   for (let i = 0; i < 30; i++) step(s, p, IN_RIGHT);
   assert.ok(!blocked(s, p, p.x, p.y));
+});
+
+test('lane centring eases in and is never faster than a deliberate move', () => {
+  // The snap people feel is not the unstick, it is this: walking off a bomb you just placed
+  // turns that tile solid underneath you, lane centring fires, and at the old flat 2x rate a
+  // booted player was moved half a tile sideways in a single tick.
+  const { s } = world();
+  const p = seat(s, 0, 2, 4);
+  p.speed = 4;                                   // fully booted: the worst case
+  p.y = tileCentre(4) + 112;                     // most of a half-tile off the centre line
+  // Something beside the lane, or centring correctly declines to fire at all.
+  setTile(s.map, 4, 3, BLOCK.SOFT, BLOCK_HP[BLOCK.SOFT]);
+  setTile(s.map, 4, 5, BLOCK.SOFT, BLOCK_HP[BLOCK.SOFT]);
+
+  const offsets = [];
+  for (let n = 0; n < 24; n++) {
+    step(s, p, IN_RIGHT);
+    offsets.push(Math.abs((((p.y % 256) + 256) % 256) - 128));
+  }
+
+  const steps = offsets.slice(0, -1)
+    .map((o, i) => o - offsets[i + 1])
+    .filter(d => d > 0);
+  assert.ok(steps.length, 'centring never fired');
+
+  const biggest = Math.max(...steps);
+  assert.ok(biggest <= 14, `a single tick moved ${biggest} units sideways`);
+  assert.ok(biggest < speedOf(p), `sideways drift (${biggest}) outran walking (${speedOf(p)})`);
+
+  // And it decelerates: the last correction is smaller than the first.
+  assert.ok(steps.at(-1) <= steps[0], `centring sped up: ${steps.join(',')}`);
 });

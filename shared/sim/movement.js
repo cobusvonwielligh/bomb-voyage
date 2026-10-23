@@ -14,9 +14,25 @@ import { walkable, has, tileCentre } from './state.js';
 
 const HALF_TILE = UNITS_PER_TILE >> 1;
 
-// How much faster than walking pace a player slides sideways onto a lane centre line. Sideways
-// drift is assistance, not travel, so it is allowed to outrun the legs.
-const ALIGN_RATE = 2;
+/* Lane centring.
+ *
+ * Three limits, and all three matter:
+ *
+ *   ALIGN_RATE     never faster than the legs. At 2x it outran a deliberate move, and with
+ *                  boots at 59 units a tick that was half a tile of sideways travel in ONE
+ *                  tick — a snap, not an assist, and the commonest place to feel it is walking
+ *                  off a bomb you just placed, where the tile turns solid underneath you.
+ *   ALIGN_FRACTION a quarter of whatever is left, so it decelerates into the lane instead of
+ *                  arriving at full speed and stopping dead. This is the part that reads as
+ *                  smooth rather than as correct.
+ *   ALIGN_MAX      an absolute ceiling in units, so a fast player is not centred faster than a
+ *                  slow one. Speed should change how far you travel, not how hard the game
+ *                  pushes you sideways.
+ */
+const ALIGN_RATE = 1;
+const ALIGN_FRACTION = 4;        // move 1/4 of the remaining offset
+const ALIGN_MIN_UNITS = 3;       // and never less than this, so it terminates
+const ALIGN_MAX_UNITS = 14;
 
 // Being shoved out of a solid tile eases rather than running at a constant rate: a fraction of
 // whatever is left each tick, capped well below walking pace and floored so it still terminates.
@@ -147,13 +163,20 @@ function moveAxis(state, p, ax, ay, speed) {
   /**
    * Slide toward the centre line of the lane we are already in.
    *
-   * At `speed` units a tick, correcting a third of a tile of misalignment takes three or four
-   * ticks of visibly scraping along the wall before the gap opens. ALIGN_RATE makes it one or
-   * two, which is the difference between "it caught the corner for me" and "it stuck".
+   * Eased rather than flat out: a quarter of the remaining offset each tick, floored so it
+   * finishes and capped so it is never a lurch. From a third of a tile out that is about a
+   * dozen ticks, decelerating the whole way — you feel the game tidy you up, not shove you.
    */
   const straighten = () => {
     const delta = -off;
-    const pull = Math.sign(delta) * Math.min(Math.abs(delta), speed * ALIGN_RATE);
+    const mag = Math.abs(delta);
+    const step = Math.min(
+      mag,
+      Math.max(ALIGN_MIN_UNITS, (mag / ALIGN_FRACTION) | 0),
+      ALIGN_MAX_UNITS,
+      speed * ALIGN_RATE,
+    );
+    const pull = Math.sign(delta) * step;
     const cx = horizontal ? p.x : p.x + pull;
     const cy = horizontal ? p.y + pull : p.y;
     if (blocked(state, p, cx, cy)) return false;
