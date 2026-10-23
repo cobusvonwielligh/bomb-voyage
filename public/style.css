@@ -9,7 +9,7 @@
 
 @font-face {
   font-family: 'Shotling';
-  src: url('/assets/shotling.ttf') format('truetype');
+  src: url('/assets/fonts/shotling.ttf') format('truetype');
   font-display: block;        /* no flash of fallback on the title; it is the first thing seen */
 }
 
@@ -1017,8 +1017,8 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   position: absolute; inset: 0;
   background: conic-gradient(from var(--spin) at 100% 100%,
     #f04a56, #ff9a5c, #ff7a9a, #b78bff, #5cc6ff, #5ce0b0, #f04a56);
-  -webkit-mask-image: url('/assets/bomb-barrels.png');
-  mask-image: url('/assets/bomb-barrels.png');
+  -webkit-mask-image: url('/assets/img/bomb-barrels.png');
+  mask-image: url('/assets/img/bomb-barrels.png');
   -webkit-mask-size: contain; mask-size: contain;
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
   -webkit-mask-position: center; mask-position: center;
@@ -1064,8 +1064,8 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   position: absolute; inset: 0;
   background: conic-gradient(from var(--spin) at 100% 100%,
     #f04a56, #ff9a5c, #ff7a9a, #b78bff, #5cc6ff, #5ce0b0, #f04a56);
-  -webkit-mask-image: url('/assets/mascot.png');
-  mask-image: url('/assets/mascot.png');
+  -webkit-mask-image: url('/assets/img/mascot.png');
+  mask-image: url('/assets/img/mascot.png');
   -webkit-mask-size: contain; mask-size: contain;
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
   -webkit-mask-position: center; mask-position: center;

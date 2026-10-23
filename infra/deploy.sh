@@ -73,6 +73,7 @@ printf '%s%s\n' "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)" \
 rsync -az --delete \
   --exclude .git --exclude node_modules --exclude data \
   --exclude config.ini --exclude '*.pem' --exclude .deps-hash \
+  --exclude art-source \
   -e "ssh $SSH_OPTS" \
   ./ "$SSH_USER@$SSH_HOST:$APP/"
 

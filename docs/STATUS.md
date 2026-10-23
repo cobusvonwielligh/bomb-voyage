@@ -20,7 +20,7 @@ accurate; the parts that describe *what is not built yet* are not.
 | Deployed, TLS, auto-restart, rollback | ✅ |
 | Bots | ✅ 15 of them, pathfinding and fleeing |
 | Maps | ✅ 5 |
-| Art and audio | ✅ all generated in code, bar four PNGs on the landing page |
+| Art and audio | ✅ generated in code, bar four landing-page PNGs and the theme (see §2e) |
 | Transport | ✅ **WebTransport over QUIC, with WebSocket as the fallback** |
 | Persistence | ✅ leaderboard, levels, XP — banked on disconnect, round end **and shutdown** |
 | Observer mode | ✅ built — Spectate on the menu, and from the death card |
@@ -78,12 +78,27 @@ it and nobody else.
   six a round, at least one guaranteed. They chain into each other and into bombs, because a keg
   *is* a bomb as far as the blast code is concerned. See [RULES.md](RULES.md) §10.
 
-### (e) Art is no longer purely code
+### (e) Art is no longer purely code, and neither is the theme
 
-Four PNGs live in `public/assets/`: the mascot, its cropped face, a stack of kegs and an icon.
+Four PNGs live in `public/assets/img/`: the mascot, its cropped face, a stack of kegs and an icon.
 They are landing-page and HUD decoration only. **Everything inside the game — terrain, players,
 bombs, fire, perks, the sea, the moored ship, the boulders — is still drawn from shapes in
 code**, and that rule has not moved.
+
+The **theme is now a produced file**, `assets/audio/theme.mp3`. It is the twenty seconds somebody
+hears before they have decided whether to play, and a mix beats an oscillator at that job by a
+distance no amount of synthesis work closes. The three in-game ambient beds are still generated,
+deliberately: a bed has to survive being heard sixty times in a round, and what makes that
+bearable is the generated overlap — every note landing on the tail of the last one, so there is
+never a line to follow and never a seam to notice.
+
+The synthesised theme is still in `music.js` and still tested. It is the **fallback**: if the
+file 404s, fails to decode, or the browser refuses the format, the menu has music rather than
+silence. Serving the file needed two things the server did not have — an `audio/mpeg` type and
+byte-range support, the latter because Safari refuses to play an `<audio>` source at all from a
+server that answers a `Range` request with a 200.
+
+The assets folder is now `art.js` plus `img/`, `fonts/` and `audio/`.
 
 ---
 

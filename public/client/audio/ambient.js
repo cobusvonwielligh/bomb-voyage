@@ -1,4 +1,6 @@
-// Three ambient beds for in-game. Synthesised, no audio files anywhere in this project.
+// Three ambient beds for in-game. Synthesised — these three still are, note. The THEME is a
+// produced file now (see music.js); the beds are not, because a bed has to survive being heard
+// sixty times in a round and the thing that makes that bearable is the generated overlap below.
 //
 // The main theme has a kit, a lead and an opinion. These are the opposite, on purpose: a round
 // lasts sixteen minutes and the thing playing underneath it has to survive being heard sixty

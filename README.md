@@ -38,8 +38,11 @@ is ready in about **50 ms**. The netcode is designed to survive 180 ms, so there
   domains, no build step.
 - Vanilla JS on the client, Node on the server. Two runtime dependencies: `ws` and the
   WebTransport/QUIC pair. No framework.
-- Art and audio are generated in code. Four decorative PNGs on the landing page are the only
-  binary assets; nothing inside the game is an image.
+- Art is generated in code — nothing inside the game is an image. Four decorative PNGs on the
+  landing page and a font are the only binary art.
+- Audio is generated in code too, with one exception: **the theme is a file**
+  (`assets/audio/theme.mp3`). The three in-game ambient beds are still synthesised, and the
+  synthesised theme is kept as the fallback if the file cannot be loaded.
 
 What it is **not**: see [docs/DESIGN.md](docs/DESIGN.md) → Non-goals. Short version: no accounts,
 no payments, no persistent world, no mobile, no matchmaking, no anti-cheat.
@@ -110,7 +113,7 @@ First-time server setup, the domain switch, and operations:
 | `server/` | Node process: static serving, WebSocket hub, authoritative loop, persistence. | NET, ROUND |
 | `public/` | Everything the browser downloads. Served raw, no bundler. | — |
 | `public/client/` | Game client: prediction, renderer, input, audio. | MOVE, ARENA, SHELL, ART |
-| `public/assets/` | `art.js` — everything in the game, drawn from shapes. Four decorative PNGs. | ART, ARENA |
+| `public/assets/` | `art.js` — everything in the game, drawn from shapes. Then `img/`, `fonts/`, `audio/`. | ART, ARENA |
 | `infra/` | `bootstrap.sh` (once per box), `deploy.sh`, systemd unit. | DEPLOY |
 | `test/` | `node --test` suites. | whichever slice owns the system |
 

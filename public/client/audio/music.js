@@ -1,9 +1,19 @@
-// Bomb Voyage — the music. Synthesised, no audio files anywhere in this project.
+// Bomb Voyage — the music.
 //
-// This module owns everything that counts as "the music": the main theme below, the three ambient
-// beds in ./ambient.js, and the cycling between them. They all sit behind one public surface, so
-// main.js still only ever says start / stop / toggle / setVolume / duck and never learns that
-// there is more than one track.
+// This module owns everything that counts as "the music": the theme, the three ambient beds in
+// ./ambient.js, and the cycling between them. They all sit behind one public surface, so main.js
+// still only ever says start / stop / toggle / setVolume / duck and never learns that there is
+// more than one track.
+//
+// THE THEME IS A FILE NOW — `/assets/audio/theme.mp3`. It is the one exception to "everything is
+// generated in code", and it is an exception on purpose: the theme is the twenty seconds somebody
+// hears before they have decided whether to play, and a produced mix beats a synthesised one at
+// that job by a distance no amount of oscillator work closes.
+//
+// The synthesised theme below is NOT dead code. It is the fallback: if the file 404s, fails to
+// decode, or the browser refuses the format, `createTheme` takes over and the menu still has
+// music instead of silence. It is also still the reference for what the file should sound like,
+// and the tests below still hold it to that. Everything from here to createMusic() describes it.
 //
 // The theme is eight bars at 116 BPM in two halves that do not sound alike.
 //
@@ -367,6 +377,94 @@ function createTheme({ bus }) {
   return { name: 'theme', steps: TOTAL_STEPS, stepDur: STEP_DUR, repeats: 4, gain, schedule };
 }
 
+// ─── the theme, as a file ─────────────────────────────────────────────────────
+
+const THEME_SRC = '/assets/audio/theme.mp3';
+// How long to wait for the file's metadata before giving up and using the synth. Metadata is a
+// few kilobytes off the front of the file, not the four megabytes of audio, so this is generous.
+const THEME_METADATA_TIMEOUT_MS = 4000;
+
+/**
+ * The produced theme, wearing the same clothes as a synthesised track.
+ *
+ * The sequencer in createMusic() knows about `steps`, `stepDur`, `repeats`, `gain` and
+ * `schedule(step, time)`, and nothing else. A whole mix is just a track with ONE step whose
+ * duration is the length of the file — so crossfading, excluding, muting, ducking and the
+ * rotation all keep working with no special case anywhere above this function.
+ *
+ * Resolves to null if the file cannot be used, so the caller can fall back to the synth.
+ */
+async function createFileTheme({ bus, src = THEME_SRC }) {
+  const ctx = audioContext();
+  const el = new Audio();
+  el.src = src;
+  el.preload = 'auto';
+  el.loop = false;
+  // The element's own volume stays at 1. The fader is the gain node below, because that is what
+  // crossfade() automates and it has to be on the AudioContext clock, not the DOM one.
+  el.volume = 1;
+
+  // Is it there, does it decode, does this browser want the format? Known once metadata lands.
+  const ok = await new Promise(resolve => {
+    const done = v => { clearTimeout(timer); resolve(v); };
+    const timer = setTimeout(() => done(false), THEME_METADATA_TIMEOUT_MS);
+    el.addEventListener('loadedmetadata', () => done(Number.isFinite(el.duration) && el.duration > 1), { once: true });
+    el.addEventListener('error', () => done(false), { once: true });
+    el.load();
+  });
+  if (!ok) {
+    console.warn(`music: ${src} unavailable, falling back to the synthesised theme`);
+    return null;
+  }
+
+  const gain = ctx.createGain();
+  gain.gain.value = 0;
+  gain.connect(bus);
+  // Once only — an element can have exactly one MediaElementAudioSourceNode, and creating a
+  // second throws. Routing it through WebAudio also takes it off the page's own output, which
+  // is what puts it behind the music bus and the volume slider with everything else.
+  ctx.createMediaElementSource(el).connect(gain);
+
+  let pauseTimer = null;
+
+  return {
+    name: 'theme',
+    steps: 1,
+    repeats: 1,
+
+    /* The crossfade has to OVERLAP the end of the file, not follow it.
+     *
+     * The sequencer calls crossfade() after `steps * stepDur` has elapsed and then ramps over
+     * XFADE_S. Report the true duration and the next track starts fading up two and a half
+     * seconds after this one has already stopped, which is two and a half seconds of silence
+     * between every theme and whatever follows it. Ending early by exactly the fade length puts
+     * the ramp across the outro instead. */
+    get stepDur() { return Math.max(XFADE_S + 1, el.duration - XFADE_S); },
+
+    gain,
+
+    schedule(step) {
+      if (step !== 0) return;
+      clearTimeout(pauseTimer);
+      // Close enough: `time` is at most LOOKAHEAD_S away, and a music bed does not need
+      // sample-accurate entry the way a hi-hat does.
+      try { el.currentTime = 0; } catch { /* not seekable yet; it starts at 0 anyway */ }
+      el.play().catch(() => { /* a gesture is still owed, or the tab is hidden */ });
+    },
+
+    /**
+     * Stop costing anything once we have faded away. Optional on a track — the synthesised ones
+     * simply stop being scheduled, but an <audio> element keeps decoding into a silent gain node
+     * forever unless somebody tells it not to.
+     */
+    leave(at = 0) {
+      clearTimeout(pauseTimer);
+      const inMs = Math.max(0, (at - ctx.currentTime) * 1000);
+      pauseTimer = setTimeout(() => el.pause(), inMs);
+    },
+  };
+}
+
 export function createMusic() {
   let ctx = null, timer = null, tracks = null, musicGain = null;
   let step = 0, loops = 0, current = 0, nextTime = 0;
@@ -380,14 +478,17 @@ export function createMusic() {
     return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : VOLUME_MUSIC_DEFAULT;
   }
 
-  function build() {
+  async function build() {
     // Shared with the sound effects. One context, so one user gesture unlocks both and turning
     // the music off cannot take the sound effects down with it.
     ctx = audioContext();
     musicGain = createMusicBus(volume);
+    // The produced mix if it is reachable, the synthesised one if it is not. Either way it is
+    // called 'theme' and nothing downstream can tell which it got.
+    const theme = await createFileTheme({ bus: musicGain }) ?? createTheme({ bus: musicGain });
     // The theme is first because start() always comes back to the top, and the track somebody
     // turned off is the one they expect back when they turn it on again.
-    tracks = [createTheme({ bus: musicGain }), ...createAmbient({ bus: musicGain })];
+    tracks = [theme, ...createAmbient({ bus: musicGain })];
   }
 
   /**
@@ -417,6 +518,9 @@ export function createMusic() {
    */
   function crossfade(at) {
     const from = tracks[current].gain.gain;
+    // A synthesised track just stops being scheduled. A file-backed one has to be told, or it
+    // keeps decoding into a fader that is already at zero for the rest of the session.
+    tracks[current].leave?.(at + XFADE_S);
     current = nextTrack();
     const to = tracks[current].gain.gain;
     loops = 0;
@@ -446,6 +550,7 @@ export function createMusic() {
       p.cancelScheduledValues(now);
       p.setValueAtTime(p.value, now);
       p.linearRampToValueAtTime(i === next ? 1 : 0, now + XFADE_S);
+      if (i !== next) track.leave?.(now + XFADE_S);
     }
     current = next;
     step = 0;
@@ -500,7 +605,7 @@ export function createMusic() {
      * being hunted. Starting a round jumps straight to an ambient bed instead.
      */
     async start(from = 'theme') {
-      if (!ctx) build();
+      if (!ctx) await build();
       if (!await unlock()) return false;
       const at = Math.max(0, tracks.findIndex(t => t.name === from));
       if (playing) { if (at !== current) jumpTo(at); return true; }
@@ -541,6 +646,9 @@ export function createMusic() {
       timer = null;
       playing = false;
       applyGain();
+      // The bus ramps to silence over a moment; let the file ride that down rather than
+      // chopping it, then stop it decoding. Synthesised tracks have no `leave` and need none.
+      for (const track of tracks ?? []) track.leave?.(ctx.currentTime + 0.3);
     },
 
     async toggle() { return playing ? (this.stop(), false) : this.start(); },

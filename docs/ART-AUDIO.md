@@ -164,7 +164,17 @@ timer, connection dot), **TAB scoreboard**, **Q map overview**, **round-end scor
 
 ## 6. Audio
 
-All synthesised with WebAudio. No files.
+Synthesised with WebAudio, with **one** exception: the theme is a file,
+`/assets/audio/theme.mp3`. Every sound effect and all three ambient beds are still generated.
+
+The file is wrapped to look exactly like a synthesised track to the sequencer — one step whose
+duration is the length of the mix, minus the crossfade so the next track overlaps the outro
+rather than following a gap. Nothing above `createFileTheme` in `music.js` knows the difference,
+which is why crossfading, `exclude`, `playFrom`, muting and ducking all work on it unchanged.
+The synthesised theme is the fallback when the file cannot be loaded.
+
+Serving it needs an `audio/mpeg` content type **and byte ranges** — Safari will not play an
+`<audio>` source from a server that answers `Range` with a 200. `server/index.js` does both.
 
 **Defaults: music `0.10`, SFX `0.75`.** Persist both to `localStorage` (`bv.music`, `bv.sfx`).
 **One** `AudioContext` for the whole page, created lazily and unlocked on the PLAY click — see

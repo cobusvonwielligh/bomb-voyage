@@ -84,7 +84,9 @@ public/
       ambient.js               the in-round beds
   assets/
     art.js                     everything in the game, drawn from shapes
-    *.png                      four decorative images: mascot, face, kegs, icon
+    img/*.png                  four decorative images: mascot, face, kegs, icon
+    fonts/shotling.ttf         the display face
+    audio/theme.mp3            the theme. The only audio file; the beds are synthesised
 
 infra/
   bootstrap.sh deploy.sh rollback.sh logs.sh bomb-voyage.service

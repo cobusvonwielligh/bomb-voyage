@@ -39,6 +39,7 @@ const MIME = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
+  '.mp3': 'audio/mpeg',
 };
 
 // No external hosts, ever. This is most of why corporate proxies leave us alone, and it means a
@@ -49,6 +50,7 @@ const CSP = [
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
+  "media-src 'self'",
   "connect-src 'self' ws: wss:",
   "object-src 'none'",
   "base-uri 'none'",
@@ -151,12 +153,55 @@ function handle(req, res) {
     return res.end('not found');
   }
   const ext = path.extname(file);
+  const size = fs.statSync(file).size;
   // No content hashing (there is no build step), so never cache HTML and cache the rest briefly.
-  res.writeHead(200, {
+  // The theme is the one big file and it never changes within a deploy, so it gets a long one.
+  const head = {
     'Content-Type': MIME[ext] || 'application/octet-stream',
-    'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=300',
-  });
+    'Cache-Control': ext === '.html' ? 'no-cache'
+      : ext === '.mp3' ? 'public, max-age=86400'
+      : 'public, max-age=300',
+    'Accept-Ranges': 'bytes',
+  };
+
+  /* Byte ranges.
+   *
+   * Only media ever asks for one, but it is not optional for media: Safari will not play an
+   * <audio> source AT ALL from a server that answers a Range request with a 200 and the whole
+   * file. It issues `bytes=0-1`, expects a 206, and gives up on the element when it does not get
+   * one. Chrome is forgiving, which is exactly how this ships broken for half the office. */
+  const asked = /^bytes=(\d*)-(\d*)$/.exec((req.headers.range || '').trim());
+  if (asked && size > 0) {
+    const [, rawStart, rawEnd] = asked;
+    let start, end;
+    if (rawStart === '') {
+      // A suffix range: the LAST n bytes. `bytes=-500` is not "from 0 to 500".
+      const n = Number(rawEnd);
+      if (!rawEnd || !Number.isFinite(n)) return range416(res, size);
+      start = Math.max(0, size - n);
+      end = size - 1;
+    } else {
+      start = Number(rawStart);
+      end = rawEnd === '' ? size - 1 : Math.min(Number(rawEnd), size - 1);
+    }
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= size) {
+      return range416(res, size);
+    }
+    res.writeHead(206, {
+      ...head,
+      'Content-Range': `bytes ${start}-${end}/${size}`,
+      'Content-Length': end - start + 1,
+    });
+    return fs.createReadStream(file, { start, end }).pipe(res);
+  }
+
+  res.writeHead(200, { ...head, 'Content-Length': size });
   fs.createReadStream(file).pipe(res);
+}
+
+function range416(res, size) {
+  res.writeHead(416, { 'Content-Range': `bytes */${size}`, 'Content-Type': 'text/plain' });
+  res.end('range not satisfiable');
 }
 
 /**
