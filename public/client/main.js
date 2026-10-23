@@ -265,7 +265,7 @@ const net = createNet({
             quips.died();
           } else if (e.by === world.you) {
             sfx.play('kill');
-            renderer?.addFlash(0.22, '255,210,31');    // a gold blink: that one was yours
+            renderer?.addFlash(0.22, '134,217,255');   // an accent blink: that one was yours
           } else sfx.playAtUnits('death', e.x, e.y);
           break;
         }
@@ -331,7 +331,7 @@ const net = createNet({
 
     sfx.play('streak', undefined, undefined, { step });
     if (m.i === world.you) {
-      renderer?.addFlash(0.22 + step * 0.3, m.ace ? '179,107,255' : '255,210,31');
+      renderer?.addFlash(0.22 + step * 0.3, m.ace ? '179,107,255' : '134,217,255');
       renderer?.addShake(0.2 + step * 0.4);
     }
     killFeed(`${m.i === world.you ? 'you' : m.name}: ${m.kind}!!`,

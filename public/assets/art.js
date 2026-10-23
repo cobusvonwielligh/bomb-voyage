@@ -19,7 +19,9 @@ export const PALETTE = {
   iron: '#262c38', column: '#59627a', shrub: '#3f6b46',
   outline: '#161b24',
   fireCore: '#fff4c2', fireMid: '#ff9b3d', fireEdge: '#e63f27',
-  gold: '#ffd21f', text: '#e8eef7',
+  // The interface accent, matching --gold in style.css. Baby blue, so the HUD belongs to the
+  // sea rather than competing with the fire. Actual treasure keeps its own yellow below.
+  gold: '#86d9ff', treasure: '#ffd21f', text: '#e8eef7',
   // The pirate. Taken off the mascot so the sprites and the artwork are the same character: red
   // bandana, cream sash, dark boots. Every one of these is a neutral against all sixteen player
   // hues, which is what lets the costume stay constant while the coat carries the identity.
@@ -510,7 +512,7 @@ export function drawPlayer(c, { dir = 3, frame = 0, colorIndex = 0, dead = false
     px(c, -7, -1, 14, 2, PIRATE.sash);
     c.restore();
     px(c, 1, 12 + bob, 10, 2, PIRATE.belt);
-    px(c, 5, 12 + bob, 2, 2, PALETTE.gold);
+    px(c, 5, 12 + bob, 2, 2, PALETTE.treasure);     // the belt buckle: real gold
   }
 
   // A rim of light down the top-left edge, matching the one light direction the whole tile set
@@ -549,7 +551,7 @@ export function drawPlayer(c, { dir = 3, frame = 0, colorIndex = 0, dead = false
       px(c, 7, 4 + bob, 2, 2, PIRATE.patch);             // eye patch
       px(c, 6, 4 + bob, 4, 1, PIRATE.patchStrap);        // strap, held inside the head
       px(c, 4, 6 + bob, 4, 1, PIRATE.grin);              // grin
-      px(c, 7, 6 + bob, 1, 1, PALETTE.gold);             // the gold tooth, same as the mascot
+      px(c, 7, 6 + bob, 1, 1, PALETTE.treasure);         // the gold tooth, same as the mascot
     }
   }
 
