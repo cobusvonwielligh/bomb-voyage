@@ -36,7 +36,7 @@ Every one of these is a thing that commonly gets a game blocked, and the choice 
 
 | Common blocker | What we do |
 |---|---|
-| Non-standard ports | **443 only.** Nothing else is exposed. |
+| Non-standard ports | **All game traffic on 443.** Port 80 is open inbound too, but only to serve the HTTP→HTTPS redirect and Let's Encrypt renewals — never game traffic. Nothing else is exposed. |
 | Plain `ws://` upgrade on port 80 | **`wss://` on 443.** TLS-wrapped, so proxies pass it as HTTPS. |
 | Multiple domains / CDNs | **One hostname.** `Content-Security-Policy: default-src 'self'` — the page is incapable of requesting anything else. |
 | Web fonts, analytics, Google APIs | None. Zero external requests. Verify in the Network tab. |
@@ -55,8 +55,8 @@ Every one of these is a thing that commonly gets a game blocked, and the choice 
 
 1. **Instance.** EC2 `t3.micro`, Amazon Linux 2023, in the region nearest the players — see §6.
    Attach an **Elastic IP** so the address is stable for the IT allow-list.
-2. **Security group.** Inbound: 443 from `0.0.0.0/0`, 22 from your IP only. Nothing else.
-   Specifically **not** 8080.
+2. **Security group.** Inbound: 443 from `0.0.0.0/0`, 80 from `0.0.0.0/0` (redirect + ACME only),
+   22 from your IP only. Nothing else — specifically **not** 8080.
 3. **DNS.** An `A` record for `game.<domain>` → the Elastic IP. No domain available? Use
    `<name>.duckdns.org` or `<ip>.sslip.io` — still one hostname, still free, still works with
    Let's Encrypt.
