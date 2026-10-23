@@ -39,6 +39,18 @@
   --rim: 1.5px 0 0 #000, -1.5px 0 0 #000, 0 1.5px 0 #000, 0 -1.5px 0 #000, 0 0 12px #000b;
 
   /* The crown, inline so it can be a CSS mask and take whatever colour it is used in. */
+  /* A texture for the panels, built out of gradients rather than an image.
+   *
+   * Three layers, none of them individually visible: a fine diagonal weave at about one percent
+   * white, the same weave crossed the other way at half that, and a very wide soft highlight
+   * falling from the top left. Separately they are invisible; together they stop a flat #11161e
+   * rectangle reading as a hole cut in the screen, which is what large unbroken fills do on a
+   * dark page. Nothing here costs a request or a decode. */
+  --weave:
+    repeating-linear-gradient(45deg,  #ffffff05 0 1px, #00000000 1px 4px),
+    repeating-linear-gradient(-45deg, #ffffff03 0 1px, #00000000 1px 5px),
+    radial-gradient(120% 90% at 12% 0%, #ffffff0a, #ffffff00 58%);
+
   --crown: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 12h12l1-7-3.5 2.5L8 3 4.5 7.5 1 5z'/%3E%3Crect x='2' y='13' width='12' height='2'/%3E%3C/svg%3E");
 }
 
@@ -102,6 +114,9 @@ canvas#game {
   position: relative;
   border: 2px solid transparent;
   background:
+    /* Texture first, so it lies over the fill and under the content. All three are clipped to
+       the padding box, or the weave would run through the animated border and muddy it. */
+    var(--weave) padding-box,
     linear-gradient(var(--panel-fill, #11161ee6), var(--panel-fill, #11161ee6)) padding-box,
     /* Centred on the bottom-right corner rather than the middle: the sweep then runs across the
        whole panel in one direction instead of pinwheeling about its centre, which reads as light
@@ -114,7 +129,11 @@ canvas#game {
 /* Browsers without @property animate nothing and simply show a static gradient, which is a fine
  * place to land. Safari below 16.4 is the realistic case. */
 @supports not (background: conic-gradient(from 0deg, red, blue)) {
-  .edge { border-color: #ffd21f66; background: var(--panel-fill, #11161ee6); }
+  .edge {
+    border-color: #ffd21f66;
+    background: var(--weave) padding-box,
+      linear-gradient(var(--panel-fill, #11161ee6), var(--panel-fill, #11161ee6)) padding-box;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -607,18 +626,19 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   box-shadow: 0 0 80px #6b21a840, 0 22px 60px #000b;
 }
 .card.small { width: 340px; text-align: center; }
+/* Sitting lower in the card now that the instruction line under it is gone: the countdown button
+   is the only other thing here, and the two were crowding the top edge together. */
 #deadTitle {
-  font-family: var(--display); color: var(--bad); font-size: 30px; margin-bottom: 8px;
+  font-family: var(--display); color: var(--bad); font-size: 30px;
+  margin: 14px 0 16px;
   text-shadow: var(--rim);
 }
-#deadText { white-space: pre-line; }
 /* The countdown gets its own face. The display font is for titles you read once, and this is a
  * number that changes every second a few inches from your eyes. */
 #respawn {
   width: 100%; margin-top: 16px; padding: 13px; font-family: var(--nums);
   font-size: 15px; font-weight: 700; letter-spacing: .1em; text-transform: none;
 }
-#deadText { font-family: var(--nums); font-size: 12px; letter-spacing: .02em; }
 /* Counting down, not broken: dimmed but still legible, and the number keeps moving. */
 #respawn:disabled { opacity: .55; }
 #respawn:disabled:hover { background: transparent; color: var(--gold); }
@@ -628,7 +648,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 #roundTable { display: none; margin-top: 14px; text-align: left; }
 .card.round { width: 460px; }
 .card.round #roundTable { display: block; }
-.card.round #deadText, .card.round #respawn { display: none; }
+.card.round #respawn { display: none; }
 .card.round #deadTitle { color: var(--gold); }
 #roundTable table { width: 100%; border-collapse: collapse; font-size: 13px; }
 #roundTable th {

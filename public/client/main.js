@@ -488,9 +488,6 @@ function drawRespawn(me) {
   btn.disabled = left > 0;
   // Calm: this ticks once a second right in front of you, and the full bump is a strobe.
   setValue(btn, left > 0 ? `respawn in ${secs}\u2026` : 'respawn', { calm: true });
-  $('deadText').textContent = left > 0
-    ? 'hold space to go again\u2026'
-    : 'space to respawn \u00b7 esc to leave';
 }
 
 function drawHud() {
