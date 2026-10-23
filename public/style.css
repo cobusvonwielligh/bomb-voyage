@@ -845,16 +845,15 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   user-select: none;
   filter: drop-shadow(0 18px 30px #000c);
 }
-/* Down at the foot of the card, centred over the GitHub mark.
+/* Down at the foot of the card, overlapping its bottom-left corner.
  *
- * The card's left padding is 48px and the mark sits just inside it, so the stack's centre lands
- * at about 70px from the card's left edge — hence the negative left offset against a 190px
- * image. Mostly below the panel with only its top third over it: a prop that merely clips the
- * edge reads as resting against the card, where one sitting squarely on top reads as a sticker
- * stuck over the controls. */
+ * Far enough left that the stack straddles the card's edge rather than sitting inside it, and
+ * high enough that a good half of it is against the panel. A prop that only clips the corner
+ * reads as resting against the card; one sitting squarely on top reads as a sticker stuck over
+ * the controls, and one too far below looks like it fell off. */
 #propBarrels {
   width: 190px; height: auto;
-  left: -25px; bottom: -132px;
+  left: -62px; bottom: -94px;
   transform: rotate(-6deg);
   animation: propA 9s ease-in-out infinite;
 }
