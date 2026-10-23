@@ -421,11 +421,15 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * he is decoration, and the card is not. */
 #menuWrap { display: flex; align-items: flex-start; }
 #mascot {
-  width: 240px; height: 240px; image-rendering: pixelated;
-  pointer-events: none; filter: drop-shadow(0 12px 22px #000c);
-  margin: -56px 0 0 -54px;
+  --panel-fill: #141b24;
+  width: 240px; height: 240px; border-radius: 50%;
+  margin: -62px 0 0 -58px;
   position: relative; z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+  filter: drop-shadow(0 14px 26px #000d);
 }
+#mascot img { display: block; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
 @media (max-width: 920px) { #mascot { display: none; } }
 
 h1 {

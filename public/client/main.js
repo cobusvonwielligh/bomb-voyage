@@ -14,25 +14,12 @@ import { createWorld } from './world.js';
 import { createRenderer } from './render.js';
 import { createMusic } from './audio/music.js';
 import { createSfx } from './audio/sfx.js';
-import { drawMascot } from '/assets/art.js';
 
 const $ = id => document.getElementById(id);
 
-// ─── landing mascot ───────────────────────────────────────────────────────────
-
-(function mascot() {
-  const c = $('mascot').getContext('2d');
-  c.imageSmoothingEnabled = false;
-  c.scale(2, 2);                                   // 96px of art, drawn at 192
-  const t0 = performance.now();
-  (function paint() {
-    if ($('menu').style.display !== 'none') {
-      c.clearRect(0, 0, 96, 96);
-      drawMascot(c, (performance.now() - t0) / 1000);
-    }
-    requestAnimationFrame(paint);
-  })();
-})();
+// The mascot is an image now, ringed by the same moving gradient as the panels. The hand-drawn
+// canvas it replaced ran a requestAnimationFrame loop the whole time the menu was open, which
+// is a lot of machinery for a picture that does not move.
 const world = createWorld();
 let renderer = null;
 let running = false;

@@ -13,3 +13,4 @@ config.ini
 *.log
 .DS_Store
 .env
+art-source/
