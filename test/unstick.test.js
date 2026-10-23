@@ -195,20 +195,40 @@ test('a bomb is still solid once you are clear of it', () => {
   assert.ok((p.y >> 8) === ty, 'walked onto a bomb it should have been stopped by');
 });
 
-test('a bomb never makes the unstick fire, however it is placed', () => {
-  // The unstick exists for positions you cannot walk out of. A bomb is not one of those — you
-  // can always step off it — so it must never be the reason you get pushed.
+test('standing on a bomb is never a shove, and standing in a wall always is', () => {
+  // A bomb you are squarely on top of must not push you anywhere: you can walk off it, and
+  // being moved when you were perfectly capable of moving yourself is the complaint this whole
+  // area exists to answer. A wall grown on top of you is the opposite — inescapable without
+  // help — and still gets the full seatbelt.
   const { s, tx, ty } = world();
   const p = seat(s, 0, tx, ty);
-  place(s, p, IN_BOMB);
-  assert.equal(unstick(s, p), false, 'pushed by a bomb under its own owner');
+  setTile(s.map, tx + 1, ty, BLOCK.SOFT, BLOCK_HP[BLOCK.SOFT]);
+  p.dir = DIR_R;
+  place(s, p, IN_BOMB);                      // falls back to the tile underfoot
+  assert.deepEqual([s.bombs[0]?.tx, s.bombs[0]?.ty], [tx, ty]);
+  assert.equal(unstick(s, p), false, 'pushed by a bomb it is standing in the middle of');
 
-  // And somebody else's bomb dropped on the tile you are standing on.
-  const q = seat(s, 1, tx, ty);
-  q.x = tileCentre(tx); q.y = tileCentre(ty);
-  assert.equal(unstick(s, q), false, 'pushed by somebody else dropping a bomb on you');
-
-  // A wall, though, still gets the seatbelt.
   setTile(s.map, tx, ty, BLOCK.SOFT, BLOCK_HP[BLOCK.SOFT]);
   assert.equal(unstick(s, p), true, 'a wall grown on top of you must still move you');
+});
+
+test('easing off the edge of a bomb is a nudge, not a shove', () => {
+  // The bomb firms up a few units before you are completely clear, so there is something to
+  // ease out of and stepping off one has a little weight. What must never come back is the
+  // third of a tile the old centre-based rule produced.
+  const { s, tx, ty } = world();
+  const p = seat(s, 0, tx, ty);
+  setTile(s.map, tx, ty + 1, BLOCK.SOFT, BLOCK_HP[BLOCK.SOFT]);
+  p.dir = DIR_D;
+  place(s, p, IN_BOMB);
+  assert.deepEqual([s.bombs[0]?.tx, s.bombs[0]?.ty], [tx, ty]);
+
+  let nudges = 0, travelled = 0;
+  for (let n = 0; n < 60; n++) {
+    const before = p.x;
+    if (unstick(s, p)) { nudges++; travelled += Math.abs(p.x - before); }
+    step(s, p, IN_RIGHT);
+  }
+  assert.ok(travelled <= 24, `eased ${travelled} units off a bomb — that is a shove`);
+  assert.ok(!blocked(s, p, p.x, p.y), 'left inside something');
 });

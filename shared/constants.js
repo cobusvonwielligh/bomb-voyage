@@ -295,8 +295,17 @@ export const STATUS_TICKS = {
  * reconciliation. It is a sum of two sines on the tick, seeded per player, so both machines
  * compute the same stagger and it still never repeats in a way anybody notices.
  */
-export const DRUNK_SWAY_UNITS = 20;
+export const DRUNK_SWAY_UNITS = 34;
 export const DRUNK_SWAY_RATE_A = 0.09, DRUNK_SWAY_RATE_B = 0.041;
+/* How often a drunk takes a step that was not asked for.
+ *
+ * The sway alone is a wobble you can simply correct for after a few seconds. The stagger is
+ * what makes it genuinely hard: for a handful of ticks the axis you are travelling on is not
+ * the one you pressed. Deterministic in (tick, seat) like everything else here, so the client
+ * predicts the stumble rather than being corrected into it.
+ */
+export const DRUNK_STAGGER_EVERY = 47;     // ticks between stumbles, prime so it never syncs
+export const DRUNK_STAGGER_TICKS = 7;      // how long one lasts
 
 export const INVULN_TICKS_SHIELD = 60; // 2 s after a shield breaks
 

@@ -39,6 +39,8 @@ export function createRenderer(canvas, world) {
 
   // Sun glints on the open water. Cheap, stateless, and most of what makes a surface read wet.
   const GLINTS = 46;
+  const TIPSY_BUBBLES = 7;
+  const TIPSY_LIFE_S = 1.3;
   const GLINT_LIFE_S = 1.6;
   /** Deterministic 0..1 from one integer, so a glint stays put for its whole life. */
   const hash01 = n => {
@@ -1065,6 +1067,7 @@ export function createRenderer(canvas, world) {
     for (const p of alive) drawOne(ctx, p, ox, oy, p.i === world.you);
 
     drawAim(ox, oy);
+    for (const p of alive) drawTipsy(ctx, p, ox, oy);
     for (const p of alive) drawStamina(ctx, p, ox, oy);
     drawFloaters(ox, oy, dtMs);
 
@@ -1240,6 +1243,47 @@ export function createRenderer(canvas, world) {
     c.strokeText(p.name, px + TILE_PX / 2, py - 3);
     c.fillStyle = isMe ? PALETTE.gold : playerShades(p.i).light;
     c.fillText(p.name, px + TILE_PX / 2, py - 3);
+  }
+
+  /**
+   * Bubbles off a drunk. Theirs alone — it is a status on one player, and the only way to see
+   * at a glance which of sixteen pirates has been at the rum.
+   *
+   * Stateless, like the sun glints: position and life come from a hash of the bubble's index
+   * and a slowly advancing epoch, so each one rises for its whole short life and a new one
+   * starts somewhere else. No arrays, no allocation, nothing to clean up when a player dies.
+   */
+  function drawTipsy(c, p, ox, oy) {
+    if (!(p.status & STATUS.DRUNK) || !p.alive) return;
+    const bx = ox + (p.rx / UNITS_PER_TILE) * TILE_PX;
+    const by = oy + (p.ry / UNITS_PER_TILE) * TILE_PX;
+
+    c.save();
+    for (let i = 0; i < TIPSY_BUBBLES; i++) {
+      const phase = seaT / TIPSY_LIFE_S + i * 0.41 + p.i * 0.17;
+      const epoch = Math.floor(phase);
+      const f = phase % 1;
+      const seed = i * 2654 + epoch * 7919 + p.i * 31;
+      // Drifting up and sideways, wider as it rises, the way a bubble actually goes.
+      const rise = 6 + f * 22;
+      const sway = Math.sin(f * 4 + seed) * (2 + f * 5);
+      const r = 1.1 + hash01(seed) * 1.8;
+      c.globalAlpha = (1 - f) * 0.5;
+      c.fillStyle = '#cfe7f5';
+      c.beginPath();
+      c.arc(bx + sway + (hash01(seed + 1) - 0.5) * 10, by - rise, r, 0, 7);
+      c.fill();
+      // A highlight on the bigger ones, which is what makes a dot read as a bubble.
+      if (r > 2) {
+        c.globalAlpha = (1 - f) * 0.7;
+        c.fillStyle = '#ffffff';
+        c.beginPath();
+        c.arc(bx + sway + (hash01(seed + 1) - 0.5) * 10 - r * 0.3, by - rise - r * 0.3, r * 0.35, 0, 7);
+        c.fill();
+      }
+    }
+    c.restore();
+    c.globalAlpha = 1;
   }
 
   /**

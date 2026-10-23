@@ -808,6 +808,12 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 }
 .ghost:hover { color: var(--ink); border-color: #ffffff38; background: #ffffff0f; }
 .card.round .ghost { display: none; }
+
+/* Leaving is the one choice on this card you cannot undo, so it is the one that is coloured.
+   Still a ghost button — it is an alternative, not the thing you came here to press — but a red
+   one, which is the convention for "this ends it". */
+#deadLeave { color: #c86a62; border-color: #e8655a3d; }
+#deadLeave:hover { color: #ff8a7e; border-color: #e8655a8c; background: #e8655a14; }
 /* The countdown gets its own face. The display font is for titles you read once, and this is a
  * number that changes every second a few inches from your eyes. */
 /* The one thing you came here to press, so it gets the same treatment as PLAY: filled, gold,

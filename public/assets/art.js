@@ -683,32 +683,57 @@ export const PERK_ART = {
   // Rum: a bottle with a cork and a pale label. The one perk whose silhouette is a real object
   // rather than a symbol, which is what makes it read instantly even at a small size.
   16: c => {
-    rr(c, 14, 3, 4, 5, 1, '#8a5a32');                     // neck
-    rr(c, 14.5, 1.5, 3, 2.5, 1, '#d8c49a');               // cork
+    /* A rum bottle. The hardest icon in the set, because a bottle on a brown plinth is a brown
+     * shape on a brown shape — so the glass is dark GREEN, which is both what rum actually
+     * comes in and the only colour that separates cleanly from the wood behind it.
+     *
+     * Everything else is silhouette work: square shoulders rather than a smooth taper, a neck
+     * wide enough to survive at a third of this size, and a hard outline round the lot. The
+     * three crosses are drawn as strokes, not text — a 7px font renders differently on every
+     * machine and the crossed diagonals are more legible than any typeface at this size.
+     */
+    const GLASS = '#2f6340', GLASS_DARK = '#17351f', CORK = '#c49a5e';
+
+    // Cork and neck, outlined together with the body below.
+    rr(c, 13.5, 1.5, 5, 3.5, 1, CORK);
+    px(c, 14, 2, 1.6, 2.5, '#e0bb84');
+
     c.beginPath();
-    c.moveTo(14, 8);
-    c.bezierCurveTo(9, 11, 8.5, 14, 8.5, 18);
-    c.lineTo(8.5, 25);
-    c.quadraticCurveTo(8.5, 28, 11.5, 28);
-    c.lineTo(20.5, 28);
-    c.quadraticCurveTo(23.5, 28, 23.5, 25);
-    c.lineTo(23.5, 18);
-    c.bezierCurveTo(23.5, 14, 23, 11, 18, 8);
+    c.moveTo(13.5, 5);
+    c.lineTo(18.5, 5);
+    c.lineTo(18.5, 9.5);
+    c.bezierCurveTo(22.5, 11.5, 23.5, 14, 23.5, 17.5);   // right shoulder
+    c.lineTo(23.5, 26);
+    c.quadraticCurveTo(23.5, 28.5, 21, 28.5);
+    c.lineTo(11, 28.5);
+    c.quadraticCurveTo(8.5, 28.5, 8.5, 26);
+    c.lineTo(8.5, 17.5);
+    c.bezierCurveTo(8.5, 14, 9.5, 11.5, 13.5, 9.5);      // left shoulder
     c.closePath();
-    c.fillStyle = '#6b4327'; c.fill();
-    px(c, 10, 12, 2, 13, 'rgba(255,255,255,0.18)');       // the highlight down one side
-    // The label, and the only three letters that have ever meant rum. Drawn as strokes rather
-    // than as text: a 7px font renders differently on every machine, and at this size the
-    // crossed diagonals are more legible than any typeface would be anyway.
-    rr(c, 9, 16.5, 14, 8, 1, '#e6dcc2');
+    c.fillStyle = GLASS;
+    c.fill();
+    c.strokeStyle = GLASS_DARK;
+    c.lineWidth = 1.4;
+    c.stroke();
+
+    // One bright edge down the left of the glass and a dark one down the right: that pair is
+    // what makes a flat shape read as round.
+    px(c, 10.5, 13, 1.6, 13, 'rgba(255,255,255,0.3)');
+    px(c, 21, 13, 1.6, 13, 'rgba(0,0,0,0.28)');
+
+    // The label, inset from the glass so a rim of bottle shows either side of it.
+    rr(c, 9.5, 16, 13, 8.5, 1, '#efe6cc');
+    px(c, 9.5, 16, 13, 1, '#fffaf0');
+    px(c, 9.5, 23.5, 13, 1, 'rgba(0,0,0,0.12)');
+
     c.save();
-    c.strokeStyle = '#6d3f1c';
-    c.lineWidth = 1.3;
+    c.strokeStyle = '#5e3414';
+    c.lineWidth = 1.5;
     c.lineCap = 'round';
-    for (const x of [10.5, 15, 19.5]) {
+    for (const x of [12.5, 16, 19.5]) {
       c.beginPath();
-      c.moveTo(x - 1.6, 18.4); c.lineTo(x + 1.6, 22.6);
-      c.moveTo(x + 1.6, 18.4); c.lineTo(x - 1.6, 22.6);
+      c.moveTo(x - 1.5, 18.2); c.lineTo(x + 1.5, 22.3);
+      c.moveTo(x + 1.5, 18.2); c.lineTo(x - 1.5, 22.3);
       c.stroke();
     }
     c.restore();

@@ -42,6 +42,8 @@ const SECONDS_PER_BEAT = 60 / BPM;
 const STEP_DUR = SECONDS_PER_BEAT / 4;
 const STEPS_PER_BAR = 16;          // sixteenth notes
 const BARS = 8;
+// Bars of build before the main section. Two, deliberately: see `intro` in schedule().
+const INTRO_BARS = 2;
 const TOTAL_STEPS = STEPS_PER_BAR * BARS;
 
 const LOOKAHEAD_S = 0.12;
@@ -59,10 +61,10 @@ const XFADE_S = 2.5;
  * down, so the statement sits under the restatement rather than beside it.
  */
 const CHORDS = [
-  { bass: 38, notes: [50, 53, 57] },   // Dm, voiced low
-  { bass: 34, notes: [50, 53, 58] },   // Bb
-  { bass: 41, notes: [48, 53, 57] },   // F
-  { bass: 36, notes: [48, 52, 55] },   // C
+  { bass: 38, notes: [50, 53, 57] },   // Dm, voiced low — the intro
+  { bass: 34, notes: [50, 53, 58] },   // Bb, voiced low
+  { bass: 41, notes: [60, 65, 69] },   // F  — the main section starts here
+  { bass: 36, notes: [60, 64, 67] },   // C
   { bass: 38, notes: [62, 65, 69] },   // Dm, open
   { bass: 34, notes: [62, 65, 70] },   // Bb
   { bass: 41, notes: [60, 65, 69] },   // F
@@ -77,17 +79,16 @@ const CHORDS = [
  */
 const PULSE_BASS = [0, null, 12, null, 0, null, 12, null, 0, null, 12, null, 0, null, 12, null];
 
-/* How much of the arpeggio plays, bar by bar, through the front half.
+/* How much of the arpeggio plays, through the two-bar intro.
  *
- * A 1 is a sixteenth that sounds. Starting at a quarter and filling in over four bars is a
- * build: the listener hears the same figure getting denser rather than a new thing arriving,
- * which is why bar 5 lands as a chorus instead of as a change of subject.
+ * A 1 is a sixteenth that sounds. Two bars, not four: the intro is a door, and the main section
+ * is the room. Quarter-notes then most of the sixteenths means the listener hears the same
+ * figure getting denser rather than a new thing arriving, which is why bar 3 lands as an
+ * arrival instead of as a change of subject.
  */
 const ARP_GATE = [
   [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0],
-  [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
-  [1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0],
-  [1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+  [1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1],
 ];
 
 /* The synthwave engine room. Indices into a three-octave stack of the bar's chord.
@@ -115,11 +116,22 @@ const ARP_ROLL = [0, 2, 4, 7, 5, 4, 6, 8, 7, 5, 3, 4, 2, 5, 3, 1];
  * D natural minor throughout, over Dm-Bb-F-C. The raised 7th (C#) is deliberately absent: the
  * flat 7 is the whole difference between a sea shanty and a vampire film.
  */
+/* The hook, rebuilt around the one figure everybody already knows from a pirate film.
+ *
+ * That figure is a PAIR OF REPEATED NOTES CLIMBING BY STEP — "da-da DA-DA, da-da DA-DA" —
+ * answered by a leap. It is not subtle and it is not supposed to be: the repeated note is what
+ * makes it singable after one listen, and the step up each time is what stops it being a
+ * drone. Three statements of the cell, each a step higher, then a fall home.
+ *
+ * It enters two eighths into the bar rather than on the downbeat. A melody that starts exactly
+ * where the section does arrives with the section; two beats of arpeggio first and it arrives
+ * ON TOP of something, which is the difference between a chorus and a change of track.
+ */
 const LEAD = [
-  null, 62, 62, 69, null, 69, 67, 69,   // Dm — pickup, then hammer the fifth. This is the hook.
-  null, 70, 69, 67, 65, null, null, null, // Bb — answer it falling, and leave a bar of air
-  null, 60, 60, 69, null, 69, 72, 69,   // F  — the SAME cell a fourth up: repetition is the hook
-  74, 72, 69, 67, 62, null, null, null, // C  — run home down the scale, land on the tonic
+  null, null, 62, 62, 65, 67, null, null,   // Dm — late pickup: D D up to F G
+  69, null, 69, 67, 65, null, null, null,   // Bb — leap to the fifth, fall back, breathe
+  69, 69, 70, 72, 74, null, 74, null,       // F  — the cell again, a step up, landing high
+  72, 70, 69, 65, 62, null, null, null,     // C  — down the scale and home to the tonic
 ];
 
 /* An octave shout on the strong beats of bars 1 and 3.
@@ -129,9 +141,9 @@ const LEAD = [
  * everything and it stops being an accent.
  */
 const LEAD_OCTAVE = [
-  0, 0, 0, 1, 0, 1, 0, 1,
   0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 1, 0, 1, 1, 1,
+  1, 0, 1, 0, 0, 0, 0, 0,
+  0, 0, 0, 1, 1, 0, 1, 0,
   0, 0, 0, 0, 0, 0, 0, 0,
 ];
 
@@ -296,16 +308,23 @@ function createTheme({ bus }) {
     const bar = Math.floor(s / STEPS_PER_BAR);
     const n = s % STEPS_PER_BAR;
     const chord = CHORDS[bar];
-    const funk = bar < 4;
+    /* Two bars of intro, six of the main section.
+     *
+     * The synthwave half is the track; the build in front of it is an introduction, and an
+     * introduction that lasts as long as the thing it introduces is a second track. The hook
+     * still waits until bar 5, so the main section gets two bars of arpeggio on its own before
+     * the melody arrives on top of it.
+     */
+    const intro = bar < INTRO_BARS;
 
     if (n === 0) pad(t, chord.notes, STEP_DUR * STEPS_PER_BAR);
 
     // Four on the floor through the whole loop. It is the one thing both halves share, which is
-    // what keeps a funk vamp and a synthwave arpeggio sounding like the same piece of music.
+    // what keeps the intro and the main section sounding like one piece of music.
     if (n % 4 === 0) kick(t);
-    if (n === 4 || n === 12) snare(t, funk ? 0.085 : 0.12);
+    if (n === 4 || n === 12) snare(t, intro ? 0.085 : 0.12);
 
-    if (funk) {
+    if (intro) {
       // Offbeat sixteenth hats: the shuffle between the kick and the bass, and the only thing
       // in the front half moving faster than an eighth until the build.
       if (n % 2 === 1) hat(t, n === 15);
@@ -319,13 +338,15 @@ function createTheme({ bus }) {
       }
       // The build: a rising noise sweep across the last bar, which is the thing that makes the
       // hook arrive rather than merely start.
-      if (bar === 3 && n === 0) sweep(t, STEP_DUR * STEPS_PER_BAR);
+      if (bar === INTRO_BARS - 1 && n === 0) sweep(t, STEP_DUR * STEPS_PER_BAR);
     } else {
       if (n % 2 === 1) hat(t, n === 7 || n === 15);
       if (n % 2 === 0) bass(t, chord.bass + (n === 6 || n === 14 ? 12 : 0), STEP_DUR * 1.6);
       const idx = ARP_ROLL[n];
       arp(t, chord.notes[idx % 3] + Math.floor(idx / 3) * 12);
-      const slot = (bar - 4) * 8 + (n >> 1);
+      // The hook occupies the last four bars, so the main section runs two bars of arpeggio
+      // on its own first. A negative slot simply has no note in it.
+      const slot = (bar - (BARS - 4)) * 8 + (n >> 1);
       const note = LEAD[slot];
       if (note && n % 2 === 0) {
         lead(t, note);

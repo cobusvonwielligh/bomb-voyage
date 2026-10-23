@@ -9,6 +9,7 @@ import {
   STAMINA_MAX, STAMINA_DRAIN_PER_TICK, STAMINA_REGEN_MOVING, STAMINA_REGEN_IDLE,
   STAMINA_RECOVER_UNITS, STAMINA_TIRED_NUM, STAMINA_TIRED_DEN, staminaMaxFor,
   DRUNK_SWAY_UNITS, DRUNK_SWAY_RATE_A, DRUNK_SWAY_RATE_B,
+  DRUNK_STAGGER_EVERY, DRUNK_STAGGER_TICKS,
   IN_RIGHT, IN_UP, IN_LEFT, IN_DOWN, DIR_R, DIR_U, DIR_L, DIR_D, STATUS,
 } from '../constants.js';
 import { walkable, has, tileCentre } from './state.js';
@@ -131,7 +132,11 @@ function bombSolid(state, p, tx, ty) {
      * clear of it, so there is nothing left to push out and the unstick never fires at all.
      * The rule stays observable from the bomb record alone, so both machines still agree.
      */
-    const half = halfBox(p);
+    // Three quarters of the box, not all of it. At the full width the bomb only turned solid
+    // once you were completely clear, so there was never anything to push and stepping off one
+    // had no weight to it at all. At three quarters it firms up a few units early, which is a
+    // nudge you can feel and still nowhere near the third of a tile it used to shove you.
+    const half = (halfBox(p) * 3) >> 2;
     const overlaps = ((p.x - half) >> 8) <= tx && ((p.x + half - 1) >> 8) >= tx
                   && ((p.y - half) >> 8) <= ty && ((p.y + half - 1) >> 8) >= ty;
     return !overlaps;
@@ -287,7 +292,25 @@ export function unstick(state, p) {
    * than a property of the current tuning: even if bomb solidity changes again, the unstick
    * cannot start pushing people off bombs as a side effect.
    */
-  if (!blocked(state, p, p.x, p.y, false)) return false;
+  const stuckInTerrain = blocked(state, p, p.x, p.y, false);
+  if (!stuckInTerrain) {
+    /* Not in a wall, but possibly a few units inside a bomb that has just firmed up.
+     *
+     * Worth a nudge rather than nothing: a bomb you are standing fractionally inside should
+     * ease you out so it feels like an object, and the distance involved is a handful of units
+     * rather than the eighty the old centre-based rule produced. Half the terrain pace, because
+     * this one is cosmetic and a wall is not.
+     */
+    if (!blocked(state, p, p.x, p.y)) return false;
+    const gentle = Math.max(1, UNSTICK_MIN_PACE >> 1);
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = p.x + dx * gentle, ny = p.y + dy * gentle;
+      if (blocked(state, p, nx, ny)) continue;
+      p.x = nx; p.y = ny;
+      return true;
+    }
+    return false;
+  }
 
   const tx = p.x >> 8, ty = p.y >> 8;
   // Nearest first, and in a fixed order so two machines always pick the same way out.
@@ -355,6 +378,14 @@ export function step(state, p, mask) {
    */
   if (has(p, STATUS.DRUNK)) {
     const t = state.tick + p.i * 37;
+    // The stagger: briefly, you go the way you were NOT pointing. Only ever sideways — a
+    // reversal would read as broken controls, where a lurch into the wall beside you reads as
+    // being unable to walk straight, which is the thing being modelled.
+    if (t % DRUNK_STAGGER_EVERY < DRUNK_STAGGER_TICKS) {
+      const lurch = ((t / DRUNK_STAGGER_EVERY) | 0) % 2 ? 1 : -1;
+      if (dx) { dy = lurch; dx = 0; } else { dx = lurch; dy = 0; }
+      p.dir = dx > 0 ? DIR_R : dx < 0 ? DIR_L : dy < 0 ? DIR_U : DIR_D;
+    }
     const sway = Math.round(
       (Math.sin(t * DRUNK_SWAY_RATE_A) + Math.sin(t * DRUNK_SWAY_RATE_B)) * (DRUNK_SWAY_UNITS / 2),
     );

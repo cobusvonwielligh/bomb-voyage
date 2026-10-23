@@ -70,6 +70,15 @@ test('the theme has one chord per bar and four bars per half', () => {
   }
 });
 
+test('the intro is two bars and the main section is six', () => {
+  // An introduction that lasts as long as the thing it introduces is a second track.
+  assert.equal(number(musicSrc, 'INTRO_BARS'), 2);
+  assert.equal(ARP_GATE.length, 2, 'the gate has to cover exactly the intro');
+  assert.match(musicSrc, /const intro = bar < INTRO_BARS;/, 'the split is hard-coded again');
+  // And the hook still sits at the end, so the main section gets two bars to itself first.
+  assert.match(musicSrc, /bar - \(BARS - 4\)/, 'the lead is no longer anchored to the last four bars');
+});
+
 test('both halves are the same progression, the second one voiced higher', () => {
   // The whole structure rests on this. Same four chords twice means the second pass is a
   // chorus rather than a new section, and the ear is free to follow the tune because it
@@ -80,9 +89,14 @@ test('both halves are the same progression, the second one voiced higher', () =>
   // voicing above it that lifts.
   const low = CHORDS.slice(0, 4), high = CHORDS.slice(4);
   assert.deepEqual(low.map(c => c.bass), high.map(c => c.bass), 'the roots changed');
-  for (let i = 0; i < 4; i++) {
+  // Only the two intro bars are voiced low; bars 3 and 4 are already the main section and lift
+  // with it, which is what makes the arrival land a bar before the melody does.
+  for (let i = 0; i < 2; i++) {
     assert.ok(Math.max(...low[i].notes) < Math.max(...high[i].notes),
-      `bar ${i} is not voiced under its restatement`);
+      `intro bar ${i} is not voiced under its restatement`);
+  }
+  for (let i = 2; i < 4; i++) {
+    assert.deepEqual(low[i].notes, high[i].notes, `bar ${i} should already be the open voicing`);
   }
 });
 
@@ -107,10 +121,10 @@ test('the octave bass pulses and never wanders', () => {
   }
 });
 
-test('the front half builds, bar by bar, into the hook', () => {
+test('the intro builds, bar by bar, into the main section', () => {
   // The listener has to hear the same figure getting denser, not a new thing arriving. If the
   // gate did not grow, bar 5 would be a change of subject instead of a chorus.
-  assert.equal(ARP_GATE.length, 4, 'one gate per bar of the front half');
+  assert.equal(ARP_GATE.length, 2, 'one gate per bar of the intro');
   const density = ARP_GATE.map(row => {
     assert.equal(row.length, STEPS_PER_BAR, 'a gate must be one bar of sixteenths');
     return row.filter(Boolean).length;
@@ -120,18 +134,32 @@ test('the front half builds, bar by bar, into the hook', () => {
       `bar ${i} is no denser than bar ${i - 1}: ${density}`);
   }
   assert.ok(density[0] <= 4, 'the first bar is already too busy to build from');
-  assert.ok(density[3] >= 14, 'the last bar does not fill in');
+  assert.ok(density.at(-1) >= 10, 'the last intro bar does not fill in');
   for (const row of ARP_GATE) assert.equal(row[0], 1, 'every bar has to start on the downbeat');
 });
 
-test('the hook states a cell, answers it, and restates it higher', () => {
-  // What makes a shanty singable, and the reason the melody is not just four long notes.
+test('the hook is a repeated-note cell that climbs, and it enters late', () => {
+  // The figure everybody already knows from a pirate film: a pair of repeated notes stepping
+  // up, answered by a leap. The repeated note is what makes it singable after one listen; the
+  // step is what stops it being a drone.
   assert.equal(LEAD.length, 32, 'eight eighth-notes a bar, four bars');
   assert.equal(LEAD_OCTAVE.length, LEAD.length, 'the octave doubling must line up with the lead');
   const bar = i => LEAD.slice(i * 8, i * 8 + 8);
-  const shape = row => row.map(n => (n === null ? '.' : 'x')).join('');
-  assert.equal(shape(bar(0)), shape(bar(2)), 'bars 1 and 3 do not share a rhythm');
-  assert.notDeepEqual(bar(0), bar(2), 'the restatement is at the same pitch — that is a repeat');
+
+  // Enters after the section does, not with it.
+  assert.ok(bar(0).slice(0, 2).every(n => n === null),
+    'the melody starts on the downbeat — it should arrive on top of the arpeggio, not with it');
+  assert.ok(bar(0)[2] !== null, 'and it should not wait longer than that either');
+
+  // The cell: somewhere in the line, the same note twice running, at least twice over.
+  const notes = LEAD.filter(n => n !== null);
+  const pairs = notes.filter((n, i) => i > 0 && n === notes[i - 1]).length;
+  assert.ok(pairs >= 2, `only ${pairs} repeated-note pairs; that is not the hook`);
+
+  // And it climbs: the high point of the third bar is above the high point of the first.
+  const peak = i => Math.max(...bar(i).filter(n => n !== null));
+  assert.ok(peak(2) > peak(0), 'the restatement is not higher than the statement');
+
   for (const i of [1, 3]) {
     assert.ok(bar(i).slice(-2).every(n => n === null), `bar ${i} never stops to breathe`);
   }
@@ -261,8 +289,7 @@ test('the three beds are audibly different, not three spellings of one bed', () 
 test('every note in every table maps to a frequency a person can hear', () => {
   const all = [
     ...CHORDS.flatMap(c => [c.bass, ...c.notes]),
-    ...CHORDS.slice(0, 4).flatMap((c, i) =>
-      PULSE_BASS.filter(v => v !== null).map(v => c.bass + v)),
+    ...CHORDS.flatMap(c => PULSE_BASS.filter(v => v !== null).map(v => c.bass + v)),
     ...CHORDS.slice(4).flatMap(c => ARP_ROLL.map(i => c.notes[i % 3] + Math.floor(i / 3) * 12)),
     ...LEAD.filter(n => n !== null),
     ...BEDS.flatMap(b => b.chords.flatMap(c => [c.bass, ...c.voice])),
