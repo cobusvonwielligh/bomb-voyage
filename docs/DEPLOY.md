@@ -223,17 +223,23 @@ Everything is already parameterised. The whole switch:
    ```bash
    scp -i ~/Downloads/bombs-away.pem infra/bootstrap.sh ec2-user@15.240.88.189:/tmp/
    ssh -i ~/Downloads/bombs-away.pem ec2-user@15.240.88.189 \
-     'HOST=bombvoyage.co.za ALT_HOSTS=www.bombvoyage.co.za EMAIL=you@example.com bash /tmp/bootstrap.sh'
+     'HOST=bombvoyage.online ALT_HOSTS="www.bombvoyage.online 15.240.88.189.sslip.io" \
+      EMAIL=you@example.com bash /tmp/bootstrap.sh'
    ```
 
-4. **Update the GitHub secret** `DEPLOY_URL` to `https://bombvoyage.co.za/deploy`.
+   `HOST` is the canonical name and goes into `config.ini` as `public_host`. Everything in
+   `ALT_HOSTS` is covered by the same certificate, answered, and then **301d to `HOST`** by
+   `server/canonical.js` — so one URL shows in the address bar and every old link still works.
+
+4. **Update the GitHub secret** `DEPLOY_URL` to `https://bombvoyage.online/deploy`.
 
 5. **Update your local `config.ini`** `[deploy] ssh_host` if you want to SSH by name.
 
 6. **Send IT the ticket** in §2 with the real hostname.
 
-The old `*.sslip.io` name keeps working — it stays on the certificate — so there is no cutover
-moment and nothing to coordinate.
+There is no cutover moment: the old name stays on the certificate and keeps resolving, it just
+bounces. `/healthz` and `/deploy` are exempt from the bounce, because the deploy script polls
+`https://localhost/healthz` and a 301 there would make every deploy look like a failure.
 
 *Why `.co.za` is worth it beyond looking right: corporate filters classify unknown
 `sslip.io`-style hostnames far more aggressively than a registered company domain.*

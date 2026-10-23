@@ -3,8 +3,12 @@
 # re-running is exactly how you switch to a new domain.
 #
 #   scp -i key.pem infra/bootstrap.sh ec2-user@HOST:/tmp/
-#   ssh -i key.pem ec2-user@HOST 'HOST=bombvoyage.co.za ALT_HOSTS=www.bombvoyage.co.za \
+#   ssh -i key.pem ec2-user@HOST 'HOST=bombvoyage.online \
+#                                 ALT_HOSTS="www.bombvoyage.online 15.240.88.189.sslip.io" \
 #                                 EMAIL=you@example.com bash /tmp/bootstrap.sh'
+#
+# HOST is the canonical name. Everything in ALT_HOSTS is answered and then 301d to HOST, so the
+# address bar only ever shows one URL — see the canonical-host block in server/index.js.
 #
 # Variables:
 #   HOST       required. Primary hostname. Must already resolve to this box.
@@ -171,8 +175,11 @@ DOMAIN_ARGS=(-d "$HOST")
 for h in $ALT_HOSTS; do DOMAIN_ARGS+=(-d "$h"); done
 
 echo "==> certificate for $HOST ${ALT_HOSTS:+(+ $ALT_HOSTS)}"
+# --cert-name pins the lineage to $HOST. Without it certbot names the directory after whichever
+# domain happened to come first and can fork a second lineage when the list changes, at which
+# point the deploy hook below is copying from a path that no longer gets renewed.
 sudo /opt/certbot/bin/certbot certonly --standalone --non-interactive --agree-tos \
-  --keep-until-expiring --expand -m "$EMAIL" "${DOMAIN_ARGS[@]}"
+  --cert-name "$HOST" --keep-until-expiring --expand -m "$EMAIL" "${DOMAIN_ARGS[@]}"
 
 # Node runs unprivileged and cannot read /etc/letsencrypt. Copy the pair somewhere it can,
 # on issue and on every renewal.

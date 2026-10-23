@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { attachHub } from './net.js';
 import { config, usingTls, ROOT } from './config.js';
+import { canonicalTarget } from './canonical.js';
 import { createLeaderboard } from './leaderboard.js';
 
 // The lag shim exists to make development honest, and would silently ruin a real session.
@@ -119,6 +120,13 @@ function handle(req, res) {
   res.setHeader('Referrer-Policy', 'no-referrer');
 
   const url = req.url.split('?')[0];
+
+  // Before anything else: www, the sslip.io name and the bare IP all bounce to the canonical one.
+  const to = canonicalTarget({ host: req.headers.host, url: req.url, want: config.publicHost, tls: usingTls });
+  if (to) {
+    res.writeHead(301, { Location: to, 'Cache-Control': 'no-store' });
+    return res.end();
+  }
 
   if (url === '/deploy' && handleDeploy(req, res)) return;
 
