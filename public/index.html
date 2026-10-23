@@ -93,6 +93,9 @@
       <span class="pip" id="pLungs" title="lungs: how long you can run before you tire">
         <svg><use href="#i-bolt"/></svg><span class="n">0</span><span class="cap"></span>
       </span>
+      <!-- Passive upgrades announce themselves directly under the loadout they just changed.
+           See showUpgrade() in main.js. -->
+      <div id="ups"></div>
     </span>
 
     <span class="right">
@@ -139,10 +142,6 @@
         <span><span class="k">deaths</span><span id="vDeaths">0</span></span>
         <span><span class="k">round</span><span id="vScore">0</span></span>
       </div>
-
-      <!-- Passive upgrades announce themselves here, floating up over the panel and fading.
-           See showUpgrade() in main.js. -->
-      <div id="ups"></div>
 
       <div id="xp">
         <div class="xpHead">
