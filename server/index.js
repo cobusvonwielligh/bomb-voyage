@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { attachHub } from './net.js';
 import { config, usingTls, ROOT } from './config.js';
+import { createLeaderboard } from './leaderboard.js';
 
 // The lag shim exists to make development honest, and would silently ruin a real session.
 if (config.lag && usingTls) {
@@ -125,6 +126,7 @@ function handle(req, res) {
     const body = JSON.stringify(hub.health({
       uptimeS: Math.round((Date.now() - started) / 1000),
       version: version(),
+      top: leaderboard.top(5),
     }));
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     return res.end(body);
@@ -174,7 +176,8 @@ const server = usingTls
       { cert: fs.readFileSync(config.tlsCert), key: fs.readFileSync(config.tlsKey) }, handle)
   : http.createServer(handle);
 
-const hub = attachHub(server, config);
+const leaderboard = createLeaderboard({ dataDir: config.dataDir });
+const hub = attachHub(server, { ...config, leaderboard });
 
 server.listen(config.port, () => {
   console.log(`bomb-voyage listening on ${usingTls ? 'https' : 'http'}://${config.publicHost}:${config.port}`);
@@ -195,6 +198,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
   process.on(sig, () => {
     console.log(`${sig} — shutting down`);
     hub.shutdown();
+    leaderboard.stop();
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 3000).unref();
   });

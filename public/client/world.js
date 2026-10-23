@@ -7,7 +7,7 @@ import { INTERP_DELAY_TICKS, TRACER_SAMPLES, TRACER_EVERY_TICKS, FIRE_TICKS } fr
 import { createPlayer } from '/shared/sim/state.js';
 import { decodeCells, packCell, cellType } from '/shared/maps.js';
 import { BLOCK, BLOCK_HP } from '/shared/constants.js';
-import { step } from '/shared/sim/movement.js';
+import { step, blocked } from '/shared/sim/movement.js';
 import { spread } from '/shared/sim/fire.js';
 
 export function createWorld() {
@@ -33,6 +33,7 @@ export function createWorld() {
     }
     if (m.mapOnly) return;
     w.you = m.you;
+    w.roundEndsAtTick = m.roundEndsAtTick ?? w.roundEndsAtTick;
     w.tick = m.tick;
     w.players = [];
     for (const p of m.players) w.players[p.i] = hydrate(p);
@@ -164,15 +165,26 @@ export function createWorld() {
         const dx = p.x - p.rx, dy = p.y - p.ry;
         // A whole tile out means a respawn or a teleport, not a correction — just go.
         if (Math.abs(dx) > 256 || Math.abs(dy) > 256) { p.rx = p.x; p.ry = p.y; }
-        else { p.rx += dx * k; p.ry += dy * k; }
+        else {
+          const nx = p.rx + dx * k, ny = p.ry + dy * k;
+          // The eased path is a straight line and the simulated one was not, so easing across a
+          // corner can draw you briefly inside a wall. If the smoothed point is solid, skip the
+          // smoothing for this frame rather than clipping.
+          if (blocked(w, p, nx, ny)) { p.rx = p.x; p.ry = p.y; }
+          else { p.rx = nx; p.ry = ny; }
+        }
       } else if (p.buf.length >= 2) {
         const [a, b] = p.buf.slice(-2);
         const span = b.tick - a.tick || 1;
         const f = Math.max(0, Math.min(1, (renderTick - a.tick) / span));
-        // Hold at the last known position rather than extrapolating. A ghost standing still
-        // reads as a hiccup; a ghost sliding through a wall reads as a bug.
-        p.rx = a.x + (b.x - a.x) * f;
-        p.ry = a.y + (b.y - a.y) * f;
+        // Movement is axis-locked: step() only ever moves on one axis per tick. So interpolate
+        // along an L, x first, rather than along the diagonal. A straight lerp between two
+        // snapshots that turned a corner cuts straight through the corner block, which is
+        // exactly the "players walk through walls" everyone sees first.
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const travel = (Math.abs(dx) + Math.abs(dy)) * f;
+        p.rx = a.x + Math.sign(dx) * Math.min(Math.abs(dx), travel);
+        p.ry = a.y + Math.sign(dy) * Math.max(0, Math.min(Math.abs(dy), travel - Math.abs(dx)));
       }
       if (p.trailAt === undefined) p.trailAt = 0;
       if (w.tick - p.trailAt >= TRACER_EVERY_TICKS) {

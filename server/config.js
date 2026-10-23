@@ -57,6 +57,11 @@ export const config = {
 
   lag: num('LAG', 'dev', 'lag', 0),
   jitter: num('JITTER', 'dev', 'jitter', 0),
+
+  // Who may use the admin chat commands. This is a name check, and names are not secret — it
+  // keeps honest colleagues from typing /restart mid-round, and nothing more. If that ever
+  // matters, make it a token in config.ini and compare with timingSafeEqual.
+  adminName: String(pick('ADMIN_NAME', 'admin', 'name', 'cobusvw')).toLowerCase(),
 };
 
 export const usingTls = Boolean(config.tlsCert && config.tlsKey);

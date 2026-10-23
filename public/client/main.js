@@ -10,8 +10,25 @@ import { createInput } from './input.js';
 import { createWorld } from './world.js';
 import { createRenderer } from './render.js';
 import { createMusic } from './audio/music.js';
+import { drawMascot } from '/assets/art.js';
 
 const $ = id => document.getElementById(id);
+
+// ─── landing mascot ───────────────────────────────────────────────────────────
+
+(function mascot() {
+  const c = $('mascot').getContext('2d');
+  c.imageSmoothingEnabled = false;
+  c.scale(2, 2);                                   // 96px of art, drawn at 192
+  const t0 = performance.now();
+  (function paint() {
+    if ($('menu').style.display !== 'none') {
+      c.clearRect(0, 0, 96, 96);
+      drawMascot(c, (performance.now() - t0) / 1000);
+    }
+    requestAnimationFrame(paint);
+  })();
+})();
 const world = createWorld();
 let renderer = null;
 let running = false;
@@ -75,6 +92,19 @@ const net = createNet({
       }
     }
   },
+  onRoundEnd: m => {
+    const list = m.standings.map((p, n) =>
+      `${n + 1}. ${p.name}  ${p.s} pts  ${p.k}/${p.d}`).join('\n');
+    $('deadTitle').textContent = 'round over';
+    $('deadText').textContent = `${list}\n\nnext: ${m.nextMap}`;
+    $('dead').style.display = 'grid';
+    $('respawn').style.display = 'none';
+    setTimeout(() => {
+      $('dead').style.display = 'none';
+      $('respawn').style.display = '';
+      $('deadTitle').textContent = 'you died';
+    }, m.startsInMs);
+  },
   onChat: m => {
     const li = document.createElement('li');
     const who = document.createElement('b');
@@ -90,8 +120,9 @@ const net = createNet({
 });
 
 const chatHasFocus = () => document.activeElement === $('chatInput');
+// Note: no isTyping override. It defaults to typingSomewhere(), which asks whether focus is in
+// ANY text field — passing chatHasFocus here is what made WASD unusable in the name box.
 const input = createInput({
-  isTyping: chatHasFocus,
   onReserved: what => toast(`${what} is not in this build yet`),
 });
 
@@ -124,8 +155,11 @@ function loop(now) {
   if (now - hudAt > 200) {
     hudAt = now;
     const me = world.me();
+    const left = Math.max(0, (world.roundEndsAtTick || 0) - world.tick);
+    const mm = String(Math.floor(left / 30 / 60)).padStart(2, '0');
+    const ss = String(Math.floor((left / 30) % 60)).padStart(2, '0');
     $('stat').textContent =
-      `${net.rtt}ms · ${world.players.filter(Boolean).length} online · ${world.map?.id ?? ''}`;
+      `${mm}:${ss} · ${net.rtt}ms · ${world.players.filter(Boolean).length} online · ${world.map?.id ?? ''}`;
     if (me) {
       $('you').textContent = `${me.name}  ${me.kills}/${me.deaths}`;
       $('gear').textContent = `◼${me.bombs}  ✸${me.radius}  »${me.speed}${me.shields ? '  ◊' : ''}`;
@@ -224,7 +258,7 @@ addEventListener('keydown', e => {
 });
 
 $('leave').onclick = leave;
-$('respawn').onclick = () => net.send({ t: 'input', tick: net.clientTick + 1, m: 16 });
+$('respawn').onclick = () => net.send({ t: 'respawn' });
 
 $('chatInput').onkeydown = e => {
   if (e.key !== 'Enter') return;

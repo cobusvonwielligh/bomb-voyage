@@ -6,7 +6,7 @@
 
 import { PING_EVERY_MS, RTT_SAMPLES, CLOCK_SAFETY_MS, TICK_MS } from '/shared/constants.js';
 
-export function createNet({ onWelcome, onSnap, onChat, onStatus }) {
+export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd }) {
   let ws = null;
   // serverTick ≈ performance.now()/TICK_MS + tickOffset. Keeping an offset rather than a
   // timestamped sample means the estimate is continuous: a new ping nudges it instead of
@@ -20,6 +20,7 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus }) {
   let closedByUs = false;
   let hello = null;
   let sinceCorrection = 0;
+  let connectedAt = 0;
 
   const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
 
@@ -49,7 +50,6 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus }) {
     ws = new WebSocket(url);
 
     ws.onopen = () => {
-      backoff = 0;
       onStatus?.('open');
       ws.send(JSON.stringify(hello));
       ping();
@@ -59,8 +59,13 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus }) {
       const m = JSON.parse(e.data);
       switch (m.t) {
         case 'welcome':
-          localStorage.setItem('bv.playerId', m.playerId);
+          // sessionStorage, not localStorage: the resume token identifies a TAB, not a browser.
+          // localStorage is shared across tabs, so two tabs both claimed the same seat, each
+          // hello evicted the other, and the pair flapped forever. It survives a reload, which
+          // is the case resume actually exists for.
+          sessionStorage.setItem('bv.playerId', m.playerId);
           hello = { ...hello, playerId: m.playerId };
+          connectedAt = performance.now();
           observeServerTick(m.tick);
           clientTick = targetTick();
           onWelcome?.(m);
@@ -80,15 +85,21 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus }) {
         }
         case 'reject': onStatus?.(`rejected: ${m.why}`); closedByUs = true; break;
         case 'mapchange': onWelcome?.({ ...m, mapOnly: true }); break;
+        case 'roundend': onRoundEnd?.(m); break;
       }
     };
 
-    ws.onclose = () => {
-      onStatus?.('reconnecting');
+    ws.onclose = ev => {
       if (closedByUs) return;
-      // First retry is immediate: most drops are a blip, and sub-second resume is invisible.
+      // Reset the backoff only after a connection that actually lasted. Resetting it in onopen
+      // means a connection that opens and immediately dies never backs off at all, which turns
+      // any repeating problem into a reconnect storm.
+      if (connectedAt && performance.now() - connectedAt > 3000) backoff = 0;
+      connectedAt = 0;
       const wait = backoff === 0 ? 150 : Math.min(8000, backoff * 2);
       backoff = wait;
+      onStatus?.(`reconnecting in ${(wait / 1000).toFixed(1)}s`);
+      if (ev?.code === 4000) console.warn('replaced by another connection:', ev.reason);
       setTimeout(open, wait);
     };
 
@@ -106,7 +117,7 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus }) {
 
   return {
     connect(name) {
-      hello = { t: 'hello', name, playerId: localStorage.getItem('bv.playerId') || null };
+      hello = { t: 'hello', name, playerId: sessionStorage.getItem('bv.playerId') || null };
       open();
     },
     send(msg) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg)); },

@@ -309,6 +309,81 @@ export function drawPerk(c, { type = 1, bob = 0 }) {
   c.restore();
 }
 
+// ─── mascot ───────────────────────────────────────────────────────────────────
+
+/**
+ * The landing-page character: a one-eyed privateer holding a lit bomb. Drawn into a 96x96 box
+ * at scale 1 and meant to be blown up with an integer scale, so it stays crisp and chunky.
+ *
+ * `t` is a free-running time in seconds; it only drives the fuse spark and a slow breath, so
+ * the page has a pulse without anything actually moving.
+ */
+export function drawMascot(c, t = 0) {
+  const breathe = Math.sin(t * 1.6) * 1.2;
+  const skin = '#d9a06b', skinDark = '#b57f4e';
+  const coat = '#2f4a6d', coatDark = '#22374f', coatLight = '#3d5f88';
+  const cloth = '#b8303a', clothDark = '#8e222b';
+
+  c.save();
+  c.translate(0, breathe);
+
+  // bomb, held low and to his left — the thing you are actually here for
+  const bx = 70, by = 68;
+  c.beginPath(); c.ellipse(bx, by + 15, 15, 4, 0, 0, 7); c.fillStyle = 'rgba(0,0,0,0.35)'; c.fill();
+  c.beginPath(); c.arc(bx, by, 15, 0, 7); c.fillStyle = '#1b2029'; c.fill();
+  c.beginPath(); c.arc(bx - 5, by - 6, 4.5, 0, 7); c.fillStyle = 'rgba(255,255,255,0.28)'; c.fill();
+  c.strokeStyle = '#3a4455'; c.lineWidth = 3; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(bx + 4, by - 14); c.quadraticCurveTo(bx + 13, by - 24, bx + 9, by - 31); c.stroke();
+  // the spark flickers on a fast, uneven cycle so it reads as burning, not blinking
+  const spark = 2.6 + Math.sin(t * 17) * 0.8 + Math.sin(t * 31) * 0.5;
+  c.beginPath(); c.arc(bx + 9, by - 32, spark + 2.5, 0, 7); c.fillStyle = 'rgba(255,155,61,0.45)'; c.fill();
+  c.beginPath(); c.arc(bx + 9, by - 32, spark, 0, 7); c.fillStyle = PALETTE.fireCore; c.fill();
+
+  // body
+  rr(c, 26, 52, 36, 38, 6, coat);
+  rr(c, 26, 52, 12, 38, 6, coatLight);
+  rr(c, 52, 52, 10, 38, 6, coatDark);
+  px(c, 40, 52, 8, 38, cloth);                       // open coat, sash beneath
+  rr(c, 24, 74, 42, 9, 3, clothDark);
+  rr(c, 24, 74, 42, 4, 2, cloth);
+
+  // arms: one across the body, one holding the bomb
+  rr(c, 18, 58, 11, 22, 5, coatDark);
+  rr(c, 58, 56, 11, 20, 5, coat);
+  rr(c, 60, 72, 10, 9, 4, skin);
+
+  // head
+  rr(c, 30, 20, 30, 30, 10, skin);
+  rr(c, 30, 20, 11, 30, 10, '#e8b67f');
+  rr(c, 52, 24, 8, 24, 6, skinDark);
+  px(c, 33, 44, 24, 6, skinDark);                    // stubble shadow under the jaw
+
+  // bandana, knotted at the back
+  rr(c, 27, 16, 36, 13, 5, cloth);
+  rr(c, 27, 16, 36, 6, 4, '#d4474f');
+  c.beginPath(); c.moveTo(28, 24); c.lineTo(16, 30); c.lineTo(20, 20); c.closePath();
+  c.fillStyle = clothDark; c.fill();
+
+  // the eye patch — the whole point
+  c.strokeStyle = '#11161f'; c.lineWidth = 2.5;
+  c.beginPath(); c.moveTo(31, 29); c.lineTo(60, 26); c.stroke();
+  rr(c, 46, 28, 13, 11, 3, '#11161f');
+  // the good eye
+  rr(c, 34, 31, 7, 6, 2, '#ffffff');
+  rr(c, 36, 32, 4, 4, 2, '#1b2430');
+
+  // a crooked grin
+  c.strokeStyle = '#8c5a33'; c.lineWidth = 2; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(34, 44); c.quadraticCurveTo(40, 48, 46, 43); c.stroke();
+  px(c, 41, 43, 3, 3, '#ffd21f');                    // gold tooth
+
+  // legs
+  rr(c, 29, 88, 12, 8, 3, coatDark);
+  rr(c, 47, 88, 12, 8, 3, coatDark);
+
+  c.restore();
+}
+
 // ─── baking ───────────────────────────────────────────────────────────────────
 //
 // Everything is drawn once into offscreen canvases at boot, then blitted. Never tint or draw

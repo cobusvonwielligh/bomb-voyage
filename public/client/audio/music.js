@@ -1,8 +1,9 @@
-// Bomb Voyage — synthwave loop. Synthesised, no audio files anywhere in this project.
+// Bomb Voyage — the soundtrack. Synthesised, no audio files anywhere in this project.
 //
-// Four bars of Am - F - C - G at 96 BPM: saw bass, detuned pad, delayed arpeggio, and a simple
-// kit. Deliberately repetitive and quiet. The real acceptance test is in docs/ART-AUDIO.md §6:
-// listen to it for a full sixteen-minute round without wanting to mute it.
+// Eight bars at 77 BPM, built on I–V–vi–IV and its brighter cousin: major, open, and more
+// pleased with itself than the minor loop this started as. Two halves that differ, a lead that
+// only shows up in the second half, and a fill before the loop comes round, so sixteen minutes
+// of it does not drill a hole in anyone.
 //
 // Scheduling uses the standard look-ahead pattern — a timer that only ever queues notes a little
 // way into the future, with the AudioContext clock doing the actual timing. setTimeout per note
@@ -10,19 +11,38 @@
 
 import { VOLUME_MUSIC_DEFAULT } from '/shared/constants.js';
 
-const BPM = 96;
+const BPM = 77;
 const STEPS_PER_BAR = 16;          // sixteenth notes
-const BARS = 4;
+const BARS = 8;
 const TOTAL_STEPS = STEPS_PER_BAR * BARS;
-const LOOKAHEAD_S = 0.12;          // how far ahead we queue
-const TIMER_MS = 25;               // how often we top up the queue
+const LOOKAHEAD_S = 0.12;
+const TIMER_MS = 25;
 
-// Am - F - C - G. bass is the root an octave or two down; voices are the chord tones we arpeggiate.
+// C G Am F | C G F G. Major, and the last bar leans on the dominant so the loop pulls round
+// again instead of simply stopping and restarting.
 const CHORDS = [
-  { bass: 45, notes: [57, 60, 64] }, // Am
-  { bass: 41, notes: [53, 57, 60] }, // F
-  { bass: 48, notes: [55, 60, 64] }, // C
-  { bass: 43, notes: [55, 59, 62] }, // G
+  { bass: 48, notes: [60, 64, 67] },   // C
+  { bass: 43, notes: [59, 62, 67] },   // G
+  { bass: 45, notes: [60, 64, 69] },   // Am
+  { bass: 41, notes: [60, 65, 69] },   // F
+  { bass: 48, notes: [60, 64, 67] },   // C
+  { bass: 43, notes: [59, 62, 67] },   // G
+  { bass: 41, notes: [60, 65, 69] },   // F
+  { bass: 43, notes: [62, 67, 71] },   // G, voiced high to lift into the repeat
+];
+
+// A full arpeggio runs the chord across three octaves rather than noodling on three notes.
+// Pattern A climbs; pattern B climbs and comes back down, so the two halves of the loop move
+// differently without needing different harmony.
+const ARP_UP = [0, 1, 2, 3, 4, 5, 6, 7, 8, 7, 6, 5, 4, 3, 2, 1];
+const ARP_ROLL = [0, 2, 4, 6, 8, 6, 7, 5, 3, 1, 2, 4, 6, 4, 2, 1];
+
+// A simple singable line over the back half. Nulls are rests — a melody needs to breathe.
+const LEAD = [
+  76, null, 74, null, 72, null, null, 74,
+  76, null, 79, null, 76, null, null, null,
+  74, null, 72, null, 71, null, null, 72,
+  74, null, 72, null, 67, null, null, null,
 ];
 
 const hz = midi => 440 * Math.pow(2, (midi - 69) / 12);
@@ -41,8 +61,8 @@ export function createMusic() {
   function build() {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
 
-    // A gentle limiter on the end of the chain. Four voices plus a delay can stack up, and
-    // clipping is the fastest way to make a soft loop sound nasty.
+    // A gentle limiter on the end of the chain. Five voices plus a delay stack up, and clipping
+    // is the fastest way to make a soft loop sound nasty.
     comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -12;
     comp.ratio.value = 6;
@@ -51,7 +71,6 @@ export function createMusic() {
 
     master = ctx.createGain();
     master.gain.value = 1;
-
     musicGain = ctx.createGain();
     musicGain.gain.value = volume;
 
@@ -59,7 +78,7 @@ export function createMusic() {
     comp.connect(master);
     master.connect(ctx.destination);
 
-    // Dotted-eighth feedback delay, the sound that makes an arpeggio feel like synthwave.
+    // Dotted-eighth feedback delay: the sound that makes an arpeggio feel like synthwave.
     delay = ctx.createDelay(1);
     delay.delayTime.value = (60 / BPM) * 0.75;
     delayFb = ctx.createGain();
@@ -88,9 +107,7 @@ export function createMusic() {
   }
 
   function bass(t, note, dur) {
-    const o = ctx.createOscillator();
-    const f = ctx.createBiquadFilter();
-    const g = ctx.createGain();
+    const o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
     o.type = 'sawtooth';
     o.frequency.value = hz(note);
     f.type = 'lowpass';
@@ -103,16 +120,15 @@ export function createMusic() {
   }
 
   function pad(t, notes, dur) {
-    const f = ctx.createBiquadFilter();
-    const g = ctx.createGain();
+    const f = ctx.createBiquadFilter(), g = ctx.createGain();
     f.type = 'lowpass';
-    f.frequency.setValueAtTime(700, t);
-    f.frequency.linearRampToValueAtTime(1500, t + dur * 0.6);
-    f.frequency.linearRampToValueAtTime(700, t + dur);
+    f.frequency.setValueAtTime(800, t);
+    f.frequency.linearRampToValueAtTime(1700, t + dur * 0.6);
+    f.frequency.linearRampToValueAtTime(800, t + dur);
     f.Q.value = 2;
-    env(g, t, { a: dur * 0.3, d: 0.1, s: 0.9, hold: dur * 0.4, r: dur * 0.4, peak: 0.075 });
+    env(g, t, { a: dur * 0.3, d: 0.1, s: 0.9, hold: dur * 0.4, r: dur * 0.4, peak: 0.07 });
     for (const n of notes) {
-      for (const detune of [-7, 7]) {           // two slightly detuned saws per note
+      for (const detune of [-7, 7]) {
         const o = ctx.createOscillator();
         o.type = 'sawtooth';
         o.frequency.value = hz(n);
@@ -124,21 +140,34 @@ export function createMusic() {
     f.connect(g); g.connect(musicGain);
   }
 
-  function arp(t, note) {
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
+  function arp(t, note, gain = 0.055) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
     o.type = 'square';
     o.frequency.value = hz(note);
-    env(g, t, { a: 0.003, d: 0.14, peak: 0.055 });
+    env(g, t, { a: 0.003, d: 0.14, peak: gain });
     o.connect(g);
     g.connect(musicGain);
-    g.connect(delay);                            // send to the dotted-eighth delay
+    g.connect(delay);
     o.start(t); o.stop(t + 0.25);
   }
 
+  function lead(t, note) {
+    const o = ctx.createOscillator(), o2 = ctx.createOscillator();
+    const f = ctx.createBiquadFilter(), g = ctx.createGain();
+    o.type = 'triangle'; o2.type = 'sawtooth';
+    o.frequency.value = hz(note);
+    o2.frequency.value = hz(note);
+    o2.detune.value = 8;
+    f.type = 'lowpass'; f.frequency.value = 2600;
+    env(g, t, { a: 0.02, d: 0.1, s: 0.8, hold: 0.18, r: 0.22, peak: 0.075 });
+    o.connect(f); o2.connect(f); f.connect(g);
+    g.connect(musicGain); g.connect(delay);
+    o.start(t); o2.start(t);
+    o.stop(t + 0.7); o2.stop(t + 0.7);
+  }
+
   function kick(t) {
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
+    const o = ctx.createOscillator(), g = ctx.createGain();
     o.type = 'sine';
     o.frequency.setValueAtTime(130, t);
     o.frequency.exponentialRampToValueAtTime(42, t + 0.11);
@@ -159,25 +188,17 @@ export function createMusic() {
     return s;
   }
 
-  function snare(t) {
-    const s = noise();
-    const f = ctx.createBiquadFilter();
-    const g = ctx.createGain();
-    f.type = 'bandpass';
-    f.frequency.value = 1900;
-    f.Q.value = 0.9;
-    // The long tail is the gated-reverb cliché, and it is the cliché for a reason.
-    env(g, t, { a: 0.002, d: 0.16, peak: 0.12 });
+  function snare(t, gain = 0.12) {
+    const s = noise(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    f.type = 'bandpass'; f.frequency.value = 1900; f.Q.value = 0.9;
+    env(g, t, { a: 0.002, d: 0.16, peak: gain });
     s.connect(f); f.connect(g); g.connect(musicGain);
     s.start(t); s.stop(t + 0.3);
   }
 
   function hat(t, open) {
-    const s = noise();
-    const f = ctx.createBiquadFilter();
-    const g = ctx.createGain();
-    f.type = 'highpass';
-    f.frequency.value = 7000;
+    const s = noise(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    f.type = 'highpass'; f.frequency.value = 7000;
     env(g, t, { a: 0.001, d: open ? 0.1 : 0.03, peak: 0.035 });
     s.connect(f); f.connect(g); g.connect(musicGain);
     s.start(t); s.stop(t + 0.2);
@@ -192,24 +213,33 @@ export function createMusic() {
     const n = s % STEPS_PER_BAR;
     const chord = CHORDS[bar];
     const d = stepDur();
+    const secondHalf = bar >= 4;
 
     if (n === 0) pad(t, chord.notes, d * STEPS_PER_BAR);
 
-    if (n % 4 === 0) kick(t);                         // four on the floor
+    if (n % 4 === 0) kick(t);
     if (n === 4 || n === 12) snare(t);
     if (n % 2 === 1) hat(t, n === 7 || n === 15);
 
+    // A fill at the end of each half, so the loop has a shape instead of a seam.
+    if ((bar === 3 || bar === 7) && n >= 12) snare(t, 0.05 + (n - 12) * 0.03);
+
     if (n % 2 === 0) {
-      // Root on the beat, octave up on the last eighth of each half bar: the walking feel.
       const up = n === 6 || n === 14;
       bass(t, chord.bass + (up ? 12 : 0), d * 1.6);
     }
 
-    // Arpeggio: up through the chord across two octaves, skipping a couple of steps per bar so
-    // it breathes instead of machine-gunning.
-    if (n !== 3 && n !== 11) {
-      const idx = s % 6;
-      arp(t, chord.notes[idx % 3] + (idx >= 3 ? 12 : 0) + 12);
+    // The arpeggio walks the chord across three octaves. Pattern changes at the halfway point.
+    const pattern = secondHalf ? ARP_ROLL : ARP_UP;
+    const idx = pattern[n];
+    if (idx !== undefined) {
+      const octave = Math.floor(idx / 3);
+      arp(t, chord.notes[idx % 3] + octave * 12, secondHalf ? 0.045 : 0.055);
+    }
+
+    if (secondHalf) {
+      const note = LEAD[(bar - 4) * 8 + (n >> 1)];
+      if (note && n % 2 === 0) lead(t, note);
     }
   }
 
@@ -232,7 +262,7 @@ export function createMusic() {
       if (playing) return true;
       if (!ctx) build();
       if (ctx.state === 'suspended') await ctx.resume();
-      if (ctx.state !== 'running') return false;    // still blocked; caller shows the prompt
+      if (ctx.state !== 'running') return false;
       step = 0;
       nextTime = ctx.currentTime + 0.08;
       timer = setInterval(scheduler, TIMER_MS);

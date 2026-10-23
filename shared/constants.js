@@ -103,6 +103,7 @@ export const PERK_WEIGHTS = {
 };
 
 export const PERK_DROP_CHANCE_SOFT = 0.35; // TUNE
+export const GIFT_DISEASE_CHANCE = 0.3;    // a Gift is a gamble; see shared/sim/perks.js
 export const PERK_DROP_ALWAYS = [BLOCK.REINFORCED, BLOCK.MONOLITH];
 export const PERK_EXPIRE_TICKS = 45 * TICK_HZ;
 export const PERKS_DROPPED_ON_DEATH = 3;
@@ -178,7 +179,7 @@ export const NAME_MAX_CHARS = 20;
 
 export const TRACER_SAMPLES = 8;
 export const TRACER_EVERY_TICKS = 3;
-export const VOLUME_MUSIC_DEFAULT = 0.25;
+export const VOLUME_MUSIC_DEFAULT = 0.10;
 export const VOLUME_SFX_DEFAULT = 0.75;
 export const SFX_MAX_DISTANCE_TILES = 12;
 

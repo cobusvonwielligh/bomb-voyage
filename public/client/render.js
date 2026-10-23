@@ -142,6 +142,24 @@ export function createRenderer(canvas, world) {
     if (performance.now() - redrawWindow > 1000) { redrawWindow = performance.now(); redrawsThisSecond = 0; }
   }
 
+  // One coloured pip per active status, above the head. Statuses are contagious, so knowing at a
+  // glance what the person running at you is carrying is most of playing around them.
+  const PIPS = [
+    [STATUS.PACIFISM, '#9aa6b5'], [STATUS.SLOWDOWN, '#5b7fd4'], [STATUS.INVISIBLE, '#b98fd9'],
+    [STATUS.CHANGELING, '#d45b8f'], [STATUS.REDUCTION, '#5ad1a0'], [STATUS.FAST_DET, '#e8655a'],
+  ];
+
+  function drawStatusPips(c, p, px, py) {
+    if (!(p.status & ~STATUS.INVULN)) return;
+    let n = 0;
+    for (const [bit, colour] of PIPS) {
+      if (!(p.status & bit)) continue;
+      c.fillStyle = colour;
+      c.fillRect(px + 4 + n * 5, py - 14, 4, 4);
+      n++;
+    }
+  }
+
   function drawTracer(c, p, ox, oy) {
     if (!p.trail.length || !p.alive) return;
     const k = playerShades(p.i);
@@ -163,13 +181,30 @@ export function createRenderer(canvas, world) {
     const py = oy + (p.ry / UNITS_PER_TILE) * TILE_PX - TILE_PX / 2;
     const frame = p.moving ? ((world.tick >> 2) & 1) : 0;
 
+    // Invisible: gone to everyone else, a ghost to yourself, so you can still steer.
+    if ((p.status & STATUS.INVISIBLE) && !isMe) return;
+
     // Invulnerable players flash, so "I am safe" and "I am about to not be" are readable at a
     // glance in a crowd. Four hertz: fast enough to notice, slow enough not to hurt.
-    const invuln = (p.status & STATUS.INVULN) !== 0;
-    if (invuln) c.globalAlpha = (world.tick >> 2) % 2 ? 0.45 : 1;
+    if (p.status & STATUS.INVULN) c.globalAlpha = (world.tick >> 2) % 2 ? 0.45 : 1;
+    if (p.status & STATUS.INVISIBLE) c.globalAlpha = 0.35;
 
-    c.drawImage(baked.players[p.i % 16][p.dir * 2 + frame], Math.round(px), Math.round(py));
+    const sprite = baked.players[p.i % 16][p.dir * 2 + frame];
+    const flipped = (p.status & STATUS.CHANGELING) !== 0;
+    const small = (p.status & STATUS.REDUCTION) !== 0;
+
+    if (flipped || small) {
+      c.save();
+      c.translate(px + TILE_PX / 2, py + TILE_PX / 2);
+      c.scale(small ? 0.55 : 1, (small ? 0.55 : 1) * (flipped ? -1 : 1));
+      c.drawImage(sprite, -TILE_PX / 2, -TILE_PX / 2);
+      c.restore();
+    } else {
+      c.drawImage(sprite, Math.round(px), Math.round(py));
+    }
     c.globalAlpha = 1;
+
+    drawStatusPips(c, p, px, py);
 
     c.font = '10px ui-monospace, monospace';
     c.textAlign = 'center';

@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "description": "16-player browser Bomberman for Friday office games",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node server/index.js",
     "dev": "LAG=200 JITTER=40 node server/index.js",
@@ -13,7 +15,8 @@
     "deploy": "./infra/deploy.sh",
     "deploy:fast": "SKIP_TESTS=1 ./infra/deploy.sh",
     "rollback": "./infra/rollback.sh",
-    "logs": "./infra/logs.sh"
+    "logs": "./infra/logs.sh",
+    "bots": "node server/bots.js"
   },
   "dependencies": {
     "ws": "^8.18.0"

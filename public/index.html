@@ -15,7 +15,10 @@
   #menu { position: fixed; inset: 0; display: grid; place-items: center; z-index: 10;
           background: radial-gradient(120% 90% at 50% 0%, #1b1430 0%, #0d1117 60%); }
   .card { border: 2px solid #ffd21f66; border-radius: 4px; background: #1a2029ee;
-          padding: 30px 38px; width: 420px; box-shadow: 0 0 60px #6b21a855; }
+          padding: 30px 38px; width: 420px; box-shadow: 0 0 60px #6b21a855; position: relative; }
+  #mascot { position: absolute; right: 18px; top: -48px; width: 192px; height: 192px;
+            image-rendering: pixelated; pointer-events: none;
+            filter: drop-shadow(0 6px 16px #000a); }
   h1 { color: var(--gold); font-size: 17px; letter-spacing: .2em; text-transform: uppercase;
        margin: 0 0 4px; }
   .sub { color: var(--dim); margin: 0 0 22px; font-size: 12px; }
@@ -62,7 +65,8 @@
   /* death + scores */
   #dead { position: fixed; inset: 0; display: none; place-items: center; z-index: 8;
           background: #0d111788; }
-  .card.small { width: 280px; text-align: center; }
+  .card.small { width: 320px; text-align: center; }
+  #deadText { white-space: pre-line; }
   .card.small h1 { color: #e8655a; }
   #respawn { width: 100%; margin-top: 10px; padding: 10px; letter-spacing: .14em;
              text-transform: uppercase; }
@@ -85,7 +89,7 @@
     <span id="conn" data-state="connecting">connecting</span>
     <span class="right">
       <button id="musicBtn">♪ off</button>
-      <input id="vol" type="range" min="0" max="100" value="25" title="music volume">
+      <input id="vol" type="range" min="0" max="100" value="10" title="music volume">
       <button id="leave" title="esc">leave</button>
     </span>
   </div>
@@ -98,8 +102,8 @@
 
 <div id="dead">
   <div class="card small">
-    <h1>you died</h1>
-    <p class="sub">space to respawn &middot; esc to leave</p>
+    <h1 id="deadTitle">you died</h1>
+    <p class="sub" id="deadText">space to respawn &middot; esc to leave</p>
     <button id="respawn">respawn</button>
   </div>
 </div>
@@ -116,8 +120,9 @@
 
 <div id="menu">
   <div class="card">
+    <canvas id="mascot" width="192" height="192"></canvas>
     <h1>Bomb Voyage</h1>
-    <p class="sub">16 players · 16 minutes · last one standing wins nothing at all</p>
+    <p class="sub">16 scoundrels &middot; 16 minutes &middot; one very short fuse</p>
     <label for="name">your name</label>
     <input id="name" type="text" placeholder="pick a name" autocomplete="off" autofocus>
     <button id="play">play</button>

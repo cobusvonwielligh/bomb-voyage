@@ -3,10 +3,12 @@
 import {
   PERK, PERK_WEIGHTS, PERK_DROP_CHANCE_SOFT, PERK_DROP_ALWAYS, PERK_EXPIRE_TICKS,
   MAX_BOMBS, MAX_RADIUS, MAX_SKATES, MAX_SHIELDS, SCORE, BLOCK, HITBOX_UNITS, STATUS,
-  PERKS_DROPPED_ON_DEATH, START_BOMBS, START_RADIUS,
+  PERKS_DROPPED_ON_DEATH, START_BOMBS, START_RADIUS, GIFT_DISEASE_CHANCE,
 } from '../constants.js';
-import { tileAt, toTile, has, applyStatus } from './state.js';
+import { tileAt, toTile } from './state.js';
+import { infect } from './statuses.js';
 import { randInt } from '../util/rng.js';
+
 
 const LIVE = Object.entries(PERK_WEIGHTS).filter(([, w]) => w > 0).map(([t, w]) => [+t, w]);
 const TOTAL = LIVE.reduce((n, [, w]) => n + w, 0);
@@ -40,7 +42,11 @@ function apply(state, p, type) {
     case PERK.FIRE:   if (p.radius < MAX_RADIUS) { p.radius++; return true; } return false;
     case PERK.SKATE:  if (p.speed  < MAX_SKATES) { p.speed++;  return true; } return false;
     case PERK.SHIELD: if (p.shields < MAX_SHIELDS) { p.shields++; return true; } return false;
-    case PERK.GIFT:   return apply(state, p, roll(state.next, PERK.GIFT));
+    // A Gift is a gamble, which is the point of it. Most of the time it is a real upgrade;
+    // sometimes you catch something, and then you hand it to whoever you run past next.
+    case PERK.GIFT:
+      if (state.next() < GIFT_DISEASE_CHANCE && infect(state, p, state.next)) return true;
+      return apply(state, p, roll(state.next, PERK.GIFT));
     default: return false;                      // reserved types: inert until given a weight
   }
 }

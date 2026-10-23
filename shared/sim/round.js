@@ -14,6 +14,7 @@ import { place, detonate, expireFires } from './bombs.js';
 import { collect, scatterOnDeath } from './perks.js';
 import { regenerate } from './blocks.js';
 import { burns } from './fire.js';
+import { spread as spreadStatuses } from './statuses.js';
 
 export function tick(state, inputs, { onRespawn } = {}) {
   // 1. statuses expire before anything reads them
@@ -37,7 +38,8 @@ export function tick(state, inputs, { onRespawn } = {}) {
   // 7. pickups
   collect(state);
 
-  // 8. statuses spread on contact — M3 (slice PLAGUE)
+  // 8. statuses spread on contact
+  spreadStatuses(state);
 
   // 9. walls grow back
   regenerate(state);
