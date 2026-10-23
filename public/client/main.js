@@ -6,7 +6,7 @@
 
 import {
   TICK_MS, TICK_HZ, NAME_MAX_CHARS, UNITS_PER_TILE, IN_BOMB, playerColor,
-  MAX_BOMBS_CARRIED, MAX_RADIUS, MAX_SKATES, IDLE_DISCONNECT_MS,
+  MAX_BOMBS_CARRIED, MAX_RADIUS, MAX_SKATES, IDLE_DISCONNECT_MS, RESPAWN_DELAY_TICKS,
 } from '/shared/constants.js';
 import { createNet } from './net.js';
 import { createInput, typingSomewhere } from './input.js';
@@ -362,6 +362,31 @@ const gearPip = (id, value, cap) => {
 };
 
 let lastShields = 0;
+let diedAtTick = -1;
+
+/**
+ * The respawn countdown, live, on the button itself.
+ *
+ * Timed from the tick your own `alive` flag went false rather than from anything on the wire:
+ * the server owns `respawnAt` but never sends it, and re-deriving it here is accurate to the two
+ * ticks of snapshot granularity — which nobody can see in a number that counts whole seconds.
+ *
+ * The button is genuinely disabled while it counts. A button that looks pressable and does
+ * nothing is worse than one that tells you to wait.
+ */
+function drawRespawn(me) {
+  const btn = $('respawn');
+  if (me.alive) { diedAtTick = -1; return; }
+  if (diedAtTick < 0) diedAtTick = world.tick;
+  const left = Math.max(0, RESPAWN_DELAY_TICKS - (world.tick - diedAtTick));
+  const secs = Math.ceil(left / TICK_HZ);
+  btn.disabled = left > 0;
+  setValue(btn, left > 0 ? `respawn in ${secs}` : 'respawn ready');
+  $('deadText').textContent = left > 0
+    ? 'hold space to go again the moment it is ready'
+    : 'space to respawn \u00b7 esc to leave';
+}
+
 function drawHud() {
   const me = world.me();
   const left = Math.max(0, (world.roundEndsAtTick || 0) - world.tick);
@@ -406,7 +431,7 @@ function drawHud() {
     lastShields = me.shields;
   }
 
-  if (!roundOverUntil) showDead(!me.alive);
+  if (!roundOverUntil) { showDead(!me.alive); drawRespawn(me); }
   if (scoresOpen) renderScores();
 }
 
