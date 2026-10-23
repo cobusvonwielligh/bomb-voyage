@@ -9,6 +9,7 @@
     "start": "node server/index.js",
     "dev": "LAG=200 JITTER=40 node server/index.js",
     "test": "node --test",
+    "preview": "node -e \"require('child_process').spawn(process.platform==='darwin'?'open':'xdg-open',['http://localhost:8080/art-preview.html'])\"",
     "deploy": "./infra/deploy.sh"
   },
   "dependencies": {

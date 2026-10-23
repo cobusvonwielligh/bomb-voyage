@@ -13,7 +13,8 @@ Friday-afternoon games at eezi.
 | | |
 |---|---|
 | ✅ Spec | All of `docs/`. Read [docs/PLAN.md](docs/PLAN.md) first. |
-| ✅ Deployment spine | Server, TLS, systemd, one-command deploy, smoke tests, reboot-safe. |
+| ✅ Deployment spine | Server, TLS, systemd, smoke tests, reboot-safe. |
+| ✅ CI/CD | Tests on every push; `main` deploys itself. Needs `DEPLOY_URL` and `DEPLOY_TOKEN` repo secrets. |
 | ⬜ The game | Not started. Phase 0 onward in [docs/PLAN.md](docs/PLAN.md). |
 
 What works end to end today: HTTPS on 443, `wss://` on the same origin, static serving, the
