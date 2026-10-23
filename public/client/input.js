@@ -17,14 +17,24 @@ const RESERVED = {
   KeyI: 'safe-house', KeyF: 'jetpack',
 };
 
+// Input types that take no text. A denylist rather than an allowlist of text types, so the next
+// field anyone adds is gated by default — which is the property that stopped the name box from
+// eating WASD in the first place.
+const NON_TEXT_INPUT = /^(range|checkbox|radio|button|submit|reset|file|color|image)$/;
+
 /**
  * True whenever focus is in anything that takes text. Checking the element rather than naming
  * specific fields is what stops the next input anyone adds from silently eating WASD.
+ *
+ * The volume sliders are the reason for the type check: they are `<input>` elements, so the naive
+ * version treated them as text fields, and one click on the music slider killed the keyboard for
+ * the rest of the round. A bare `<input>` reports type 'text', so chat and the name box stay gated.
  */
 export const typingSomewhere = () => {
   const el = document.activeElement;
   if (!el) return false;
-  return el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA';
+  if (el.isContentEditable || el.tagName === 'TEXTAREA') return true;
+  return el.tagName === 'INPUT' && !NON_TEXT_INPUT.test(el.type);
 };
 
 export function createInput({ onReserved, isTyping = typingSomewhere }) {

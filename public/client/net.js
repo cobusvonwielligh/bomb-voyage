@@ -6,7 +6,7 @@
 
 import { PING_EVERY_MS, RTT_SAMPLES, CLOCK_SAFETY_MS, TICK_MS } from '/shared/constants.js';
 
-export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd }) {
+export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onScores, onStreak }) {
   let ws = null;
   // serverTick ≈ performance.now()/TICK_MS + tickOffset. Keeping an offset rather than a
   // timestamped sample means the estimate is continuous: a new ping nudges it instead of
@@ -32,11 +32,23 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd }) {
     return performance.now() / TICK_MS + tickOffset;
   }
 
-  /** Blend a fresh measurement in rather than jumping to it. */
+  /**
+   * Blend a fresh measurement in rather than jumping to it.
+   *
+   * Except while `rtts` is still empty or nearly so. The `welcome` that seeds the clock arrives
+   * before any pong, so `rttMin()` is 0 and the estimate omits the travel correction twice —
+   * leaving a lead of `2.5 - travel` ticks instead of `travel + 2.5`. Above about 83 ms of RTT
+   * that lead is negative, every input packet lands after the server already simulated that tick,
+   * and `room.input` drops it silently: several seconds of rubber-banding in place on every join.
+   * Blending from a known-wrong seed takes five pings to crawl out of, so do not blend yet.
+   */
   function observeServerTick(serverTick) {
     const implied = serverTick + (rttMin() / 2) / TICK_MS - performance.now() / TICK_MS;
-    if (tickOffset === null || Math.abs(implied - tickOffset) > 25) tickOffset = implied;
-    else tickOffset += (implied - tickOffset) * 0.15;
+    if (tickOffset === null || rtts.length < 2 || Math.abs(implied - tickOffset) > 25) {
+      tickOffset = implied;
+    } else {
+      tickOffset += (implied - tickOffset) * 0.15;
+    }
   }
 
   /** Run far enough ahead that this tick's input lands before the server simulates it. */
@@ -84,12 +96,18 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd }) {
             if (rtts.length > RTT_SAMPLES) rtts.shift();
             // Rolling minimum, not an average: one jitter spike should not shove the clock.
             observeServerTick(m.tick);
+            // The very first real RTT sample: re-seed the lead, which until now was computed as
+            // if the connection were instant. Safe because this fires microseconds after
+            // `welcome`, long before prediction has produced anything worth keeping.
+            if (rtts.length === 1) clientTick = targetTick();
           }
           break;
         }
         case 'reject': onStatus?.(`rejected: ${m.why}`); closedByUs = true; break;
         case 'mapchange': onWelcome?.({ ...m, mapOnly: true }); break;
         case 'roundend': onRoundEnd?.(m); break;
+        case 'scores': onScores?.(m); break;
+        case 'streak': onStreak?.(m); break;
       }
     };
 
@@ -135,6 +153,17 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd }) {
     get clientTick() { return clientTick; },
     get rtt() { return Math.round(rttMin()); },
     serverTickNow,
+
+    /**
+     * The frame loop deliberately discarded wall-clock time — a clamped `dt` after an alt-tab, or
+     * a dumped accumulator after a stall. The clock has to jump with it.
+     *
+     * Without this, `clientTick` sits permanently N ticks behind real time with N between 3 and
+     * 25: too small for advanceTick's hard resync, and corrected at one tick per second. Every
+     * input in the meantime lands in the server's past and is dropped, so a half-second hitch
+     * costs about ten seconds of being unable to move.
+     */
+    resync() { clientTick = targetTick(); sinceCorrection = 0; },
 
     /**
      * Exactly one tick per simulated step. Always.

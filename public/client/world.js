@@ -4,7 +4,7 @@
 // Everyone else is drawn from snapshots, a little in the past. docs/NETCODE.md §2.
 
 import { INTERP_DELAY_TICKS, TRACER_SAMPLES, TRACER_EVERY_TICKS, FIRE_TICKS } from '/shared/constants.js';
-import { createPlayer } from '/shared/sim/state.js';
+import { createPlayer, tileCentre } from '/shared/sim/state.js';
 import { decodeCells, packCell, cellType } from '/shared/maps.js';
 import { BLOCK, BLOCK_HP } from '/shared/constants.js';
 import { step, blocked } from '/shared/sim/movement.js';
@@ -154,6 +154,27 @@ export function createWorld() {
   }
 
   /**
+   * Keep a drawn player out of the walls.
+   *
+   * The useful observation is that the *tile* a player is in is the whole truth as far as the
+   * rules go — fire, pickups and contagion all resolve per tile — and the sub-tile offset is
+   * purely presentation. So when smoothing or interpolation puts the drawn point somewhere
+   * illegal, the tile index is still trustworthy and we can fall back to it: pull the offending
+   * axis onto the centre line of the tile the simulation says they occupy.
+   *
+   * Movement is axis-locked and auto-centring, so in a corridor that centre line is where they
+   * really are to within a few units. You get the fine movement everywhere it is legal, and a
+   * silent snap to the lane exactly where it is not. No more walking through corners.
+   */
+  function settleToLane(p) {
+    if (!w.map || !blocked(w, p, p.rx, p.ry)) return;
+    const cx = tileCentre(p.x >> 8), cy = tileCentre(p.y >> 8);
+    if (!blocked(w, p, cx, p.ry)) { p.rx = cx; return; }
+    if (!blocked(w, p, p.rx, cy)) { p.ry = cy; return; }
+    p.rx = cx; p.ry = cy;        // both axes are wrong: the tile centre is always legal
+  }
+
+  /**
    * Hard cut, not a slide. The tracer is sampled from the *rendered* position, so without
    * clearing it a respawn leaves a stripe of coloured dots across the map from where you died.
    */
@@ -210,6 +231,8 @@ export function createWorld() {
           p.ry = xFirst ? pv : pu;
         }
       }
+
+      settleToLane(p);
       if (p.trailAt === undefined) p.trailAt = 0;
       if (w.tick - p.trailAt >= TRACER_EVERY_TICKS) {
         p.trailAt = w.tick;

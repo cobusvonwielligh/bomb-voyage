@@ -3,145 +3,147 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bomb Voyage</title>
 <link rel="icon" href="data:,">
-<style>
-  :root { color-scheme: dark; --gold:#ffd21f; --panel:#1a2029; --ink:#e8eef7; --dim:#8b97a8; }
-  * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; overflow: hidden; background: #0d1117; color: var(--ink);
-               font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
-  canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block;
-                image-rendering: pixelated; }
+<link rel="preload" href="/assets/pixel-game.otf" as="font" type="font/otf" crossorigin>
+<link rel="stylesheet" href="/style.css">
 
-  /* menu */
-  #menu { position: fixed; inset: 0; display: grid; place-items: center; z-index: 10;
-          background: radial-gradient(120% 90% at 50% 0%, #1b1430 0%, #0d1117 60%); }
-  .card { border: 2px solid #ffd21f66; border-radius: 4px; background: #1a2029ee;
-          padding: 30px 38px; width: 420px; box-shadow: 0 0 60px #6b21a855; position: relative; }
-  #mascot { position: absolute; right: 18px; top: -48px; width: 192px; height: 192px;
-            image-rendering: pixelated; pointer-events: none;
-            filter: drop-shadow(0 6px 16px #000a); }
-  h1 { color: var(--gold); font-size: 17px; letter-spacing: .2em; text-transform: uppercase;
-       margin: 0 0 4px; }
-  .sub { color: var(--dim); margin: 0 0 22px; font-size: 12px; }
-  label { display: block; color: var(--dim); font-size: 11px; letter-spacing: .1em;
-          text-transform: uppercase; margin-bottom: 6px; }
-  input[type=text] { width: 100%; font: inherit; font-size: 15px; color: var(--ink);
-                     background: #0d1117; border: 1px solid #ffd21f55; border-radius: 3px;
-                     padding: 9px 11px; }
-  input[type=text]:focus { outline: none; border-color: var(--gold); }
-  button { font: inherit; color: var(--gold); background: transparent;
-           border: 1px solid #ffd21f88; border-radius: 3px; padding: 7px 16px; cursor: pointer; }
-  button:hover { background: var(--gold); color: var(--panel); }
-  button:disabled { opacity: .45; cursor: default; }
-  button:disabled:hover { background: transparent; color: var(--gold); }
-  #play { width: 100%; margin-top: 16px; padding: 11px; font-size: 15px; letter-spacing: .18em;
-          text-transform: uppercase; }
-  .keys { margin: 22px 0 0; padding: 0; list-style: none; color: var(--dim); font-size: 11px;
-          display: grid; grid-template-columns: 7em 1fr; gap: 3px 10px; }
-  .keys b { color: var(--ink); font-weight: normal; }
-
-  /* hud */
-  #hud { position: fixed; inset: 0; display: none; pointer-events: none; z-index: 5;
-         flex-direction: column; justify-content: space-between; padding: 10px 12px; }
-  .bar { display: flex; gap: 14px; align-items: center; color: var(--dim); }
-  .bar b { color: var(--ink); font-weight: normal; }
-  #conn[data-state=open] { color: #5ad1a0; }
-  #conn[data-state=reconnecting], #conn[data-state=connecting] { color: var(--gold); }
-  /* z-index above the menu: the first thing it ever has to say is "server full". */
-  #toast { position: fixed; top: 44px; left: 50%; transform: translateX(-50%); z-index: 20;
-           background: #1a2029dd; border: 1px solid #ffd21f66; border-radius: 3px;
-           padding: 6px 14px; color: var(--gold); opacity: 0; transition: opacity .25s;
-           pointer-events: none; }
-
-  /* chat */
-  #chat { pointer-events: auto; width: 340px; }
-  #chatList { list-style: none; margin: 0 0 6px; padding: 0; max-height: 170px; overflow-y: auto;
-              font-size: 12px; text-shadow: 0 1px 2px #000; }
-  #chatList li { padding: 1px 0; }
-  #chatInput { width: 100%; font: inherit; font-size: 12px; color: var(--ink);
-               background: #0d1117cc; border: 1px solid #ffd21f44; border-radius: 3px;
-               padding: 5px 8px; opacity: .45; }
-  #chatInput:focus { outline: none; opacity: 1; border-color: var(--gold); }
-  .right { margin-left: auto; display: flex; gap: 8px; align-items: center; pointer-events: auto; }
-  input[type=range] { width: 72px; accent-color: var(--gold); }
-  .vlabel { color: var(--dim); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
-  .gear { display: block; margin-top: 6px; color: var(--gold); font-size: 13px;
-          text-shadow: 0 1px 2px #000; letter-spacing: .08em; }
-
-  /* death + scores */
-  /* Click-through except for the card, so the chat box underneath stays usable while dead —
-     and for the twenty seconds of the round-over standings. */
-  #dead { position: fixed; inset: 0; display: none; place-items: center; z-index: 8;
-          background: #0d111788; pointer-events: none; }
-  #dead .card { pointer-events: auto; }
-  .card.small { width: 320px; text-align: center; }
-  #deadText { white-space: pre-line; }
-  .card.small h1 { color: #e8655a; }
-  #respawn { width: 100%; margin-top: 10px; padding: 10px; letter-spacing: .14em;
-             text-transform: uppercase; }
-  #scores { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 9;
-            display: none; background: #1a2029f2; border: 2px solid #ffd21f66; border-radius: 4px;
-            padding: 18px 22px; min-width: 340px; }
-  #scores table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  #scores th { color: var(--dim); font-weight: normal; text-align: left; padding-bottom: 6px;
-               border-bottom: 1px solid #ffd21f33; }
-  #scores td { padding: 3px 10px 3px 0; }
-  #scores .sub { margin: 12px 0 0; text-align: center; }
-</style>
+<!-- One SVG sprite sheet, defined once and referenced by <use>. Repeating the paths per pip would
+     be four copies of the same geometry in the markup. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-bomb" viewBox="0 0 16 16">
+      <circle cx="7" cy="10" r="5" fill="currentColor"/>
+      <path d="M9 5l2-2 1 1" stroke="currentColor" stroke-width="1.6" fill="none"/>
+      <circle cx="13" cy="3" r="1.6" fill="#ff7a3d"/>
+    </symbol>
+    <symbol id="i-fire" viewBox="0 0 16 16">
+      <path d="M8 1c1 3-3 4-3 7a3 3 0 006 0c0-1-1-2-1-3 1 1 3 2 3 4a5 5 0 01-10 0c0-4 5-5 5-8z"
+            fill="currentColor"/>
+    </symbol>
+    <symbol id="i-boot" viewBox="0 0 16 16">
+      <path d="M4 2h4v6l4 2v4H4z" fill="currentColor"/>
+      <path d="M2 14h12" stroke="currentColor" stroke-width="1.4"/>
+    </symbol>
+    <symbol id="i-gh" viewBox="0 0 16 16">
+      <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+        0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01
+        1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95
+        0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 014 0c1.53-1.04
+        2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65
+        3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/>
+    </symbol>
+    <symbol id="i-bug" viewBox="0 0 16 16">
+      <ellipse cx="8" cy="9" rx="4" ry="5" fill="currentColor"/>
+      <path d="M8 4V2M4 7L1 5M12 7l3-2M4 11l-3 2M12 11l3 2" stroke="currentColor"
+            stroke-width="1.3" fill="none"/>
+    </symbol>
+  </defs>
+</svg>
 
 <canvas id="game"></canvas>
 
 <div id="hud">
-  <div class="bar">
-    <span id="you">—</span>
-    <span id="stat"></span>
-    <span id="conn" data-state="connecting">connecting</span>
+  <div id="topbar" class="edge">
+    <span id="who">&mdash;</span>
+    <span id="rank"></span>
+    <span class="sep"></span>
+
+    <span class="stat" id="clock"><span class="k">left</span><span class="v" id="vClock">--:--</span></span>
+    <span class="stat"><span class="k">ping</span><span class="v" id="vPing">&mdash;</span></span>
+    <span class="stat"><span class="k">alive</span><span class="v" id="vOnline">&mdash;</span></span>
+    <span class="stat"><span class="k">map</span><span class="v" id="vMap">&mdash;</span></span>
+    <span class="sep"></span>
+
+    <span id="gear">
+      <span class="pip" id="pBombs" title="bombs you can have out at once">
+        <svg><use href="#i-bomb"/></svg><span class="n">1</span><span class="cap"></span>
+      </span>
+      <span class="pip" id="pFire" title="blast radius">
+        <svg><use href="#i-fire"/></svg><span class="n">1</span><span class="cap"></span>
+      </span>
+      <span class="pip" id="pSpeed" title="speed">
+        <svg><use href="#i-boot"/></svg><span class="n">0</span><span class="cap"></span>
+      </span>
+      <span id="shields" title="shields"></span>
+    </span>
+
     <span class="right">
-      <button id="musicBtn">♪ off</button>
+      <span id="conn" data-state="connecting">connecting</span>
+      <button id="musicBtn">&#9834; off</button>
       <input id="vol" type="range" min="0" max="100" value="10" title="music volume">
       <span class="vlabel">sfx</span>
       <input id="sfxVol" type="range" min="0" max="100" value="75" title="sound effect volume">
+      <a class="ghLink" href="https://github.com/cobusvonwielligh/bomb-voyage"
+         target="_blank" rel="noopener noreferrer" title="source on GitHub">
+        <svg><use href="#i-gh"/></svg>source
+      </a>
+      <a class="ghLink bug" href="https://github.com/cobusvonwielligh/bomb-voyage/issues/new"
+         target="_blank" rel="noopener noreferrer" title="report a bug on GitHub">
+        <svg><use href="#i-bug"/></svg>report bug
+      </a>
       <button id="leave" title="esc">leave</button>
     </span>
   </div>
-  <div id="chat">
+
+  <div id="chat" class="edge">
     <ul id="chatList"></ul>
-    <input id="chatInput" placeholder="enter to chat" maxlength="140">
-    <span id="gear" class="gear"></span>
+    <input id="chatInput" placeholder="enter to chat &middot; /help for commands" maxlength="140">
   </div>
 </div>
 
+<div id="streak"><span class="big"></span><span class="who"></span></div>
+
 <div id="dead">
-  <div class="card small">
+  <div class="card small edge">
     <h1 id="deadTitle">you died</h1>
     <p class="sub" id="deadText">space to respawn &middot; esc to leave</p>
     <button id="respawn">respawn</button>
   </div>
 </div>
 
-<div id="scores">
+<div id="scores" class="edge">
   <table>
-    <thead><tr><th>#</th><th>name</th><th>k</th><th>d</th><th>score</th></tr></thead>
+    <thead><tr><th>#</th><th>name</th><th>rank</th><th>k</th><th>d</th><th>round</th><th>career</th></tr></thead>
     <tbody id="scoreRows"></tbody>
   </table>
+  <div id="allTime">
+    <h2>all time</h2>
+    <table>
+      <thead><tr><th>#</th><th>name</th><th>rank</th><th>score</th></tr></thead>
+      <tbody id="allTimeRows"></tbody>
+    </table>
+  </div>
   <p class="sub">tab to close</p>
 </div>
 
 <div id="toast"></div>
 
 <div id="menu">
-  <div class="card">
+  <div id="menuWrap">
+    <div class="card edge">
+      <h1 class="hoverFlow">Bomb Voyage</h1>
+      <p class="sub">16 scoundrels &middot; 16 minutes &middot; one very short fuse</p>
+      <label for="name">your name</label>
+      <input id="name" type="text" placeholder="pick a name" autocomplete="off" autofocus>
+      <button id="play" class="hoverFlow">play</button>
+      <ul class="keys">
+        <li><b>arrows / wasd</b></li><li>move</li>
+        <li><b>space / k</b></li><li>bomb</li>
+        <li><b>enter</b></li><li>chat &middot; /help for commands</li>
+        <li><b>tab</b></li><li>scores &amp; ranks</li>
+        <li><b>esc</b></li><li>leave</li>
+      </ul>
+      <p class="menuFoot">
+        <a href="https://github.com/cobusvonwielligh/bomb-voyage"
+           target="_blank" rel="noopener noreferrer">
+          <svg><use href="#i-gh"/></svg>source
+        </a>
+        <a class="bug" href="https://github.com/cobusvonwielligh/bomb-voyage/issues/new"
+           target="_blank" rel="noopener noreferrer">
+          <svg><use href="#i-bug"/></svg>report a bug
+        </a>
+      </p>
+    </div>
     <canvas id="mascot" width="192" height="192"></canvas>
-    <h1>Bomb Voyage</h1>
-    <p class="sub">16 scoundrels &middot; 16 minutes &middot; one very short fuse</p>
-    <label for="name">your name</label>
-    <input id="name" type="text" placeholder="pick a name" autocomplete="off" autofocus>
-    <button id="play">play</button>
-    <ul class="keys">
-      <li><b>arrows / wasd</b></li><li>move</li>
-      <li><b>space / k</b></li><li>bomb</li>
-      <li><b>enter</b></li><li>chat</li>
-      <li><b>tab</b></li><li>scores</li>
-    </ul>
   </div>
 </div>
 

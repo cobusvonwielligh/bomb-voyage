@@ -6,6 +6,7 @@
 
 import {
   TICK_MS, TICK_HZ, NAME_MAX_CHARS, UNITS_PER_TILE, IN_BOMB, playerColor,
+  MAX_BOMBS_CARRIED, MAX_RADIUS, MAX_SKATES,
 } from '/shared/constants.js';
 import { createNet } from './net.js';
 import { createInput, typingSomewhere } from './input.js';
@@ -127,6 +128,8 @@ const net = createNet({
         case 'shield': {
           const p = world.players[e.i];
           if (p) sfx.playAtUnits('shield', p.rx ?? p.x, p.ry ?? p.y);
+          // Being saved by a shield deserves to be as legible as dying would have been.
+          if (e.i === world.you) renderer?.addFlash(0.4, '90,209,160');
           break;
         }
 
@@ -150,9 +153,14 @@ const net = createNet({
           killFeed(e.i === e.by
             ? `${who?.name ?? '?'} blew themselves up`
             : `${by?.name ?? '?'} bombed ${who?.name ?? '?'}`);
-          if (e.i === world.you) sfx.play('ownDeath');
-          else if (e.by === world.you) sfx.play('kill');
-          else sfx.playAtUnits('death', e.x, e.y);
+          if (e.i === world.you) {
+            sfx.play('ownDeath');
+            renderer?.addFlash(0.8, '220,60,48');     // you, specifically, just died
+            renderer?.addShake(0.7);
+          } else if (e.by === world.you) {
+            sfx.play('kill');
+            renderer?.addFlash(0.22, '255,210,31');    // a gold blink: that one was yours
+          } else sfx.playAtUnits('death', e.x, e.y);
           break;
         }
       }
@@ -174,6 +182,34 @@ const net = createNet({
       $('deadTitle').textContent = 'you died';
       $('deadText').textContent = 'space to respawn · esc to leave';
     }, m.startsInMs);
+  },
+  // Lifetime rank, once a second. See the comment on emitScores in server/room.js for why this
+  // is not in the snapshot.
+  onScores: m => {
+    ranks.clear();
+    for (const r of m.ranks || []) ranks.set(r.i, r);
+    allTime = m.top || [];
+    if (scoresOpen) renderScores();
+  },
+  /**
+   * Kill streaks. The server decides what counts; this only has to make it impossible to miss.
+   * Shape: { t:'streak', i, name, kind, ace }.
+   */
+  onStreak: m => {
+    const el = $('streak');
+    el.querySelector('.big').textContent = m.kind;
+    el.querySelector('.who').textContent = m.i === world.you ? 'you' : m.name;
+    el.classList.toggle('ace', !!m.ace);
+    // Restart the animation even if one is already running — a triple kill arriving on top of a
+    // double has to replace it, not be swallowed by it.
+    el.classList.remove('show');
+    void el.offsetWidth;
+    el.classList.add('show');
+    if (m.i === world.you) {
+      sfx.play(m.ace ? 'fanfare' : 'kill');
+      renderer?.addFlash(m.ace ? 0.45 : 0.3, m.ace ? '179,107,255' : '255,210,31');
+    }
+    killFeed(`${m.i === world.you ? 'you' : m.name} — ${m.kind}`);
   },
   onChat: m => {
     const li = document.createElement('li');
@@ -259,9 +295,13 @@ function loop(now) {
   // input packets per tick, which is indistinguishable from the server lagging.
   if (!running) return;
   requestAnimationFrame(loop);
-  const dt = Math.min(250, now - last);     // a backgrounded tab must not replay two minutes
+  const raw = now - last;
+  const dt = Math.min(250, raw);            // a backgrounded tab must not replay two minutes
   last = now;
   acc += dt;
+  // The clamp above just skipped (raw - 250) ms of simulation. Re-tie the clock to real time, or
+  // every input from here lands in the server's past until a 1-tick-per-second crawl catches up.
+  if (raw > 250) net.resync();
 
   sfx.frame();                              // resets the per-frame sound budget
 
@@ -276,35 +316,92 @@ function loop(now) {
     const me = world.me();
     net.send({ t: 'input', tick, m: mask, x: me?.x | 0, y: me?.y | 0 });
   }
-  if (acc > TICK_MS * 5) acc = 0;           // fell badly behind: drop it rather than catching up
+  // Fell badly behind: drop it rather than catching up — and resync, for the same reason.
+  if (acc > TICK_MS * 5) { acc = 0; net.resync(); }
 
   fuseTicks();
   world.updateFires();
   world.interpolate(net.serverTickNow(), dt);
   renderer.frame(dt);
 
-  if (now - hudAt > 200) {
-    hudAt = now;
-    const me = world.me();
-    const left = Math.max(0, (world.roundEndsAtTick || 0) - world.tick);
-    const mm = String(Math.floor(left / 30 / 60)).padStart(2, '0');
-    const ss = String(Math.floor((left / 30) % 60)).padStart(2, '0');
+  if (now - hudAt > 200) { hudAt = now; drawHud(); }
+}
 
-    // One minute left, then ten seconds. Nobody watches the clock while being chased.
-    const secs = Math.floor(left / TICK_HZ);
-    for (const mark of [60, 10]) {
-      if (secs <= mark && warnedAt !== mark && secs > mark - 3) { warnedAt = mark; sfx.play('warn'); }
-    }
-    if (secs > 61) warnedAt = -1;           // a new round re-arms both
-    $('stat').textContent =
-      `${mm}:${ss} · ${net.rtt}ms · ${world.players.filter(Boolean).length} online · ${world.map?.id ?? ''}`;
-    if (me) {
-      $('you').textContent = `${me.name}  ${me.kills}/${me.deaths}`;
-      $('gear').textContent = `◼${me.bombs}  ✸${me.radius}  »${me.speed}${me.shields ? '  ◊' : ''}`;
-      if (!roundOverUntil) showDead(!me.alive);
-    }
-    if (scoresOpen) renderScores();
+// ─── HUD ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Write a value, and flash it if it changed.
+ *
+ * The flash is the point. A number in the corner that silently becomes a different number is
+ * invisible while you are being chased — picking up a Fire has to announce itself. Colour alone
+ * is not enough either: peripheral vision notices movement far more reliably than hue, which is
+ * why the keyframe scales as well as recolours.
+ *
+ * Restarting the animation needs the class off, a forced reflow, and the class back on. Without
+ * the reflow the browser coalesces both changes into no change at all, and two pickups in quick
+ * succession only flash once.
+ */
+function setValue(el, text, { worse = false } = {}) {
+  if (!el || el.textContent === String(text)) return;
+  const first = el.textContent === '' || el.textContent === '\u2014';
+  el.textContent = text;
+  if (first) return;                        // joining is not an event worth flashing
+  const cls = worse ? 'bump-bad' : 'bump';
+  el.classList.remove('bump', 'bump-bad');
+  void el.offsetWidth;
+  el.classList.add(cls);
+}
+
+const gearPip = (id, value, cap) => {
+  const el = $(id);
+  setValue(el.querySelector('.n'), value);
+  el.querySelector('.cap').textContent = `/${cap}`;
+  el.classList.toggle('max', value >= cap);
+};
+
+let lastShields = 0;
+function drawHud() {
+  const me = world.me();
+  const left = Math.max(0, (world.roundEndsAtTick || 0) - world.tick);
+  const secs = Math.floor(left / TICK_HZ);
+  const mm = String(Math.floor(secs / 60)).padStart(2, '0');
+  const ss = String(secs % 60).padStart(2, '0');
+
+  // One minute left, then ten seconds. Nobody watches the clock while being chased.
+  for (const mark of [60, 10]) {
+    if (secs <= mark && warnedAt !== mark && secs > mark - 3) { warnedAt = mark; sfx.play('warn'); }
   }
+  if (secs > 61) warnedAt = -1;             // a new round re-arms both
+
+  $('vClock').textContent = `${mm}:${ss}`;
+  $('clock').classList.toggle('low', secs <= 60);
+  $('vPing').textContent = `${net.rtt}ms`;
+  $('vOnline').textContent = world.players.filter(Boolean).length;
+  $('vMap').textContent = world.map?.id ?? '';
+
+  if (!me) return;
+
+  const mine = ranks.get(world.you);
+  $('who').textContent = `${me.name}  ${me.kills}/${me.deaths}`;
+  setValue($('rank'), mine ? mine.rankName : '');
+
+  gearPip('pBombs', me.bombs, MAX_BOMBS_CARRIED);
+  gearPip('pFire', me.radius, MAX_RADIUS);
+  gearPip('pSpeed', me.speed, MAX_SKATES);
+
+  // Shields are the closest thing this game has to health: one hit each, and nothing refills
+  // them except picking up another. Drawn as pips rather than a bar, because a bar implies a
+  // continuous quantity and these are discrete lives.
+  if (me.shields !== lastShields) {
+    const box = $('shields');
+    box.textContent = '';
+    for (let n = 0; n < me.shields; n++) box.append(document.createElement('i'));
+    if (me.shields > lastShields) { box.classList.remove('bump'); void box.offsetWidth; box.classList.add('bump'); }
+    lastShields = me.shields;
+  }
+
+  if (!roundOverUntil) showDead(!me.alive);
+  if (scoresOpen) renderScores();
 }
 
 // ─── death, scoreboard, leaving ───────────────────────────────────────────────
@@ -324,21 +421,52 @@ function killFeed(text) {
 }
 
 let scoresOpen = false;
+const ranks = new Map();        // seat -> {lifetime, rank, rankName, nextAt}
+let allTime = [];
+
+function cell(tr, text, colour, dim) {
+  const td = document.createElement('td');
+  td.textContent = text;
+  if (colour) td.style.color = colour;
+  if (dim) td.className = 'dimcell';
+  tr.append(td);
+  return td;
+}
+
+/** Tabular figures, so a column of scores lines up instead of shimmering. */
+const num = td => { td.classList.add('num'); return td; };
+
 function renderScores() {
   const rows = world.players.filter(Boolean).sort((a, b) => b.score - a.score || b.kills - a.kills);
   const body = $('scoreRows');
   body.textContent = '';
   for (const [n, p] of rows.entries()) {
     const tr = document.createElement('tr');
-    for (const [v, colour] of [[n + 1], [p.name, playerColor(p.i)], [p.kills], [p.deaths], [p.score]]) {
-      const td = document.createElement('td');
-      td.textContent = v;
-      if (colour) td.style.color = colour;
-      tr.append(td);
-    }
+    const r = ranks.get(p.i);
+    cell(tr, n + 1, null, true);
+    cell(tr, p.name, playerColor(p.i));
+    // The rank ladder is the thing returning Game of Bombs players recognise first, so it gets a
+    // column of its own rather than a tooltip.
+    cell(tr, r?.rankName ?? '\u2014', null, true);
+    num(cell(tr, p.kills));
+    num(cell(tr, p.deaths));
+    num(cell(tr, p.score));
+    num(cell(tr, r ? r.lifetime : '\u2014', null, true));
     if (p.i === world.you) tr.style.fontWeight = 'bold';
     body.append(tr);
   }
+
+  const best = $('allTimeRows');
+  best.textContent = '';
+  for (const [n, e] of allTime.entries()) {
+    const tr = document.createElement('tr');
+    cell(tr, n + 1, null, true);
+    cell(tr, e.name);
+    cell(tr, e.rankName, null, true);
+    num(cell(tr, e.score));
+    best.append(tr);
+  }
+  $('allTime').style.display = allTime.length ? '' : 'none';
 }
 
 function leave() {
@@ -377,6 +505,17 @@ function play() {
     // A blast before its own fuse ran out was set off by something else. A bomb we never even
     // saw placed counts too — that only happens when a chain reaches it inside one snapshot.
     sfx.play('boom', bomb.tx, bomb.ty, { chain: bomb.at === undefined || world.tick < bomb.at });
+
+    // Shake falls off with distance and is saturating, so a chain reaction across the map rattles
+    // once rather than sixteen times. Nothing past eight tiles moves the camera at all.
+    const me = world.me();
+    if (!me) return;
+    const d = Math.hypot(bomb.tx - me.rx / UNITS_PER_TILE, bomb.ty - me.ry / UNITS_PER_TILE);
+    if (d >= 8) return;
+    // Yours kicks harder than someone else's at the same distance. You pressed the button; the
+    // screen agreeing with you is most of what makes a bomb feel like it went off.
+    const mine = (bomb.o ?? bomb.owner) === world.you;
+    renderer?.addShake((mine ? 0.75 : 0.5) * (1 - d / 8));
   };
   net.connect(name);
 }

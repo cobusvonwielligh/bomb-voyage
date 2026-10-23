@@ -32,7 +32,11 @@ export const HITBOX_REDUCED_UNITS = 10 * (UNITS_PER_TILE / TILE_PX);
 
 // Slide toward a tile centre instead of stopping when the perpendicular offset is within this.
 // This is what makes movement feel like Bomberman rather than like a grid. Do not remove.
-export const CORNER_ASSIST_UNITS = 96; // 0.375 tile. TUNE
+// Widened from 0.375 to 0.44 of a tile after playtesting: at the old window you could be visibly
+// most of the way into a doorway and still stop dead against its edge, which reads as the game
+// refusing a move you clearly made. There is no overshoot risk — the assist only ever pulls you
+// onto the centre line of a lane you are already in.
+export const CORNER_ASSIST_UNITS = 112; // 0.44 tile. TUNE
 
 // Input bitmask
 export const IN_RIGHT = 1, IN_UP = 2, IN_LEFT = 4, IN_DOWN = 8, IN_BOMB = 16;
@@ -45,7 +49,13 @@ export const DIR_R = 0, DIR_U = 1, DIR_L = 2, DIR_D = 3;
 export const FUSE_TICKS = 72;      // 2.4 s. TUNE
 export const FUSE_TICKS_FAST = 36; // Fast Detonation
 export const FIRE_TICKS = 15;      // 0.5 s
-export const MAX_BOMBS = 16;
+export const MAX_BOMBS = 16;        // hard ceiling on bombs alive anywhere, a safety valve
+
+// What one player can have out at once. Separate from MAX_BOMBS and much lower: sixteen bombs in
+// one pair of hands is not a loadout, it is a carpet, and a map where every tile is about to
+// explode has no decisions left in it. The HUD shows the cap so the ceiling is visible, not a
+// surprise when a Bomb pickup stops doing anything.
+export const MAX_BOMBS_CARRIED = 8;
 export const MAX_RADIUS = 6;
 export const MAX_RADIUS_BLUE = 9;  // reserved, Blue fire is not in v1
 export const START_BOMBS = 1;
@@ -185,7 +195,29 @@ export const TRACER_SAMPLES = 8;
 export const TRACER_EVERY_TICKS = 3;
 export const VOLUME_MUSIC_DEFAULT = 0.10;
 export const VOLUME_SFX_DEFAULT = 0.75;
+
+// Applied to every bus, on top of the sliders. A persisted slider value in localStorage would
+// survive a change to the defaults above, so halving the output has to happen somewhere the
+// user's stored preference cannot override.
+export const VOLUME_MASTER = 0.5;
+
 export const SFX_MAX_DISTANCE_TILES = 12;
+
+// ─── Kill streaks ─────────────────────────────────────────────────────────────
+// Kills inside this window, without dying, escalate. ACE is separate: everyone else, no deaths.
+
+export const STREAK_WINDOW_TICKS = 6 * TICK_HZ;   // 6 s between kills to keep a streak alive
+export const STREAK_NAMES = { 2: 'DOUBLE KILL', 3: 'TRIPLE KILL', 4: 'ULTRA KILL', 5: 'RAMPAGE' };
+export const STREAK_ACE = 'ACE';
+
+// ─── Admin ────────────────────────────────────────────────────────────────────
+
+export const GAMESPEED_MIN = 10, GAMESPEED_MAX = 200;   // percent of TICK_HZ
+export const BAN_MAX_HOURS = 24;
+
+// Wall regrowth stops once this much of the open floor is wall again, or a long round silts up
+// into a maze nobody can cross.
+export const REGEN_MAX_FILL = 0.55;
 
 // 16 hues evenly spaced 22.5° apart, handed out in bit-reversed order so the first few joiners
 // get maximally separated colours. Adjacent hues also alternate lightness, so the two closest

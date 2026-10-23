@@ -19,6 +19,10 @@ export function createRenderer(canvas, world) {
   let baked = null;
   const cam = { x: 0, y: 0 };
   let redrawsThisSecond = 0, redrawWindow = 0;
+  // Screen shake and a full-screen flash. Both are presentation only and both decay toward zero,
+  // so a frame drop can never leave the camera stuck off-centre or the screen stuck red.
+  let shake = 0;
+  let flash = 0, flashColour = '255,255,255';
 
   const ensureBaked = () => { baked ??= bake({ playerCount: 16 }); };
 
@@ -100,7 +104,18 @@ export function createRenderer(canvas, world) {
     }
     cam.x = Math.max(0, Math.min(Math.max(0, worldW - vw), cam.x));
     cam.y = Math.max(0, Math.min(Math.max(0, worldH - vh), cam.y));
-    const ox = -Math.round(cam.x), oy = -Math.round(cam.y);
+
+    // Shake is applied to the draw offset, not to the camera, so it cannot accumulate into the
+    // follow logic or drift the view. Decay is time-based for the same reason the follow is.
+    let sx = 0, sy = 0;
+    if (shake > 0.002) {
+      const amp = shake * shake * 11;        // squared, so small hits barely register
+      sx = (Math.random() * 2 - 1) * amp;
+      sy = (Math.random() * 2 - 1) * amp;
+      shake *= Math.exp(-dtMs / 90);
+    } else shake = 0;
+
+    const ox = -Math.round(cam.x) + Math.round(sx), oy = -Math.round(cam.y) + Math.round(sy);
 
     ctx.fillStyle = PALETTE.void;
     ctx.fillRect(0, 0, vw, vh);
@@ -138,6 +153,12 @@ export function createRenderer(canvas, world) {
     const alive = world.players.filter(Boolean).sort((a, b) => a.ry - b.ry);
     for (const p of alive) drawTracer(ctx, p, ox, oy);
     for (const p of alive) drawOne(ctx, p, ox, oy, p.i === world.you);
+
+    if (flash > 0.004) {
+      ctx.fillStyle = `rgba(${flashColour},${flash * 0.5})`;
+      ctx.fillRect(0, 0, vw, vh);
+      flash *= Math.exp(-dtMs / 110);
+    } else flash = 0;
 
     if (performance.now() - redrawWindow > 1000) { redrawWindow = performance.now(); redrawsThisSecond = 0; }
   }
@@ -216,5 +237,11 @@ export function createRenderer(canvas, world) {
   }
 
   resize();
-  return { frame, resize, invalidateAll, invalidateTile, get chunkRedraws() { return redrawsThisSecond; } };
+  return {
+    frame, resize, invalidateAll, invalidateTile,
+    /** @param amount 0..1. Clamped and saturating: ten bombs at once must not throw the camera off. */
+    addShake(amount) { shake = Math.min(1, shake + Math.max(0, amount)); },
+    addFlash(amount, colour = '255,255,255') { flash = Math.min(1, flash + amount); flashColour = colour; },
+    get chunkRedraws() { return redrawsThisSecond; },
+  };
 }

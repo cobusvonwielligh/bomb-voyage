@@ -12,6 +12,10 @@ import { walkable, has, tileCentre } from './state.js';
 
 const HALF_TILE = UNITS_PER_TILE >> 1;
 
+// How much faster than walking pace a player slides sideways onto a lane centre line. Sideways
+// drift is assistance, not travel, so it is allowed to outrun the legs.
+const ALIGN_RATE = 2;
+
 export function speedOf(p) {
   let s = SPEED_UNITS_PER_TICK[Math.min(p.speed, SPEED_UNITS_PER_TICK.length - 1)];
   if (has(p, STATUS.SLOWDOWN)) s = ((s * SLOWDOWN_NUM) / SLOWDOWN_DEN) | 0;
@@ -21,15 +25,22 @@ export function speedOf(p) {
 const halfBox = p => (has(p, STATUS.REDUCTION) ? HITBOX_REDUCED_UNITS : HITBOX_UNITS) >> 1;
 
 /**
- * A bomb is solid to everyone — except the player still standing on the tile they just put it
- * on, who may walk off it. Inlined rather than imported from bombs.js: that module imports
- * fire.js and blocks.js, and movement has no business pulling in the whole blast chain.
+ * A bomb is solid to anyone whose centre is outside its tile — and to nobody who is already
+ * standing on it, whoever placed it.
+ *
+ * The owner test this used to have made a non-owner's bomb solid the instant it appeared, with
+ * no grace for a player whose hitbox was already inside that tile. Every candidate position was
+ * then blocked too, so dropping a bomb on someone standing next to you froze them in place for
+ * the whole 72-tick fuse: an unavoidable kill with no counterplay. Tile occupancy is observable
+ * from the bomb record alone, so both sides agree without the bomb carrying any extra state.
+ *
+ * Inlined rather than imported from bombs.js: that module imports fire.js and blocks.js, and
+ * movement has no business pulling in the whole blast chain.
  */
 function bombSolid(state, p, tx, ty) {
   if (!state.bombs) return false;
   for (const b of state.bombs) {
     if (b.tx !== tx || b.ty !== ty) continue;
-    if (b.owner !== p.i) return true;
     return !((p.x >> 8) === tx && (p.y >> 8) === ty);
   }
   return false;
@@ -94,10 +105,16 @@ function moveAxis(state, p, ax, ay, speed) {
   const ny = horizontal ? p.y : p.y + dir * speed;
   const wayBlocked = blocked(state, p, nx, ny);
 
-  /** Slide toward the centre line of the lane we are already in, by at most one tick. */
+  /**
+   * Slide toward the centre line of the lane we are already in.
+   *
+   * At `speed` units a tick, correcting a third of a tile of misalignment takes three or four
+   * ticks of visibly scraping along the wall before the gap opens. ALIGN_RATE makes it one or
+   * two, which is the difference between "it caught the corner for me" and "it stuck".
+   */
   const straighten = () => {
     const delta = -off;
-    const pull = Math.sign(delta) * Math.min(Math.abs(delta), speed);
+    const pull = Math.sign(delta) * Math.min(Math.abs(delta), speed * ALIGN_RATE);
     const cx = horizontal ? p.x : p.x + pull;
     const cy = horizontal ? p.y + pull : p.y;
     if (blocked(state, p, cx, cy)) return false;
@@ -137,11 +154,45 @@ function moveAxis(state, p, ax, ay, speed) {
 }
 
 /**
+ * Nothing may leave a player unable to move. Ever.
+ *
+ * `moveAxis` assumes you start from a legal position and only ever asks whether the *next* one is
+ * legal — so a player who somehow ends up overlapping a solid tile finds every candidate blocked,
+ * including the flush-to-wall slide, and is frozen for good. The ways in are all rare and all
+ * real: a wall regrowing on top of you, Reduction expiring while you stand inside a column, a map
+ * change, a spawn point that is no longer clear.
+ *
+ * So: if the position we are *already* in is illegal, leave for the nearest legal tile centre.
+ * This runs off nothing but the shared state, so the client predicts the identical escape and
+ * reconciliation stays a no-op. It never fires in normal play — if it is firing, something else
+ * is wrong and this is the seatbelt, not the fix.
+ *
+ * @returns true if it had to intervene
+ */
+export function unstick(state, p) {
+  if (!blocked(state, p, p.x, p.y)) return false;
+
+  const tx = p.x >> 8, ty = p.y >> 8;
+  // Nearest first, and in a fixed order so two machines always pick the same way out.
+  const ring = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
+  for (const [dx, dy] of ring) {
+    const nx = tileCentre(tx + dx), ny = tileCentre(ty + dy);
+    if (blocked(state, p, nx, ny)) continue;
+    p.x = nx; p.y = ny;
+    return true;
+  }
+  return false;     // boxed in on all nine tiles; the blast that caused it will resolve it
+}
+
+/**
  * Advance one player by one tick. `mask` is the input bitmask from docs/PROTOCOL.md §3.
  * Pure in everything that matters: same player, same map, same mask -> same result, every time.
  */
 export function step(state, p, mask) {
   if (!p || !p.alive) return;
+
+  // Before anything reads the position, make sure it is one we could legally be standing in.
+  unstick(state, p);
 
   let dx = ((mask & IN_RIGHT) ? 1 : 0) - ((mask & IN_LEFT) ? 1 : 0);
   let dy = ((mask & IN_DOWN) ? 1 : 0) - ((mask & IN_UP) ? 1 : 0);
