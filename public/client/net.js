@@ -5,6 +5,7 @@
 // parallel socket would share the same wifi, NAT and server, so it would die in the same breath.
 
 import { PING_EVERY_MS, RTT_SAMPLES, CLOCK_SAFETY_MS, TICK_MS } from '/shared/constants.js';
+import { createTransport } from './transport.js';
 
 export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onScores, onStreak }) {
   let ws = null;
@@ -22,7 +23,11 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
   let sinceCorrection = 0;
   let connectedAt = 0;
 
-  const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+  const secure = location.protocol === 'https:';
+  const wsUrl = `${secure ? 'wss' : 'ws'}://${location.host}/ws`;
+  // WebTransport needs a publicly trusted certificate, so it only exists on the real site.
+  const wtUrl = secure ? `https://${location.host}/wt` : null;
+  let kind = null;
 
   const rttMin = () => (rtts.length ? Math.min(...rtts) : 0);
 
@@ -59,16 +64,23 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
   function open() {
     closedByUs = false;
     onStatus?.('connecting');
-    ws = new WebSocket(url);
 
-    ws.onopen = () => {
-      onStatus?.('open');
-      ws.send(JSON.stringify(hello));
-      ping();
-    };
+    ws = createTransport({
+      onOpen: won => {
+        kind = won;
+        onStatus?.('open');
+        ws.send(hello);
+        ping();
+      },
+      onNote: note => console.info(`transport: ${note}`),
+      onClose: () => onDisconnect(),
+      onMessage: handle,
+    });
+    ws.connect({ ws: wsUrl, wt: wtUrl });
+  }
 
-    ws.onmessage = e => {
-      const m = JSON.parse(e.data);
+  function handle(m) {
+    {
       switch (m.t) {
         case 'welcome':
           // sessionStorage, not localStorage: the resume token identifies a TAB, not a browser.
@@ -109,9 +121,11 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
         case 'scores': onScores?.(m); break;
         case 'streak': onStreak?.(m); break;
       }
-    };
+    }
+  }
 
-    ws.onclose = ev => {
+  function onDisconnect(ev) {
+    {
       if (closedByUs) return;
       // Reset the backoff only after a connection that actually lasted. Resetting it in onopen
       // means a connection that opens and immediately dies never backs off at all, which turns
@@ -122,17 +136,16 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
       backoff = wait;
       onStatus?.(`reconnecting in ${(wait / 1000).toFixed(1)}s`);
       if (ev?.code === 4000) console.warn('replaced by another connection:', ev.reason);
+      kind = null;
       setTimeout(open, wait);
-    };
-
-    ws.onerror = () => {};
+    }
   }
 
   function ping() {
-    if (!ws || ws.readyState !== 1) return;
+    if (!ws?.open) return;
     const c = Date.now();
     pending.set(c, performance.now());
-    ws.send(JSON.stringify({ t: 'ping', c }));
+    ws.send({ t: 'ping', c });
     if (pending.size > 8) pending.delete(pending.keys().next().value);
   }
   setInterval(ping, PING_EVERY_MS);
@@ -142,7 +155,7 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
       hello = { t: 'hello', name, playerId: sessionStorage.getItem('bv.playerId') || null };
       open();
     },
-    send(msg) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg)); },
+    send(msg) { if (ws?.open) ws.send(msg); },
 
     /** Leave on purpose. Must suppress the reconnect, or we would immediately rejoin. */
     close() {
@@ -152,6 +165,8 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
     },
     get clientTick() { return clientTick; },
     get rtt() { return Math.round(rttMin()); },
+    /** 'webtransport' or 'websocket' — shown in the HUD so a bad round can be attributed. */
+    get transport() { return kind; },
     serverTickNow,
 
     /**

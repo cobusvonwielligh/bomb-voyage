@@ -11,6 +11,7 @@ import { attachHub } from './net.js';
 import { config, usingTls, ROOT } from './config.js';
 import { canonicalTarget } from './canonical.js';
 import { createLeaderboard } from './leaderboard.js';
+import { startWebTransport } from './webtransport.js';
 
 // The lag shim exists to make development honest, and would silently ruin a real session.
 if (config.lag && usingTls) {
@@ -137,6 +138,7 @@ function handle(req, res) {
     const body = JSON.stringify(hub.health({
       uptimeS: Math.round((Date.now() - started) / 1000),
       version: version(),
+      transports: { ...hub.transportCounts, webtransport: wt ? hub.transportCounts.webtransport : null },
       top: leaderboard.top(5),
     }));
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -190,6 +192,27 @@ const server = usingTls
 const leaderboard = createLeaderboard({ dataDir: config.dataDir });
 const hub = attachHub(server, { ...config, leaderboard });
 
+/**
+ * WebTransport on UDP/443, beside the WebSocket on TCP/443.
+ *
+ * Only with real TLS: WebTransport demands a publicly trusted certificate unless the client pins
+ * a hash, and there is no sane way to hand a pinned hash to sixteen colleagues. Locally that
+ * means WebSocket only, which is the correct local setup anyway.
+ *
+ * Failure here is never fatal. A missing native binary, a taken port, a kernel that will not give
+ * us UDP — all of them end as "WebSocket only", which is the configuration a good share of
+ * players behind a corporate firewall will be in no matter what we do.
+ */
+let wt = null;
+if (usingTls) {
+  startWebTransport({
+    port: config.port,
+    cert: fs.readFileSync(config.tlsCert, 'utf8'),
+    privKey: fs.readFileSync(config.tlsKey, 'utf8'),
+    onSocket: ws => hub.attachSocket(ws),
+  }).then(h => { wt = h; }).catch(err => console.warn(`webtransport: ${err.message}`));
+}
+
 server.listen(config.port, () => {
   console.log(`bomb-voyage listening on ${usingTls ? 'https' : 'http'}://${config.publicHost}:${config.port}`);
   console.log(`config: ${config.iniPath || 'defaults + environment only'}`);
@@ -209,6 +232,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
   process.on(sig, () => {
     console.log(`${sig} — shutting down`);
     hub.shutdown();
+    wt?.stop();
     leaderboard.stop();
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 3000).unref();
