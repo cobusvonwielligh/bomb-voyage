@@ -1,6 +1,6 @@
 # Bomb Voyage — Where We Stand
 
-Last updated: **2026-10-23**. Live on `bombvoyage.online`. 201 tests passing.
+Last updated: **2026-10-23**. Live on `bombvoyage.online`. 206 tests passing.
 
 This document replaces the "⬜ The game: not started" line in the README. The game is built, the
 whole plan in [PLAN.md](PLAN.md) has been walked through, and several decisions in it have since
@@ -91,7 +91,7 @@ code**, and that rule has not moved.
 | `state.js` | The state object, players, tile accessors, seeded RNG |
 | `movement.js` | Walking, corner assist, lane centring, diagonals, unstick, stamina |
 | `bombs.js` | Placement, fuses, same-tick chains, powder kegs |
-| `fire.js` | Blast shape. Pure: `(map, bomb) → cells` |
+| `fire.js` | Blast shape. Pure: `(map, bomb, bombs) → cells` |
 | `blocks.js` | Damage, destruction, wall regrowth, keg placement |
 | `perks.js` | Drop table, pickup, supply-and-demand drop rate, scatter on death |
 | `statuses.js` | Contagious statuses and their spread |
