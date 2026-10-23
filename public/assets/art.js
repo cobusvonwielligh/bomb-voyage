@@ -87,38 +87,145 @@ const bevel = (c, x, y, w, h, t = 2) => {
 export function drawTile(c, type, tx = 0, ty = 0, dmg = 0) {
   const S = TILE_PX;
   switch (type) {
+    /* Packed sand over buried stone.
+     *
+     * Four layers, each at a different spatial frequency, which is what stops a large open area
+     * reading as a flat colour field. A single noise octave tiles visibly at 32px; three at
+     * different scales do not, because their periods never line up.
+     *
+     * All of it is deterministic in (tx, ty). The chunk renderer may redraw any tile at any
+     * moment, and terrain that reshuffles when a wall next to it breaks looks like a glitch.
+     */
     case BLOCK.FLOOR: {
       px(c, 0, 0, S, S, PALETTE.floor);
+
+      // Broad tonal drift: whole tiles a shade lighter or darker than their neighbours.
+      const tone = hash(tx * 3, ty * 3);
+      px(c, 0, 0, S, S, tone > 0.5
+        ? `rgba(255,255,255,${(tone - 0.5) * 0.09})`
+        : `rgba(0,0,0,${(0.5 - tone) * 0.13})`);
+
+      // Grain: a scatter of single pixels, dense enough to texture and sparse enough to stay
+      // cheap. Eighteen samples a tile over a cached chunk is nothing.
+      for (let i = 0; i < 18; i++) {
+        const gx = (hash(tx * 17 + i, ty * 7) * S) | 0;
+        const gy = (hash(ty * 13 + i, tx * 11) * S) | 0;
+        const g = hash(i * 5 + tx, i * 3 + ty);
+        px(c, gx, gy, 1, 1, g > 0.5 ? 'rgba(255,255,255,0.045)' : 'rgba(0,0,0,0.07)');
+      }
+
+      // Flagstones, on about one tile in six: the stone the sand has blown off.
+      if (hash(tx + 101, ty + 211) > 0.84) {
+        const sx = 3 + ((hash(tx, ty + 5) * 7) | 0);
+        const sy = 3 + ((hash(tx + 5, ty) * 7) | 0);
+        rr(c, sx, sy, 16, 13, 2, PALETTE.floorAccent);
+        px(c, sx, sy, 16, 1, 'rgba(255,255,255,0.07)');
+        px(c, sx, sy + 12, 16, 1, 'rgba(0,0,0,0.16)');
+      }
+
+      // Pebbles and shell fragments.
       const r = hash(tx, ty);
-      if (r > 0.8) px(c, (r * 20 | 0) + 4, (hash(ty, tx) * 20 | 0) + 4, 4, 3, PALETTE.floorAccent);
-      if (r < 0.15) px(c, (r * 90 | 0) + 6, (hash(tx + 7, ty) * 18 | 0) + 6, 3, 3, PALETTE.floorAccent);
+      if (r > 0.72) px(c, ((r * 23) | 0) + 3, ((hash(ty, tx) * 23) | 0) + 3, 3, 2, PALETTE.sand);
+      if (r < 0.18) px(c, ((r * 120) | 0) + 5, ((hash(tx + 7, ty) * 20) | 0) + 5, 2, 2, PALETTE.floorAccent);
+
+      // The seam where the chunk cache joins tiles. A hair of shadow on two sides gives the
+      // floor a grid without drawing a grid, and hides the join entirely.
+      px(c, 0, 0, S, 1, 'rgba(0,0,0,0.07)');
+      px(c, 0, 0, 1, S, 'rgba(0,0,0,0.07)');
       break;
     }
-    case BLOCK.SOFT:
+
+    /* Soft wall: a stack of crates, not masonry.
+     *
+     * The old brick courses were a dungeon block on a pirate island, and more importantly a
+     * breakable wall has to be visibly DIFFERENT in material from the ones that are not — the
+     * single most important read on the whole map is "can I blow through this". Wood against
+     * stone does that at any zoom, in one glance, before any of the detail is resolvable.
+     */
+    case BLOCK.SOFT: {
       px(c, 0, 0, S, S, PALETTE.soft);
-      // brick courses
-      px(c, 0, S / 2 - 1, S, 2, dark);
-      px(c, S / 2 - 1, 0, 2, S / 2, dark);
-      px(c, S / 4 - 1, S / 2, 2, S / 2, dark);
-      px(c, (S * 3) / 4 - 1, S / 2, 2, S / 2, dark);
+      // Plank grain, two per crate, running with the boards.
+      for (let y = 3; y < S; y += 7) {
+        px(c, 2, y, S - 4, 1, 'rgba(0,0,0,0.13)');
+        px(c, 2, y + 1, S - 4, 1, 'rgba(255,255,255,0.05)');
+      }
+      // Knots, deterministic so a given crate always has the same ones.
+      for (let i = 0; i < 3; i++) {
+        const kx = 4 + ((hash(tx * 31 + i, ty) * (S - 10)) | 0);
+        const ky = 4 + ((hash(ty * 23 + i, tx) * (S - 10)) | 0);
+        px(c, kx, ky, 2, 2, 'rgba(0,0,0,0.2)');
+      }
+      // The frame: corner battens and a cross brace, which is what makes it read as a crate
+      // rather than as a plank wall.
+      px(c, 0, 0, S, 3, '#6d5238'); px(c, 0, S - 3, S, 3, '#5a4330');
+      px(c, 0, 0, 3, S, '#6d5238'); px(c, S - 3, 0, 3, S, '#5a4330');
+      c.save();
+      c.strokeStyle = 'rgba(90,67,48,0.75)'; c.lineWidth = 2.5;
+      c.beginPath(); c.moveTo(3, 3); c.lineTo(S - 3, S - 3); c.stroke();
+      c.restore();
       bevel(c, 0, 0, S, S);
       break;
-    case BLOCK.REINFORCED:
+    }
+
+    /* Reinforced: cut stone, banded with iron. Six hits, so it has to look like it will take
+     * six — the bands are the visual promise that this is not a crate. */
+    case BLOCK.REINFORCED: {
       px(c, 0, 0, S, S, PALETTE.reinforced);
-      rr(c, 4, 4, S - 8, S - 8, 2, 'rgba(0,0,0,0.18)');
+      // Two courses of ashlar with a staggered joint, which is how stone is actually laid and
+      // reads as deliberate construction rather than as a texture.
+      px(c, 0, S / 2 - 1, S, 2, 'rgba(0,0,0,0.22)');
+      px(c, S / 2 - 1, 0, 2, S / 2, 'rgba(0,0,0,0.22)');
+      px(c, S / 4 - 1, S / 2, 2, S / 2, 'rgba(0,0,0,0.22)');
+      px(c, (S * 3) / 4 - 1, S / 2, 2, S / 2, 'rgba(0,0,0,0.22)');
+      for (let i = 0; i < 10; i++) {
+        const gx = (hash(tx * 19 + i, ty * 5) * S) | 0;
+        const gy = (hash(ty * 29 + i, tx * 3) * S) | 0;
+        px(c, gx, gy, 1, 1, 'rgba(0,0,0,0.09)');
+      }
+      // Iron bands across the middle, with rivets.
+      px(c, 0, 12, S, 8, '#565d6b');
+      px(c, 0, 12, S, 2, 'rgba(255,255,255,0.14)');
+      px(c, 0, 18, S, 2, 'rgba(0,0,0,0.26)');
+      for (const rx of [5, 15, 25]) px(c, rx, 15, 2, 2, 'rgba(255,255,255,0.3)');
       bevel(c, 0, 0, S, S, 3);
       break;
-    case BLOCK.MONOLITH:
+    }
+
+    /* Monolith: one carved block, nine hits. Darker and smoother than the reinforced stone, with
+     * a sunken face — the strongest thing you can actually break, and it looks it. */
+    case BLOCK.MONOLITH: {
       px(c, 0, 0, S, S, PALETTE.monolith);
-      px(c, 6, 3, S - 12, S - 6, 'rgba(0,0,0,0.22)');
-      px(c, 10, 7, S - 20, S - 14, 'rgba(255,255,255,0.06)');
+      rr(c, 4, 3, S - 8, S - 6, 2, 'rgba(0,0,0,0.26)');
+      rr(c, 6, 5, S - 12, S - 10, 2, '#555e70');
+      // A carved mark on the face. Same glyph every time for a given tile, different between
+      // tiles, so a wall of them does not look stamped.
+      c.save();
+      c.strokeStyle = 'rgba(0,0,0,0.3)'; c.lineWidth = 2; c.lineCap = 'round';
+      const g = hash(tx * 7 + 3, ty * 11 + 5);
+      c.beginPath();
+      if (g < 0.33) { c.moveTo(12, 10); c.lineTo(20, 16); c.lineTo(12, 22); }
+      else if (g < 0.66) { c.moveTo(12, 11); c.lineTo(20, 11); c.moveTo(16, 11); c.lineTo(16, 21); }
+      else { c.moveTo(12, 21); c.lineTo(16, 11); c.lineTo(20, 21); }
+      c.stroke();
+      c.restore();
+      px(c, 6, 5, S - 12, 1, 'rgba(255,255,255,0.1)');
       bevel(c, 0, 0, S, S, 3);
       break;
-    case BLOCK.IRON:
+    }
+
+    /* Iron: the fixed skeleton. Deliberately the dullest thing on the map — it is never a
+     * decision, so it must never pull the eye away from the things that are. */
+    case BLOCK.IRON: {
       px(c, 0, 0, S, S, PALETTE.iron);
-      for (let i = 4; i < S; i += 8) px(c, i, 4, 2, S - 8, 'rgba(255,255,255,0.05)');
+      px(c, 2, 2, S - 4, S - 4, '#2e3542');
+      for (let i = 5; i < S - 3; i += 7) px(c, i, 4, 2, S - 8, 'rgba(255,255,255,0.045)');
+      // Corner plates with bolts: it reads as engineered rather than as a dark square.
+      for (const [bx, by] of [[4, 4], [S - 6, 4], [4, S - 6], [S - 6, S - 6]]) {
+        px(c, bx, by, 2, 2, 'rgba(255,255,255,0.14)');
+      }
       bevel(c, 0, 0, S, S, 2);
       break;
+    }
     case BLOCK.COLUMN:
       px(c, 0, 0, S, S, PALETTE.floor);
       rr(c, 9, 2, 14, S - 4, 3, PALETTE.column);
@@ -135,6 +242,15 @@ export function drawTile(c, type, tx = 0, ty = 0, dmg = 0) {
       px(c, 5, 12, S - 10, 3, '#4a3524');            // hoops
       px(c, 5, S - 11, S - 10, 3, '#4a3524');
       px(c, 6, 8, S - 12, 2, 'rgba(255,255,255,0.18)');
+      // The powder mark. Small and red, dead centre between the hoops: the universal "this one
+      // is dangerous", and the one bit of pure red on an island of browns and blues.
+      c.save();
+      c.strokeStyle = '#e03c2e'; c.lineWidth = 2.2; c.lineCap = 'round';
+      c.beginPath();
+      c.moveTo(13, 15); c.lineTo(19, 21);
+      c.moveTo(19, 15); c.lineTo(13, 21);
+      c.stroke();
+      c.restore();
       c.strokeStyle = '#d8c9a8'; c.lineWidth = 1.6; c.lineCap = 'round';
       c.beginPath(); c.moveTo(20, 7); c.quadraticCurveTo(25, 3, 22, 1); c.stroke();
       c.beginPath(); c.arc(22, 1.5, 2.2, 0, 7); c.fillStyle = PALETTE.fireMid; c.fill();
@@ -272,6 +388,22 @@ export function drawPlayer(c, { dir = 3, frame = 0, colorIndex = 0, dead = false
   const k = playerShades(colorIndex);
   const ox = TILE_PX / 2 - 6, oy = TILE_PX / 2 - 9;
   c.save();
+
+  // A soft shadow on the ground, drawn in tile space before the figure is offset.
+  //
+  // This is the single cheapest thing that makes a sprite sit ON the floor rather than float
+  // above it, and it matters more here than in most games: the floor is a flat top-down plane
+  // with no horizon, so contact is the only depth cue there is.
+  if (!dead) {
+    c.save();
+    c.globalAlpha = 0.3;
+    c.beginPath();
+    c.ellipse(TILE_PX / 2, TILE_PX / 2 + 8, 7, 2.6, 0, 0, 7);
+    c.fillStyle = '#000';
+    c.fill();
+    c.restore();
+  }
+
   c.translate(ox, oy);
   if (dead) c.globalAlpha = 0.45;
 
@@ -289,6 +421,12 @@ export function drawPlayer(c, { dir = 3, frame = 0, colorIndex = 0, dead = false
   // ── coat ──
   // The player's colour IS the coat, because colour is how you tell sixteen people apart at a
   // glance and the costume must never win that fight.
+  //
+  // A dark silhouette is laid down first, one pixel proud on every side, and the colour drawn
+  // inside it. Sixteen hues have to stay apart against a sand floor, a blue wall and an orange
+  // explosion, and the darker half of them lose their edge against the floor without this.
+  rr(c, 0, 5 + bob, 12, 10, 4, PALETTE.outline);
+  rr(c, 1, 0 + bob, 10, 9, 4, PALETTE.outline);
   rr(c, 1, 6 + bob, 10, 8, 3, k.base);
   px(c, 1, 6 + bob, 3, 8, k.light);
   px(c, 8, 6 + bob, 3, 8, k.dark);
@@ -312,8 +450,13 @@ export function drawPlayer(c, { dir = 3, frame = 0, colorIndex = 0, dead = false
     px(c, 5, 12 + bob, 2, 2, PALETTE.gold);
   }
 
+  // A rim of light down the top-left edge, matching the one light direction the whole tile set
+  // is lit from. Two pixels of highlight is the difference between a coloured blob and a figure.
+  px(c, 1, 6 + bob, 10, 1, 'rgba(255,255,255,0.22)');
+
   // ── head ──
   rr(c, 2, 1 + bob, 8, 7, 3, back ? PIRATE.skinDark : PIRATE.skin);
+  px(c, 2, 7 + bob, 8, 1, 'rgba(0,0,0,0.18)');          // jaw shadow, onto the collar
 
   // ── bandana ──
   // Red, always, on every colour of coat: it is the thing that says "pirate" from across the map,

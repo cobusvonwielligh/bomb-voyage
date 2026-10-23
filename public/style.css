@@ -516,7 +516,11 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * thing a level means moment to moment. The numbers under it are into/need rather than
  * total/target: 3 093 of 26 957 is a distance you can feel, and 60 000 of 83 864 is not.
  */
-#xp { margin-top: 11px; }
+/* The card reserves 76px on its right for the mascot's face, which the name and the stat row
+   need to stay clear of. The XP bar does not: it sits well below the face, and stopping it short
+   left a gap that read as a broken layout rather than as breathing room. Pull it back out to the
+   full panel width. */
+#xp { margin-top: 11px; margin-right: -76px; }
 .xpHead {
   display: flex; justify-content: space-between; align-items: baseline;
   margin-bottom: 5px; font-size: 10px;
