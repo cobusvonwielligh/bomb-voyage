@@ -24,6 +24,12 @@
       <path d="M4 2h4v6l4 2v4H4z" fill="currentColor"/>
       <path d="M2 14h12" stroke="currentColor" stroke-width="1.4"/>
     </symbol>
+    <symbol id="i-shield" viewBox="0 0 16 16">
+      <path fill="currentColor" d="M8 1l6 2.5v4.2c0 3.4-2.4 6.2-6 7.3-3.6-1.1-6-3.9-6-7.3V3.5z"/>
+    </symbol>
+    <symbol id="i-bolt" viewBox="0 0 16 16">
+      <path fill="currentColor" d="M9.5 1L3 9h3.5L5.5 15 12 7H8.5z"/>
+    </symbol>
     <symbol id="i-crown" viewBox="0 0 16 16">
       <path fill="currentColor" d="M2 12h12l1-7-3.5 2.5L8 3 4.5 7.5 1 5z"/>
       <rect x="2" y="13" width="12" height="2" fill="currentColor"/>
@@ -68,17 +74,19 @@
     <span class="stat"><span class="k">map</span><span class="v" id="vMap">--</span></span>
     <span class="sep"></span>
 
+    <!-- One pip per live perk, in the order you are likely to find them. A pip lights up when
+         you have any of that perk at all, so the bar answers "what am I carrying" without
+         anybody having to read the numbers. -->
     <span id="gear">
-      <span class="pip" id="pBombs" title="bombs you can have out at once">
-        <svg><use href="#i-bomb"/></svg><span class="n">1</span><span class="cap"></span>
-      </span>
-      <span class="pip" id="pFire" title="blast radius">
-        <svg><use href="#i-fire"/></svg><span class="n">1</span><span class="cap"></span>
-      </span>
-      <span class="pip" id="pSpeed" title="speed">
+      <span class="pip" id="pSpeed" title="boots: movement speed">
         <svg><use href="#i-boot"/></svg><span class="n">0</span><span class="cap"></span>
       </span>
-      <span id="shields" title="shields"></span>
+      <span class="pip" id="pShield" title="shield: survives one hit">
+        <svg><use href="#i-shield"/></svg><span class="n">0</span><span class="cap"></span>
+      </span>
+      <span class="pip" id="pLungs" title="lungs: how long you can run before you tire">
+        <svg><use href="#i-bolt"/></svg><span class="n">0</span><span class="cap"></span>
+      </span>
     </span>
 
     <span class="right">

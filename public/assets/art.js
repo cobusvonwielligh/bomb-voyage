@@ -124,6 +124,23 @@ export function drawTile(c, type, tx = 0, ty = 0, dmg = 0) {
       rr(c, 9, 2, 14, S - 4, 3, PALETTE.column);
       px(c, 9, 2, 3, S - 4, light); px(c, 20, 2, 3, S - 4, dark);
       break;
+    // A powder keg: barrel staves, iron hoops, and a lit fuse so it reads as armed rather than
+    // as scenery. Warm against a map of cold blues and greys — the one tile you want spotted
+    // from across the island.
+    case BLOCK.POWDER: {
+      px(c, 0, 0, S, S, PALETTE.floor);
+      rr(c, 5, 7, S - 10, S - 10, 5, '#7a4a22');
+      rr(c, 6, 8, S - 12, S - 12, 4, '#9c6230');
+      for (const x of [11, 16, 21]) px(c, x, 8, 1, S - 12, 'rgba(0,0,0,0.25)');
+      px(c, 5, 12, S - 10, 3, '#4a3524');            // hoops
+      px(c, 5, S - 11, S - 10, 3, '#4a3524');
+      px(c, 6, 8, S - 12, 2, 'rgba(255,255,255,0.18)');
+      c.strokeStyle = '#d8c9a8'; c.lineWidth = 1.6; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(20, 7); c.quadraticCurveTo(25, 3, 22, 1); c.stroke();
+      c.beginPath(); c.arc(22, 1.5, 2.2, 0, 7); c.fillStyle = PALETTE.fireMid; c.fill();
+      c.beginPath(); c.arc(22, 1.5, 1.1, 0, 7); c.fillStyle = PALETTE.fireCore; c.fill();
+      break;
+    }
     case BLOCK.SHRUB_WALK:
     case BLOCK.SHRUB_SOLID: {
       px(c, 0, 0, S, S, PALETTE.floor);
@@ -388,6 +405,7 @@ const PERK_SKIN = {
   3: { dark: '#123f4e', mid: '#1b6076', rim: '#5fd8f0' },   // skate  — ice
   4: { dark: '#15402f', mid: '#1d6347', rim: '#5ad1a0' },   // shield — green
   5: { dark: '#4a1d42', mid: '#752d69', rim: '#ff8fd8' },   // gift   — magenta
+  15: { dark: '#4a4212', mid: '#75671d', rim: '#ffe04a' },  // lungs  — yellow
 };
 
 export const PERK_ART = {
@@ -444,6 +462,16 @@ export const PERK_ART = {
     c.fillStyle = '#ffe9a8';
     c.beginPath(); c.ellipse(13, 7.5, 3, 2.4, 0, 0, 7); c.fill();
     c.beginPath(); c.ellipse(19, 7.5, 3, 2.4, 0, 0, 7); c.fill();
+  },
+  // Stamina: a lightning bolt. Energy is the one idea with a universally understood glyph, and
+  // the zig-zag is unmistakable at any size — which is the whole brief for these.
+  15: c => {
+    c.beginPath();
+    c.moveTo(19, 4); c.lineTo(10, 17); c.lineTo(15.5, 17);
+    c.lineTo(13, 28); c.lineTo(22, 14); c.lineTo(16.5, 14);
+    c.closePath();
+    c.fillStyle = '#ffe04a'; c.fill();
+    c.strokeStyle = '#4a4212'; c.lineWidth = 1.2; c.stroke();
   },
 };
 

@@ -2,6 +2,7 @@
 
 import {
   FUSE_TICKS, FUSE_TICKS_FAST, FIRE_TICKS, CHAIN_CAP_PER_TICK, IN_BOMB, STATUS, MAX_RADIUS,
+  BLOCK, POWDER_RADIUS,
 } from '../constants.js';
 import { has, toTile, tileCentre } from './state.js';
 import { spread } from './fire.js';
@@ -81,7 +82,18 @@ export function detonate(state) {
 
     for (const { tx, ty } of hits) {
       const res = damage(state, tx, ty, bomb.owner);
-      if (res?.destroyed) maybeDrop(state, tx, ty, res.type);
+      if (!res?.destroyed) continue;
+      if (res.type === BLOCK.POWDER) {
+        // A keg IS a bomb, so it goes on the same queue as any other chained bomb. Nothing in
+        // the blast code needs to know about kegs: it chains through other kegs, through bombs
+        // and through walls exactly the way a bomb already does.
+        queue.push({
+          id: state.nextBombId++, tx, ty,
+          owner: bomb.owner, radius: POWDER_RADIUS, at: state.tick,
+        });
+        continue;                                   // kegs hold powder, not pickups
+      }
+      maybeDrop(state, tx, ty, res.type);
     }
 
     for (const c of cells) {

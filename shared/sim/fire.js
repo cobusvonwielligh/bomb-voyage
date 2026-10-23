@@ -9,7 +9,10 @@ import { tileAt } from './state.js';
 
 const DIRS = [[1, 0], [0, -1], [-1, 0], [0, 1]];   // right, up, left, down — matches DIR_* order
 
-const DESTRUCTIBLE = new Set([BLOCK.SOFT, BLOCK.REINFORCED, BLOCK.MONOLITH]);
+// Anything a blast arm damages and then stops at. A powder keg is one of these, which is the
+// whole reason a blast reaching one sets it off: the arm registers a hit, damage() destroys it,
+// and detonate() turns the destruction into a bomb.
+const DESTRUCTIBLE = new Set([BLOCK.SOFT, BLOCK.REINFORCED, BLOCK.MONOLITH, BLOCK.POWDER]);
 const SHRUB = new Set([BLOCK.SHRUB_WALK, BLOCK.SHRUB_SOLID]);
 
 /**

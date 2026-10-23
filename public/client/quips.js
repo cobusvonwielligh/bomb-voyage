@@ -59,7 +59,7 @@ export const ON_DEATH = ['Oof.', 'Oof!', 'Oof… that one hurt.'];
 export const ON_SPAWN = ["Let's go!", "Let's go, {n}!", 'Back at it!'];
 
 /** How long a bubble stays up. Long enough to read a short line, short enough to not be furniture. */
-export const SHOW_MS = 4000;
+export const SHOW_MS = 7000;
 
 /** The idle line fires on average once every this many ms, and never twice inside MIN_GAP_MS. */
 export const IDLE_EVERY_MS = 75_000;

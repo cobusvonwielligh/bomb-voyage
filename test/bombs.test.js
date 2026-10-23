@@ -10,6 +10,7 @@ import { tick } from '../shared/sim/round.js';
 import { drop, maybeDrop } from '../shared/sim/perks.js';
 import {
   BLOCK, BLOCK_HP, IN_BOMB, IN_RIGHT, FUSE_TICKS, STATUS, PERK, MAX_RADIUS, SCORE,
+  PERK_WEIGHTS,
 } from '../shared/constants.js';
 
 function room(w = 15, h = 15) {
@@ -220,12 +221,22 @@ test('bombs in the round loop', async t => {
     }
     const total = Object.values(counts).reduce((a, b) => a + b, 0);
     assert.ok(total > 3900, 'reinforced blocks always drop');
-    // Bomb and Fire are weight 30 of 100 each; allow a wide band, this is a sanity check.
-    for (const type of [PERK.BOMB, PERK.FIRE]) {
-      const share = counts[type] / total;
-      assert.ok(share > 0.2 && share < 0.4, `${type} share was ${share.toFixed(3)}`);
+    // Read the expected share straight from the weight table rather than hard-coding it, so
+    // turning a perk on or off is a one-line change here too. Wide band: this is a sanity check
+    // that the weighting works at all, not a chi-squared test.
+    const live = Object.entries(PERK_WEIGHTS).filter(([, w]) => w > 0);
+    const sum = live.reduce((n, [, w]) => n + w, 0);
+    for (const [type, w] of live) {
+      const share = (counts[type] || 0) / total;
+      const want = w / sum;
+      assert.ok(Math.abs(share - want) < 0.08,
+        `perk ${type}: ${share.toFixed(3)} against an expected ${want.toFixed(3)}`);
     }
-    assert.equal(counts[PERK.KICK], undefined, 'reserved perks stay at weight zero');
+    // Everything at weight zero must never appear — the reserved types, and the three that are
+    // implemented but switched off.
+    for (const [type, w] of Object.entries(PERK_WEIGHTS)) {
+      if (w === 0) assert.equal(counts[type], undefined, `perk ${type} is off but still dropped`);
+    }
   });
 
   await t.test('broken blocks sometimes drop perks', () => {

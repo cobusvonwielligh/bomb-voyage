@@ -247,11 +247,11 @@ canvas#game {
 .pip .n { display: inline-block; min-width: 1.2ch; text-align: right; }
 .pip .cap { color: #9fabbd; font-size: 13px; }
 .pip.max .n { color: var(--gold); }
-#shields { display: flex; gap: 4px; min-width: 11px; }
-#shields i {
-  width: 10px; height: 10px; border-radius: 50%; background: var(--good);
-  box-shadow: 0 0 8px #5ad1a0aa;
-}
+/* Carrying at least one. The glow is the part that reads without being looked at; the number is
+   there for when you do look. */
+.pip.on { color: var(--gold); }
+.pip.on svg { filter: drop-shadow(0 0 6px #ffd21f88); }
+.pip:not(.on) { opacity: .5; }
 
 /* The flash a value does when it changes. Colour plus a little scale: motion catches the eye in
  * peripheral vision in a way a colour change alone does not. */

@@ -442,6 +442,9 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     i: p.i, x: p.x, y: p.y, d: p.dir, st: p.alive ? 1 : 0,
     b: p.bombs, f: p.radius, sp: p.speed, sh: p.shields,
     s: p.score, k: p.kills, dd: p.deaths, stat: p.status,
+    // Stamina rides along because the indicator is drawn beside EVERY player, not just you:
+    // seeing that the pirate chasing you is limping is the whole point of showing it at all.
+    sta: p.stamina, stl: p.staminaLevel, tr: p.tired ? 1 : 0,
   });
 
   function emitSnapshot() {

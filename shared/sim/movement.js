@@ -6,6 +6,8 @@
 import {
   UNITS_PER_TILE, HITBOX_UNITS, HITBOX_REDUCED_UNITS, CORNER_ASSIST_UNITS,
   SPEED_UNITS_PER_TICK, SLOWDOWN_NUM, SLOWDOWN_DEN,
+  STAMINA_MAX, STAMINA_DRAIN_PER_TICK, STAMINA_REGEN_MOVING, STAMINA_REGEN_IDLE,
+  STAMINA_RECOVER_UNITS, STAMINA_TIRED_NUM, STAMINA_TIRED_DEN, staminaMaxFor,
   IN_RIGHT, IN_UP, IN_LEFT, IN_DOWN, DIR_R, DIR_U, DIR_L, DIR_D, STATUS,
 } from '../constants.js';
 import { walkable, has, tileCentre } from './state.js';
@@ -29,7 +31,32 @@ const UNSTICK_PACE_NUM = 1, UNSTICK_PACE_DEN = 4;
 export function speedOf(p) {
   let s = SPEED_UNITS_PER_TICK[Math.min(p.speed, SPEED_UNITS_PER_TICK.length - 1)];
   if (has(p, STATUS.SLOWDOWN)) s = ((s * SLOWDOWN_NUM) / SLOWDOWN_DEN) | 0;
+  if (p.tired) s = ((s * STAMINA_TIRED_NUM) / STAMINA_TIRED_DEN) | 0;
   return Math.max(1, s);
+}
+
+/**
+ * Stamina, once per tick per player.
+ *
+ * Runs for everyone alive, moving or not, and runs BEFORE the move so the speed used this tick
+ * reflects the state this tick. `tired` is a latch with hysteresis: it is set at zero and only
+ * cleared once a third of the bar is back. Without the latch the exhausted flag flips every tick
+ * at the boundary — the player stutters between full and half pace, and it reads as packet loss
+ * rather than as a mechanic.
+ */
+export function stamina(p, moving) {
+  if (p.stamina === undefined) { p.stamina = STAMINA_MAX; p.tired = false; }
+  const max = staminaMaxFor(p);
+
+  if (moving && !p.tired) {
+    p.stamina -= STAMINA_DRAIN_PER_TICK;
+    if (p.stamina <= 0) { p.stamina = 0; p.tired = true; }
+    return;
+  }
+
+  // Standing still is twice as good as limping, which is what makes stopping a decision.
+  p.stamina = Math.min(max, p.stamina + (moving ? STAMINA_REGEN_MOVING : STAMINA_REGEN_IDLE));
+  if (p.tired && p.stamina >= STAMINA_RECOVER_UNITS) p.tired = false;
 }
 
 const halfBox = p => (has(p, STATUS.REDUCTION) ? HITBOX_REDUCED_UNITS : HITBOX_UNITS) >> 1;
@@ -226,7 +253,7 @@ export function step(state, p, mask) {
 
   if (has(p, STATUS.CHANGELING)) { dx = -dx; dy = -dy; }
 
-  if (!dx && !dy) { p.moving = false; return; }
+  if (!dx && !dy) { p.moving = false; stamina(p, false); return; }
 
   // Both axes held: keep moving along the one already facing, so holding a diagonal into a
   // corner does not stutter between the two.
@@ -237,6 +264,7 @@ export function step(state, p, mask) {
 
   p.dir = dx > 0 ? DIR_R : dx < 0 ? DIR_L : dy < 0 ? DIR_U : DIR_D;
   p.moving = true;
+  stamina(p, true);
 
   const speed = speedOf(p);
   moveAxis(state, p, dx, dy, speed);

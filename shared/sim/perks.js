@@ -3,10 +3,11 @@
 import {
   PERK, PERK_WEIGHTS, PERK_DROP_CHANCE_SOFT, PERK_DROP_ALWAYS, PERK_EXPIRE_TICKS,
   MAX_BOMBS_CARRIED, MAX_RADIUS, MAX_SKATES, MAX_SHIELDS, SCORE, BLOCK, HITBOX_UNITS, STATUS,
-  PERKS_DROPPED_ON_DEATH, START_BOMBS, START_RADIUS, GIFT_DISEASE_CHANCE,
+  PERKS_DROPPED_ON_DEATH, START_BOMBS, START_RADIUS, GIFT_DISEASE_CHANCE, MAX_STAMINA_LEVELS,
   PERK_TARGET_PER_PLAYER, PERK_TARGET_MIN, PERK_SCARCE_BOOST, PERK_GLUT_FLOOR,
   PERK_TAKE_DECAY, PERK_DEMAND_BOOST,
 } from '../constants.js';
+import { staminaMaxFor } from '../constants.js';
 import { tileAt, toTile } from './state.js';
 import { infect } from './statuses.js';
 import { randInt } from '../util/rng.js';
@@ -78,6 +79,14 @@ function apply(state, p, type) {
     case PERK.FIRE:   if (p.radius < MAX_RADIUS) { p.radius++; return true; } return false;
     case PERK.SKATE:  if (p.speed  < MAX_SKATES) { p.speed++;  return true; } return false;
     case PERK.SHIELD: if (p.shields < MAX_SHIELDS) { p.shields++; return true; } return false;
+    // A bigger pair of lungs. Tops you up as well as raising the ceiling, because a perk that
+    // only pays off the next time you stop running does not feel like a pickup.
+    case PERK.STAMINA:
+      if ((p.staminaLevel ?? 0) >= MAX_STAMINA_LEVELS) return false;
+      p.staminaLevel = (p.staminaLevel ?? 0) + 1;
+      p.stamina = staminaMaxFor(p);
+      p.tired = false;
+      return true;
     // A Gift is a gamble, which is the point of it. Most of the time it is a real upgrade;
     // sometimes you catch something, and then you hand it to whoever you run past next.
     case PERK.GIFT:

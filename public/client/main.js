@@ -6,7 +6,8 @@
 
 import {
   TICK_MS, TICK_HZ, NAME_MAX_CHARS, UNITS_PER_TILE, IN_BOMB, playerColor,
-  MAX_BOMBS_CARRIED, MAX_RADIUS, MAX_SKATES, IDLE_DISCONNECT_MS, RESPAWN_DELAY_TICKS, TILE_PX,
+  MAX_SKATES, MAX_SHIELDS, MAX_STAMINA_LEVELS, IDLE_DISCONNECT_MS, RESPAWN_DELAY_TICKS, TILE_PX,
+  STAMINA_SHOW_AT, staminaMaxFor,
 } from '/shared/constants.js';
 import { createNet } from './net.js';
 import { createInput, typingSomewhere } from './input.js';
@@ -31,6 +32,7 @@ const PERK_LABEL = {
   3: { text: '+1 SPEED', colour: '#5fd8f0' },
   4: { text: 'SHIELD', colour: '#5ad1a0' },
   5: { text: 'GIFT', colour: '#ff8fd8' },
+  15: { text: '+ LUNGS', colour: '#ffe04a' },
 };
 
 // The mascot is an image now, ringed by the same moving gradient as the panels. The hand-drawn
@@ -510,9 +512,11 @@ const gearPip = (id, value, cap) => {
   setValue(el.querySelector('.n'), value);
   el.querySelector('.cap').textContent = `/${cap}`;
   el.classList.toggle('max', value >= cap);
+  // Lit means "you have at least one of these". The numbers say how many; the glow is what you
+  // actually read mid-round, because it is visible without focusing on it.
+  el.classList.toggle('on', value > 0);
 };
 
-let lastShields = 0;
 let diedAtTick = -1;
 let lastLevel = -1;
 
@@ -610,20 +614,12 @@ function drawHud() {
   setValue($('vScore'), me.score);
   renderLive();
 
-  gearPip('pBombs', me.bombs, MAX_BOMBS_CARRIED);
-  gearPip('pFire', me.radius, MAX_RADIUS);
+  // The three live perks, each as a pip that lights when you are carrying any. Shields used to
+  // be a separate row of green dots off to the right of the bar; they are a perk like the other
+  // two and belong in the same row, counted the same way.
   gearPip('pSpeed', me.speed, MAX_SKATES);
-
-  // Shields are the closest thing this game has to health: one hit each, and nothing refills
-  // them except picking up another. Drawn as pips rather than a bar, because a bar implies a
-  // continuous quantity and these are discrete lives.
-  if (me.shields !== lastShields) {
-    const box = $('shields');
-    box.textContent = '';
-    for (let n = 0; n < me.shields; n++) box.append(document.createElement('i'));
-    if (me.shields > lastShields) { box.classList.remove('bump'); void box.offsetWidth; box.classList.add('bump'); }
-    lastShields = me.shields;
-  }
+  gearPip('pShield', me.shields, MAX_SHIELDS);
+  gearPip('pLungs', me.staminaLevel ?? 0, MAX_STAMINA_LEVELS);
 
   // drawRespawn first: it is what stamps diedAtTick, and showDead reads it to hold the dialog
   // back. The other order shows the dialog a frame early on the tick you die.

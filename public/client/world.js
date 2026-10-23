@@ -53,6 +53,7 @@ export function createWorld() {
     p.alive = wire.st === 1;
     p.bombs = wire.b; p.radius = wire.f; p.speed = wire.sp; p.shields = wire.sh;
     p.score = wire.s; p.kills = wire.k; p.deaths = wire.dd; p.status = wire.stat;
+    if (wire.sta !== undefined) { p.stamina = wire.sta; p.staminaLevel = wire.stl; p.tired = !!wire.tr; }
     if (wire.name) p.name = wire.name;
     p.rx ??= p.x; p.ry ??= p.y;        // rendered position, smoothed for remotes
     p.trail ??= [];
@@ -162,6 +163,9 @@ export function createWorld() {
     me.alive = wire.st === 1;
     me.bombs = wire.b; me.radius = wire.f; me.speed = wire.sp; me.shields = wire.sh;
     me.score = wire.s; me.kills = wire.k; me.deaths = wire.dd; me.status = wire.stat;
+    // Stamina is simulated locally too, so it is replayed with the inputs below rather than
+    // simply trusted — the server's value is the one the replay starts from.
+    if (wire.sta !== undefined) { me.stamina = wire.sta; me.staminaLevel = wire.stl; me.tired = !!wire.tr; }
 
     for (const inp of w.pending) step(w, me, inp.mask);
 

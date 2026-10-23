@@ -93,6 +93,9 @@ export const BLOCK = {
   // not destructible, stops fire — and exists only so the renderer can tell "the sea" from "a
   // wall" and so a map can be any shape it likes inside its bounding rectangle.
   WATER: 8,
+  // A powder keg. Destructible like a soft wall, but detonating one sets off a blast several
+  // times the size of the bomb that lit it. Rare on purpose — see POWDER_* below.
+  POWDER: 9,
 };
 
 export const BLOCK_HP = {
@@ -105,6 +108,7 @@ export const BLOCK_HP = {
   [BLOCK.SHRUB_WALK]: 0,
   [BLOCK.SHRUB_SOLID]: 0,
   [BLOCK.WATER]: 0,
+  [BLOCK.POWDER]: 1,      // one hit, like a soft wall: the point is the explosion, not the siege
 };
 
 export const BLOCK_DESTRUCTIBLE = b => BLOCK_HP[b] > 0;
@@ -121,6 +125,49 @@ export const REGEN_EVERY_TICKS = 20 * TICK_HZ; // 600
 export const REGEN_PER_CYCLE = 3;
 export const REGEN_CLEAR_RADIUS_TILES = 4;
 
+/* Powder kegs.
+ *
+ * At most two in a round, and at least one guaranteed — a map event you can plan around is worth
+ * far more than a random one you might never see. Placement rides on the existing regrowth cycle
+ * (every 20 s) because that function already knows which tiles are quiet: dropping a keg next to
+ * a player would be a free kill nobody could read coming.
+ *
+ * The blast is a bomb with a much larger radius, detonating on the tick the keg breaks. Nothing
+ * special in the blast code — a keg IS a bomb, which is why it chains through other kegs, bombs
+ * and walls exactly the way you would expect.
+ */
+export const POWDER_MAX_PER_ROUND = 2;
+export const POWDER_RADIUS = 7;
+export const POWDER_CHANCE_PER_CYCLE = 0.12;
+// Six minutes in, the first one stops being optional. A round must never pass without one.
+export const POWDER_GUARANTEE_TICK = Math.round(0.6 * 10 * 60 * TICK_HZ);
+
+/* Stamina.
+ *
+ * Running flat out for ten seconds empties it; once empty you move at half pace until you have
+ * recovered a third of it back. The hysteresis is the important part — a bare "zero means slow"
+ * rule flips the speed on and off every single tick at the boundary, which is unplayable and
+ * looks like lag.
+ *
+ * It regenerates whether you are moving or not, just twice as fast when you stand still. That
+ * makes stopping a real tactical choice rather than a punishment, and it means an exhausted
+ * player is never stuck: limping still refills, slowly.
+ */
+export const STAMINA_MAX = 300;                    // 10 s of running at 1 per tick
+export const STAMINA_DRAIN_PER_TICK = 1;
+export const STAMINA_REGEN_MOVING = 1;             // only while exhausted; see movement.js
+export const STAMINA_REGEN_IDLE = 2;
+export const STAMINA_RECOVER_UNITS = Math.round(STAMINA_MAX / 3);
+export const STAMINA_TIRED_NUM = 1, STAMINA_TIRED_DEN = 2;   // half pace when exhausted
+// Below this fraction the indicator appears beside the player. Above it, nothing is drawn: a
+// meter that is always on screen is a meter nobody looks at.
+export const STAMINA_SHOW_AT = 0.5;
+// Each Lung perk adds this much to your ceiling, up to MAX_STAMINA_LEVELS of them. Four levels
+// takes ten seconds of running to twenty.
+export const STAMINA_PER_LEVEL = 75;
+export const MAX_STAMINA_LEVELS = 4;
+export const staminaMaxFor = p => STAMINA_MAX + Math.min(p?.staminaLevel ?? 0, MAX_STAMINA_LEVELS) * STAMINA_PER_LEVEL;
+
 // ─── Perks ────────────────────────────────────────────────────────────────────
 
 export const PERK = {
@@ -128,10 +175,19 @@ export const PERK = {
   // Reserved — designed for, not implemented in v1. Give one a weight to turn it on.
   KICK: 6, JELLY: 7, DETONATOR: 8, BAT: 9, JETPACK: 10,
   NUKE: 11, BLUE_FIRE: 12, HEART: 13, KEY: 14,
+  // Raises your maximum stamina, so you can run for longer before the limp.
+  STAMINA: 15,
 };
 
+/* Only three perks are live.
+ *
+ * Bomb count, blast radius and the Gift gamble are all at weight zero: they stay implemented and
+ * tested, they simply never roll. The reserved types below them were always zero. A perk at zero
+ * weight costs nothing and can be switched back on with one number.
+ */
 export const PERK_WEIGHTS = {
-  [PERK.BOMB]: 30, [PERK.FIRE]: 30, [PERK.SKATE]: 20, [PERK.SHIELD]: 12, [PERK.GIFT]: 8,
+  [PERK.BOMB]: 0, [PERK.FIRE]: 0, [PERK.SKATE]: 34, [PERK.SHIELD]: 26, [PERK.GIFT]: 0,
+  [PERK.STAMINA]: 40,
   [PERK.KICK]: 0, [PERK.JELLY]: 0, [PERK.DETONATOR]: 0, [PERK.BAT]: 0, [PERK.JETPACK]: 0,
   [PERK.NUKE]: 0, [PERK.BLUE_FIRE]: 0, [PERK.HEART]: 0, [PERK.KEY]: 0,
 };

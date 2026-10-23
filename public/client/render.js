@@ -7,7 +7,7 @@
 import {
   TILE_PX, CHUNK_TILES, UNITS_PER_TILE, TRACER_SAMPLES, FUSE_TICKS, FIRE_TICKS, STATUS,
   BLOCK, BLOCK_HP, SEA_MARGIN_TILES, SPAWN_POP_TICKS, SPAWN_POP_SCALE, MIN_ZOOM, MAX_ZOOM,
-  PERK_FADE_TICKS,
+  PERK_FADE_TICKS, STAMINA_SHOW_AT, staminaMaxFor,
 } from '/shared/constants.js';
 import { cellType, cellHp } from '/shared/maps.js';
 import {
@@ -535,6 +535,7 @@ export function createRenderer(canvas, world) {
     for (const p of alive) drawTracer(ctx, p, ox, oy);
     for (const p of alive) drawOne(ctx, p, ox, oy, p.i === world.you);
 
+    for (const p of alive) drawStamina(ctx, p, ox, oy);
     drawFloaters(ox, oy, dtMs);
 
     if (flash > 0.004) {
@@ -674,6 +675,55 @@ export function createRenderer(canvas, world) {
     c.strokeText(p.name, px + TILE_PX / 2, py - 3);
     c.fillStyle = isMe ? PALETTE.gold : playerShades(p.i).light;
     c.fillText(p.name, px + TILE_PX / 2, py - 3);
+  }
+
+  /**
+   * Stamina, beside the player, and only when it matters.
+   *
+   * Nothing is drawn above half: a meter that is always on screen is a meter nobody looks at,
+   * and sixteen permanent gauges would bury the thing they are drawn on top of. Below half a
+   * small bolt appears and drains; at empty it pulses, because that is the moment the number
+   * stops being informative and becomes "you are slow now".
+   *
+   * Drawn for everyone, not just you. Knowing the pirate chasing you is out of breath is at
+   * least as useful as knowing you are.
+   */
+  function drawStamina(c, p, ox, oy) {
+    if (!p.alive || p.stamina === undefined) return;
+    const max = staminaMaxFor(p);
+    const frac = Math.max(0, Math.min(1, p.stamina / max));
+    if (frac >= STAMINA_SHOW_AT && !p.tired) return;
+
+    const x = ox + (p.rx / UNITS_PER_TILE) * TILE_PX + TILE_PX * 0.42;
+    const y = oy + (p.ry / UNITS_PER_TILE) * TILE_PX - TILE_PX * 0.1;
+
+    // Fades in over the top quarter of the visible range rather than appearing at a hard edge,
+    // which would read as a glitch on the frame it crossed the threshold.
+    const appear = Math.min(1, (STAMINA_SHOW_AT - frac) / (STAMINA_SHOW_AT * 0.25));
+    const pulse = p.tired ? 0.65 + 0.35 * Math.sin(world.tick / 2.6) : 1;
+
+    c.save();
+    c.globalAlpha = Math.max(0, appear) * pulse;
+
+    // A vertical sliver that empties downwards, with the bolt sitting in it.
+    const h = TILE_PX * 0.5, w = 3.5;
+    c.fillStyle = 'rgba(0,0,0,0.55)';
+    c.beginPath(); c.roundRect(x - w / 2, y - h, w, h, w / 2); c.fill();
+    c.fillStyle = p.tired ? '#ff7a5c' : '#ffe04a';
+    const fh = Math.max(1.5, h * frac);
+    c.beginPath(); c.roundRect(x - w / 2, y - fh, w, fh, w / 2); c.fill();
+
+    // The bolt, so the sliver is identifiable as energy rather than as another health bar.
+    c.translate(x + 4.5, y - h - 1.5);
+    c.scale(0.42, 0.42);
+    c.beginPath();
+    c.moveTo(9.5, 0); c.lineTo(3, 9); c.lineTo(7.5, 9);
+    c.lineTo(5.5, 17); c.lineTo(12, 7); c.lineTo(7.5, 7);
+    c.closePath();
+    c.fillStyle = p.tired ? '#ff7a5c' : '#ffe04a';
+    c.fill();
+    c.restore();
+    c.globalAlpha = 1;
   }
 
   /**

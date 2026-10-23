@@ -3,6 +3,7 @@
 
 import {
   MAX_PLAYERS, START_BOMBS, START_RADIUS, UNITS_PER_TILE, DIR_D, STATUS, STATUS_TICKS,
+  STAMINA_MAX,
 } from '../constants.js';
 import { buildMap, cellType, cellHp, packCell } from '../maps.js';
 import { BLOCK, BLOCK_WALKABLE } from '../constants.js';
@@ -21,6 +22,8 @@ export function createState(mapDef, seed = mapDef.seed) {
     perks: [],
     nextBombId: 1,
     nextPerkId: 1,
+    // Powder kegs placed so far this round. See POWDER_MAX_PER_ROUND.
+    powderPlaced: 0,
     // Decaying count of recent pickups; drives the drop rate. See maybeDrop in sim/perks.js.
     perkTakeRate: 0,
     // Seeded, so drops and wall regrowth are reproducible. The sim never calls Math.random().
@@ -44,6 +47,9 @@ export function createPlayer(i, name) {
     status: 0,         // bitmask
     statusUntil: {},   // STATUS bit -> tick
     score: 0, kills: 0, deaths: 0,
+    stamina: STAMINA_MAX,
+    staminaLevel: 0,   // Lung perks collected; raises the ceiling, see staminaMaxFor
+    tired: false,
     respawnAt: 0,
   };
 }
