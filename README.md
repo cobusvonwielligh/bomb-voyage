@@ -20,9 +20,9 @@ work breakdown and is now history.
 | ✅ The game | 16 players, 5 maps, 10-minute rounds, bots, perks, stamina, powder kegs |
 | ✅ Transport | **WebTransport over QUIC**, racing WebSocket, whichever connects first wins |
 | ✅ Deployment | TLS, systemd, reboot-safe, one-level rollback, ~6 s end to end |
-| ✅ Tests | 206, `node --test`, no framework. Green on every push. |
+| ✅ Tests | 227, `node --test`, no framework. Green on every push. |
 | ✅ Domain | `bombvoyage.online`, canonical. Aliases redirect to it. |
-| ⬜ Observer mode | Specced in DESIGN.md, never built |
+| ✅ Observer mode | Spectate from the menu, or from the death card without losing your seat to nobody |
 
 Measured round trip from Cape Town to the box: **62 ms min / 73 ms median**, and a QUIC session
 is ready in about **50 ms**. The netcode is designed to survive 180 ms, so there is headroom.
@@ -52,7 +52,7 @@ no payments, no persistent world, no mobile, no matchmaking, no anti-cheat.
 npm install                        # ws, plus the WebTransport pair
 cp config.example.ini config.ini   # optional — defaults work without it
 npm start                          # http://localhost:8080
-npm test                           # 206 tests, node --test, no framework
+npm test                           # 227 tests, node --test, no framework
 ```
 
 WebTransport needs TLS and a native addon, so locally you get WebSocket and the client never

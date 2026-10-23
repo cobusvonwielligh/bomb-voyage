@@ -1,6 +1,6 @@
 # Bomb Voyage — Where We Stand
 
-Last updated: **2026-10-23**. Live on `bombvoyage.online`. 206 tests passing.
+Last updated: **2026-10-24**. Live on `bombvoyage.online`. 227 tests passing.
 
 This document replaces the "⬜ The game: not started" line in the README. The game is built, the
 whole plan in [PLAN.md](PLAN.md) has been walked through, and several decisions in it have since
@@ -22,8 +22,8 @@ accurate; the parts that describe *what is not built yet* are not.
 | Maps | ✅ 5 |
 | Art and audio | ✅ all generated in code, bar four PNGs on the landing page |
 | Transport | ✅ **WebTransport over QUIC, with WebSocket as the fallback** |
-| Persistence | ✅ leaderboard, levels, XP |
-| Observer mode | ⬜ never built — see §6 |
+| Persistence | ✅ leaderboard, levels, XP — banked on disconnect, round end **and shutdown** |
+| Observer mode | ✅ built — Spectate on the menu, and from the death card |
 | Mobile | ⬜ out of scope, unchanged |
 
 ---
@@ -58,11 +58,16 @@ and this game exists to be played in an office, so WebTransport can never be the
 And the host can change it live with `/roundtime N`, in tenths of a minute. Sixteen minutes is a
 long time to be losing.
 
-### (c) The perk set is smaller and there is a new one
+### (c) The perk set is smaller and there are two new ones
 
-Bomb, Fire, Boots, Shield and **Stim** (stamina capacity). The **Gift** is at weight zero — it
-hands out diseases, and that mechanic is unfinished. It is still implemented and still tested; a
-single number switches it back on.
+Bomb, Fire, Boots, Shield, **Stim** (stamina capacity) and **Rum**. The **Gift** is at weight
+zero — it hands out diseases, and that mechanic is unfinished. It is still implemented and still
+tested; a single number switches it back on.
+
+Rum is the odd one. At weight 11 of 101 it is a tenth of all drops, it glows on the floor, and
+it is the only perk you might not want: it softens damage and makes you drunk, which sways your
+walk and rolls the camera. It is the only perk whose effect is visible to the person carrying
+it and nobody else.
 
 ### (d) Two new systems that were never in the plan
 
@@ -139,7 +144,7 @@ Every one of these is in `shared/constants.js`. Nothing is inline.
 | Round | 10 min, `/roundtime 0.1–60` to change |
 | Speed | `[27, 35, 43, 51, 59]` units/tick by boot count — 3.2 to 6.9 tiles/s |
 | Caps | 8 bombs, radius 6, 4 boots, 1 shield, 4 stims |
-| Stamina | 300 (+75 per stim), empty = half pace until a third is back |
+| Stamina | 3450 tenths (+750 per stim), empty = half pace until a third is back |
 | Respawn | 10 s, then weighted-random across every legal spawn |
 | Perk drops | 35% base, scaled by what is on the floor and how fast it is taken |
 | Kegs | ≤6 a round, ≥1 guaranteed, radius 7 |
@@ -165,6 +170,9 @@ is the index.
 | QUIC built but never used | The WebSocket won the race every time; see §2(a) |
 | Everyone calling each other `p1` | Snapshots carry no names, and the only message that did was the welcome |
 | Fire overshooting a chain | Blast arms passed straight through other bombs instead of stopping at them |
+| Two bombs from one tap | Placement ran per tick. Harmless while the bomb landed underfoot; aimed placement made the second attempt fall back to the tile you were standing on |
+| Scores lost on deploy | Only written at round end and disconnect, and `leaderboard.stop()` was not awaited before `process.exit` |
+| Searching `server/net.js` returned nothing | The file held raw control bytes inside a character class, so grep and `git diff` treated it as binary and said nothing at all. `test/sources.test.js` now fails on any raw control byte |
 
 ---
 
@@ -174,16 +182,18 @@ Ordered by how much it would change a Friday session.
 
 ### Worth doing
 
-1. **Observer mode.** In DESIGN.md, never built. Joining a full server currently kicks a bot;
-   there is no way to watch.
-2. **Bot suicides.** Roughly 3.4 deaths per bot per minute and about 49 in 50 are self-inflicted.
-   26 of 30 sampled deaths landed on a tile the danger map called safe one tick earlier. Not root
-   caused.
-3. **A browser-side confirmation of WebTransport.** Verified with a real QUIC client from outside
-   AWS (8/8 sessions, ~50 ms to ready) and from the box, but not yet read off a Chrome session.
-   The console logs `transport: webtransport` on connect; somebody needs to look.
-4. **Reduction does not force blast radius to 1.** Listed in RULES.md, never implemented.
-5. **`SURVIVE_ROUND` bonus has no effect.** The constant exists and nothing reads it.
+1. **Bot suicides.** Down from about 1.9 to about 1.4 deaths per bot per minute, but still the
+   largest single source of deaths on the board. Two causes were found and fixed — unlit powder
+   kegs were missing from the danger map, and a bot that had committed to a walk would not break
+   it when the tile ahead caught fire. What is left is commitment on long routes; a bot that
+   starts a four-tile dash still finishes it.
+2. **A browser-side confirmation of WebTransport.** Verified with a real QUIC client from
+   outside AWS (8/8 sessions, ~50 ms to ready) and from the box, but not yet read off a Chrome
+   session. The console logs `transport: webtransport` on connect; somebody needs to look.
+3. **Gift and its diseases are switched off.** Weight zero in the drop table. Everything in
+   `statuses.js` works and is tested, and the one piece that is genuinely unimplemented is
+   Reduction's "blast radius forced to 1", which RULES.md §12 still promises. Finish that line
+   before raising the weight, or delete the claim.
 
 ### Known-and-fine
 
