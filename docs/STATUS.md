@@ -60,9 +60,9 @@ long time to be losing.
 
 ### (c) The perk set is smaller and there are two new ones
 
-Bomb, Fire, Boots, Shield, **Stim** (stamina capacity) and **Rum**. The **Gift** is at weight
-zero — it hands out diseases, and that mechanic is unfinished. It is still implemented and still
-tested; a single number switches it back on.
+Bomb, Fire, Boots, Shield, **Stim** (stamina capacity) and **Rum**. The **Gift** has been
+removed. It was the only thing that handed out diseases, so the contagious statuses in
+`statuses.js` are now dormant: still implemented and tested, but nothing in play starts one.
 
 Rum is the odd one. At weight 11 of 411 it is **2.7% of drops**, it glows on the floor, and it
 is the only perk you might not want: it softens damage and makes you drunk, which sways your
@@ -124,7 +124,7 @@ The assets folder is now `art.js` plus `img/`, `fonts/` and `audio/`.
 | `fire.js` | Blast shape. Pure: `(map, bomb, bombs) → cells` |
 | `blocks.js` | Damage, destruction, wall regrowth, keg placement |
 | `perks.js` | Drop table, pickup, supply-and-demand drop rate, scatter on death |
-| `statuses.js` | Contagious statuses and their spread |
+| `statuses.js` | Contagious statuses and their spread — dormant since the Gift went |
 | `round.js` | The one ordered tick: the only place that decides what happens before what |
 
 Deterministic throughout: integers only, one tile is 256 units, no wall clock, no
@@ -216,10 +216,9 @@ Ordered by how much it would change a Friday session.
 2. **A browser-side confirmation of WebTransport.** Verified with a real QUIC client from
    outside AWS (8/8 sessions, ~50 ms to ready) and from the box, but not yet read off a Chrome
    session. The console logs `transport: webtransport` on connect; somebody needs to look.
-3. **Gift and its diseases are switched off.** Weight zero in the drop table. Everything in
-   `statuses.js` works and is tested, and the one piece that is genuinely unimplemented is
-   Reduction's "blast radius forced to 1", which RULES.md §12 still promises. Finish that line
-   before raising the weight, or delete the claim.
+3. **Diseases have no source.** The Gift is gone, so the contagious statuses never start. If they
+   come back it needs a new way in (a map hazard, a cursed drop); Reduction's old "blast radius
+   forced to 1" was never implemented and has been dropped from RULES.md.
 
 ### Known-and-fine
 
