@@ -1131,6 +1131,19 @@ export function createRenderer(canvas, world) {
         ctx.ellipse(x + l.dx, y + l.dy, l.r * grow, l.r * l.squash * grow, l.turn, 0, 7);
         ctx.fill();
       };
+      /* Under the water, then above it.
+       *
+       * The waterline is the ellipse the wet line below traces. Everything outside it is stone
+       * under the sea: drawn first, faint and pulled toward the water's colour, so the rock's
+       * full bulk is there if you look and gone if you do not. Then the same stone again, at
+       * full strength but clipped to the waterline, which is the part that breaks the surface. */
+      const wlx = x, wly = y + k.r * 0.16, wrx = k.r * 0.9, wry = k.r * 0.64;
+      for (const l of k.lumps) lump(l, 1.04, '#1c3a4c', 0.22);        // submerged stone, sea-tinted
+      for (const l of k.lumps) lump(l, 0.9, '#21323f', 0.14);         // its darker heart
+      ctx.save();
+      ctx.beginPath();
+      ctx.ellipse(wlx, wly, wrx, wry, 0, 0, 7);
+      ctx.clip();
       // The dark side first, pushed AWAY from the sun, then the stone over most of it.
       for (const l of k.lumps) lump({ ...l, dx: l.dx + ux * l.r * 0.2, dy: l.dy + uy * l.r * 0.2 },
         1.06, '#071320', 0.6);                                        // the shaded side
@@ -1145,13 +1158,14 @@ export function createRenderer(canvas, world) {
         0.6, '#3c424c', 0.78);                                        // the lit shoulder
       for (const l of k.lumps) lump({ ...l, dx: l.dx - ux * l.r * 0.46, dy: l.dy - uy * l.r * 0.46 },
         0.26, '#565d6a', 0.55);                                       // the dry cap, sunward
+      ctx.restore();
 
       // A wet line where it goes into the water, which is what sells "half submerged".
       ctx.globalAlpha = ROCK_ALPHA * 0.7;
       ctx.strokeStyle = PALETTE.seaLight;
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.ellipse(x, y + k.r * 0.16, k.r * 0.86, k.r * 0.6, 0, 0, 7);
+      ctx.ellipse(wlx, wly, wrx, wry, 0, 0, 7);
       ctx.stroke();
 
       ctx.restore();
