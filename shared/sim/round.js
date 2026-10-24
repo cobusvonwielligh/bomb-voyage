@@ -5,7 +5,7 @@
 // cause of "it desyncs after about a minute". docs/ARCHITECTURE.md §4.
 
 import {
-  IN_BOMB, SCORE, STATUS, STATUS_TICKS, INVULN_TICKS_SHIELD, HITBOX_UNITS,
+  IN_BOMB, SCORE, STATUS, STATUS_TICKS, HITBOX_UNITS,
   HITBOX_REDUCED_UNITS, START_BOMBS, START_RADIUS, RESPAWN_DELAY_TICKS,
   FIRE_TICKS, FIRE_LETHAL_TICKS,
 } from '../constants.js';
@@ -86,12 +86,39 @@ function killInFire(state) {
     const lethal = has(p, STATUS.DRUNK) ? cores : fresh;
     if (!lethal.length || !burns(lethal, p.x, p.y, half)) continue;
 
-    if (p.shields > 0) {
-      p.shields--;
-      applyStatus(state, p, STATUS.INVULN, INVULN_TICKS_SHIELD);
-      state.events.push({ e: 'shield', tick: state.tick, i: p.i });
-      continue;
+    /* Every blast is its own hit, and none waits for the one before it to finish.
+     *
+     * A shield used to buy two seconds of invulnerability, so a second bomb landing while the
+     * first was still burning did nothing at all — with two shields to hold, the second could
+     * never be spent by a chain or a crossfire, only by a blast after the grace ran out. Now each
+     * blast that reaches you costs a shield the tick it arrives, and two at once cost two. What
+     * stops one blast charging you every tick it burns is memory, not a timer: `hitBy` holds the
+     * blasts you have already paid for, and those cannot hit you again. If the hits outnumber the
+     * shields you die, credited to the first blast the shields could not cover. */
+    const live = new Set(fresh.map(f => f.src));
+    p.hitBy = (p.hitBy || []).filter(src => live.has(src));
+    const inBox = f =>
+      f.tx >= (p.x - half) >> 8 && f.tx <= (p.x + half - 1) >> 8 &&
+      f.ty >= (p.y - half) >> 8 && f.ty <= (p.y + half - 1) >> 8;
+    // One entry per blast reaching you this tick that you have not already paid for — the blast
+    // on your centre tile first, because that is who the kill goes to (RULES.md §3).
+    const ctx = toTile(p.x), cty = toTile(p.y);
+    const ordered = [...lethal.filter(f => f.tx === ctx && f.ty === cty), ...lethal];
+    const newHits = [];
+    for (const f of ordered) {
+      if (!inBox(f) || p.hitBy.includes(f.src) || newHits.some(g => g.src === f.src)) continue;
+      newHits.push(f);
     }
+    if (!newHits.length) continue;
+
+    let fatal = null;
+    for (const f of newHits) {
+      if (p.shields <= 0) { fatal = f; break; }
+      p.shields--;
+      p.hitBy.push(f.src);
+      state.events.push({ e: 'shield', tick: state.tick, i: p.i, left: p.shields });
+    }
+    if (!fatal) continue;
 
     // Who gets the kill.
     //
@@ -105,12 +132,12 @@ function killInFire(state) {
     // So: fall back to the fire the hitbox actually overlaps, scanning `fresh` in array order,
     // which is `detonate` push order and therefore deterministic. One of them must match, because
     // `burns()` just returned true for the identical box.
-    const tx = toTile(p.x), ty = toTile(p.y);
-    const overlapped = lethal.find(f =>
-      f.tx >= (p.x - half) >> 8 && f.tx <= (p.x + half - 1) >> 8 &&
-      f.ty >= (p.y - half) >> 8 && f.ty <= (p.y + half - 1) >> 8);
-    const fire = fresh.find(f => f.tx === tx && f.ty === ty) || overlapped;
-    const killer = fire.owner;
+    //
+    // With shields in play the answer is narrower still: the blast that got past them. Shields
+    // spent on earlier blasts this tick do not hand those blasts the kill. `newHits` is already
+    // in that order — centre tile first, then the rest as `detonate` pushed them.
+    const killer = fatal.owner;
+    p.hitBy = [];
 
     scatterOnDeath(state, p);
 

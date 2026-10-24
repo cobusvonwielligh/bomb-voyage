@@ -184,7 +184,7 @@ Drop weights, applied after the drop roll:
 | Fire | 100 | 24.3 % | +1 blast radius | 6 |
 | Stim | 72 | 17.5 % | +75 maximum stamina, and tops you up | 4 |
 | Boots | 72 | 17.5 % | +1 speed step | 4 |
-| Shield | 48 | 11.7 % | Survive one death each; a blue ring per shield on your pirate | 2 held |
+| Shield | 48 | 11.7 % | Each absorbs one blast; a blue ring per shield on your pirate. No grace period: two blasts at once, or a second while the first still burns, cost two | 2 held |
 | Rum | 11 | 2.7 % | Blast arms stop killing you for 12 s; you walk drunk | — |
 
 The weights live in `PERK_WEIGHTS` in `shared/constants.js`; this table is a copy of them.

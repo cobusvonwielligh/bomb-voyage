@@ -144,7 +144,8 @@ export function detonate(state) {
     }
 
     for (const c of cells) {
-      state.fires.push({ tx: c.tx, ty: c.ty, kind: c.kind, rot: c.rot, until: state.tick + FIRE_TICKS, owner: bomb.owner });
+      // `src` is which blast this is, so a hit can be counted once per blast — see killInFire.
+      state.fires.push({ tx: c.tx, ty: c.ty, kind: c.kind, rot: c.rot, until: state.tick + FIRE_TICKS, owner: bomb.owner, src: bomb.id });
       // Anything caught in the blast goes off now, not on its own fuse.
       const neighbour = bombAt(state, c.tx, c.ty);
       if (neighbour && !burst.has(neighbour.id)) queue.push(neighbour);

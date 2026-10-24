@@ -409,7 +409,9 @@ export const DRUNK_SWAY_RATE_A = 0.09, DRUNK_SWAY_RATE_B = 0.041;
 export const DRUNK_STAGGER_EVERY = 79;     // ticks between stumbles, prime so it never syncs
 export const DRUNK_STAGGER_TICKS = 4;      // how long one lasts
 
-export const INVULN_TICKS_SHIELD = 60; // 2 s after a shield breaks
+// Unused since shields stopped granting a grace period: each blast now costs one shield the tick it
+// lands, so a second hit during the first is never swallowed. See killInFire in sim/round.js.
+export const INVULN_TICKS_SHIELD = 0;
 
 // How long you sit on the death screen before SPACE will do anything.
 //
