@@ -30,6 +30,14 @@ const ACE_MIN_VICTIMS = 3;
 
 const newStreak = () => ({ count: 0, lastTick: -1e9, victims: new Set() });
 
+// Bots go by people's names. Twenty-eight, more than the fifteen bot seats there can ever be.
+export const BOT_NAMES = [
+  'Charles', 'Tango', 'Johnson', 'Echo', 'Sanchez', 'Franky', 'Steven',
+  'Marco', 'Rosa', 'Dmitri', 'Kenji', 'Priya', 'Olu', 'Bianca',
+  'Hector', 'Ingrid', 'Mateo', 'Nadia', 'Ravi', 'Sasha', 'Tomas',
+  'Wendell', 'Yusuf', 'Zara', 'Lena', 'Bruno', 'Gus', 'Mabel',
+];
+
 export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = MAX_PLAYERS, leaderboard = null,
   // Overridable so a test can watch a seat be recycled without waiting 45 real seconds.
   graceTicks = RECONNECT_GRACE_TICKS,
@@ -381,6 +389,10 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     if (ms > 20) console.warn(`slow tick: ${ms.toFixed(1)}ms at ${state.tick}`);
 
     if (state.tick % TICK_HZ === 0) emitScores();
+    // Bank everyone's progress every ten seconds, not only at round end and on leaving. Banking is
+    // by delta, so doing it often costs nothing and double-counts nothing — and the most a crash
+    // can now take from anybody is ten seconds of play rather than the round so far.
+    if (state.tick % (10 * TICK_HZ) === 0) bankScores();
 
     // Events accumulate until a snapshot actually carries them.
     //
@@ -703,7 +715,7 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     while (botCount() < n) {
       const seat = seats.findIndex(s => s === null);
       if (seat < 0) break;
-      const name = `bot-${seat}`;
+      const name = botName();
       seats[seat] = {
         playerId: `bot_${seat}`, name, mask: 0, inputs: new Map(), lastAckTick: 0,
         connected: true, goneSince: 0, isBot: true, brain: createBrain(), addedAt: ++botSeq,
@@ -714,6 +726,19 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       respawn(p);
     }
     return botCount();
+  }
+
+  /**
+   * A name for a new bot: a person's name, picked at random from BOT_NAMES and never one already
+   * in the room, bot or human. "bot-7" told everybody exactly which pirates were not worth
+   * worrying about; the robot beside the name on the scoreboard still says it, for anyone who
+   * looks. Falls back to the old numbering only if all twenty-eight are somehow taken.
+   */
+  function botName() {
+    const taken = new Set(seats.filter(Boolean).map(s => s.name.toLowerCase()));
+    const free = BOT_NAMES.filter(n => !taken.has(n.toLowerCase()));
+    if (!free.length) return `bot-${botSeq + 1}`;
+    return free[(Math.random() * free.length) | 0];
   }
 
   /** Somebody arrived: make sure there is a fight waiting for them. See AUTO_BOTS_MIN. */

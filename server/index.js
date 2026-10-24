@@ -329,6 +329,19 @@ if (usingTls && config.redirectPort) {
  * Now: bank the round, await the save, then exit. The three-second backstop stays, because a
  * shutdown that hangs is worse than one that loses a few points.
  */
+/* A crash is the shutdown nobody planned, and it used to save nothing: everything earned since
+ * the last round boundary was simply gone. Bank and write synchronously — there is no event loop
+ * worth trusting at this point — then exit non-zero so systemd restarts us. */
+process.on('uncaughtException', err => {
+  console.error('uncaught exception — saving the leaderboard before exiting', err);
+  try { hub.bankScores(); } catch (e) { console.error(`bank on crash failed (${e.message})`); }
+  leaderboard.flushSync();
+  process.exit(1);
+});
+process.on('unhandledRejection', err => {
+  console.error('unhandled rejection', err);
+});
+
 let shuttingDown = false;
 for (const sig of ['SIGTERM', 'SIGINT']) {
   process.on(sig, async () => {
@@ -338,8 +351,9 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
     setTimeout(() => process.exit(0), 3000).unref();
     try {
       hub.bankScores();
+      // Synchronously, so the backstop timer above can never cut a save off halfway.
       await leaderboard.stop();
-      console.log('leaderboard saved');
+      if (leaderboard.flushSync()) console.log('leaderboard saved');
     } catch (err) {
       console.warn(`leaderboard: save on shutdown failed (${err.message})`);
     }

@@ -63,7 +63,8 @@ test('lifetime rank is banked plus the round in progress', async () => {
     // The name rides on this broadcast because nothing else refreshes it: the snapshot omits
     // names, so without it a client that hydrated a seat before the welcome calls that player
     // "p1" for the whole round.
-    assert.equal(seat0.name, 'bot-0', 'the scores broadcast carries no name');
+    assert.ok(seat0.name && seat0.name === room.state.players[0].name,
+      'the scores broadcast carries no name');
 
     const seat1 = last.ranks.find(r => r.i === 1);
     assert.equal(seat1.tier, 'Rookie', 'a fresh seat starts at the bottom of the ladder');

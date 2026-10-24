@@ -19,7 +19,8 @@
     "rollback": "./infra/rollback.sh",
     "logs": "./infra/logs.sh",
     "bots": "node server/bots.js",
-    "botbench": "node server/botbench.js"
+    "botbench": "node server/botbench.js",
+    "medals": "node server/medals.js"
   },
   "dependencies": {
     "@fails-components/webtransport": "^1.6.11",

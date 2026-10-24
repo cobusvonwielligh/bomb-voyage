@@ -125,11 +125,14 @@ test('leaderboard', async t => {
     const lb = createLeaderboard({ dataDir: dir });
     lb.record('a', { name: 'ann', score: 10 });
     await lb.flush();
-    assert.deepEqual(await fs.readdir(dir), ['leaderboard.json']);
+    // `history/` holds the daily copies; see keepHistory in server/leaderboard.js.
+    assert.deepEqual((await fs.readdir(dir)).filter(f => f !== 'history'), ['leaderboard.json']);
 
     lb.record('a', { score: 10 });
     await lb.stop();
-    assert.deepEqual(await fs.readdir(dir), ['leaderboard.json'], 'and none after stop() either');
+    // The second save leaves the first behind as `.bak`, on purpose; still no temporary file.
+    assert.deepEqual((await fs.readdir(dir)).filter(f => f !== 'history'),
+      ['leaderboard.json', 'leaderboard.json.bak'], 'and none after stop() either');
     assert.equal((await read(dir)).players.a.score, 20);
   });
 
