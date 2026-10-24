@@ -939,12 +939,12 @@ function renderRoundTable(m) {
   for (const [n, p] of (m.standings || []).entries()) {
     const tr = document.createElement('tr');
     const you = p.i === world.you;
-    cell(tr, n === 0 ? '1st' : `${n + 1}`, n === 0 ? 'var(--gold)' : null, n !== 0);
+    placeCell(tr, n);
     cell(tr, you ? `${p.name} (you)` : p.name, playerColor(p.i));
     num(cell(tr, p.k));
     num(cell(tr, p.d));
-    num(cell(tr, p.s));
-    if (you) { tr.className = 'me'; mine = tr; }
+    num(cell(tr, p.s)).classList.add('score');
+    if (you) { tr.classList.add('me'); mine = tr; }
     body.append(tr);
   }
   $('roundNext').textContent = `next map: ${m.nextMap}`;
@@ -1028,7 +1028,10 @@ function renderLive() {
   for (const [n, p] of rows.entries()) {
     const li = list.children[n];
     const [pos, nm, kd, sc] = li.children;
-    pos.textContent = n + 1;
+    // Only rebuilt when the place in this slot changes — this runs five times a second, and the
+    // slot's place never changes at all once the list exists. Cheap either way.
+    if (pos.dataset.n !== String(n)) { pos.dataset.n = n; pos.replaceChildren(placeMark(n)); }
+    for (const k of [1, 2, 3]) li.classList.toggle(`p${k}`, n === k - 1);
     nm.textContent = p.name;
     nm.style.color = playerColor(p.i);
     // A robot beside anything that is not a person. `bot` comes from the scores broadcast, which
@@ -1062,6 +1065,34 @@ function cell(tr, text, colour, dim) {
 /** Tabular figures, so a column of scores lines up instead of shimmering. */
 const num = td => { td.classList.add('num'); return td; };
 
+const PLACES = ['1st', '2nd', '3rd'];
+
+/**
+ * A medal for the podium, a plain number for everyone else.
+ *
+ * Drawn by CSS (`.medal.m1`–`m3` in style.css) so all four boards share one set of medals. It
+ * keeps an accessible name, because a picture of a "1" is not a "1" to a screen reader.
+ */
+function placeMark(n) {
+  if (n > 2) return document.createTextNode(String(n + 1));
+  const m = document.createElement('span');
+  m.className = `medal m${n + 1}`;
+  m.setAttribute('role', 'img');
+  m.setAttribute('aria-label', `${PLACES[n]} place`);
+  m.title = PLACES[n];
+  return m;
+}
+
+/** The place column of a table row, and the podium tint on the row itself. */
+function placeCell(tr, n) {
+  const td = document.createElement('td');
+  td.className = 'place';
+  td.append(placeMark(n));
+  if (n < 3) tr.classList.add(`p${n + 1}`);
+  tr.append(td);
+  return td;
+}
+
 function renderScores() {
   const rows = world.players.filter(Boolean).sort((a, b) => b.score - a.score || b.kills - a.kills);
   const body = $('scoreRows');
@@ -1069,16 +1100,16 @@ function renderScores() {
   for (const [n, p] of rows.entries()) {
     const tr = document.createElement('tr');
     const r = ranks.get(p.i);
-    cell(tr, n + 1, null, true);
+    placeCell(tr, n);
     cell(tr, p.name, playerColor(p.i));
     // The rank ladder is the thing returning Game of Bombs players recognise first, so it gets a
     // column of its own rather than a tooltip.
     cell(tr, r ? `${r.level} \u00b7 ${r.tier}` : '\u2014', null, true);
     num(cell(tr, p.kills));
     num(cell(tr, p.deaths));
-    num(cell(tr, p.score));
+    num(cell(tr, p.score)).classList.add('score');
     num(cell(tr, r ? r.xp.toLocaleString() : '\u2014', null, true));
-    if (p.i === world.you) tr.style.fontWeight = 'bold';
+    if (p.i === world.you) tr.classList.add('me');
     body.append(tr);
   }
 
@@ -1086,7 +1117,7 @@ function renderScores() {
   best.textContent = '';
   for (const [n, e] of allTime.entries()) {
     const tr = document.createElement('tr');
-    cell(tr, n + 1, null, true);
+    placeCell(tr, n);
     cell(tr, e.name);
     cell(tr, `${e.level} \u00b7 ${e.tier}`, null, true);
     num(cell(tr, e.score));

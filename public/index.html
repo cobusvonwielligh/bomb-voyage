@@ -154,6 +154,7 @@
 
     <div>
       <h2 class="panelHead">scoreboard</h2>
+      <div class="liveHead"><span></span><span>pirate</span><span>k / d</span><span>score</span></div>
       <ul id="liveRows"></ul>
     </div>
 
@@ -178,7 +179,7 @@
     <h1 id="deadTitle">round over</h1>
     <div id="roundTable">
       <table>
-        <thead><tr><th>#</th><th>name</th><th>k</th><th>d</th><th>score</th></tr></thead>
+        <thead><tr><th>#</th><th>name</th><th class="num">kills</th><th class="num">deaths</th><th class="num">score</th></tr></thead>
         <tbody id="roundRows"></tbody>
       </table>
       <p class="sub" id="roundEmpty">no scores</p>
@@ -194,14 +195,15 @@
 </div>
 
 <div id="scores" class="edge">
+  <h2 class="boardHead">this round</h2>
   <table>
-    <thead><tr><th>#</th><th>name</th><th>level</th><th>k</th><th>d</th><th>round</th><th>xp</th></tr></thead>
+    <thead><tr><th>#</th><th>name</th><th>level</th><th class="num">kills</th><th class="num">deaths</th><th class="num">round</th><th class="num">xp</th></tr></thead>
     <tbody id="scoreRows"></tbody>
   </table>
   <div id="allTime">
     <h2>all time</h2>
     <table>
-      <thead><tr><th>#</th><th>name</th><th>level</th><th>xp</th></tr></thead>
+      <thead><tr><th>#</th><th>name</th><th>level</th><th class="num">xp</th></tr></thead>
       <tbody id="allTimeRows"></tbody>
     </table>
   </div>
