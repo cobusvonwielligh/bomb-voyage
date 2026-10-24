@@ -9,7 +9,7 @@ import {
   TILE_PX, UNITS_PER_TILE, FUSE_TICKS, FIRE_TICKS, playerColor, SCORE, ROUND_INTERMISSION_MS,
   progressFor,
   STREAK_WINDOW_TICKS, STREAK_NAMES, STREAK_ACE, GAMESPEED_MIN, GAMESPEED_MAX,
-  IDLE_KICK_TICKS, AUTO_BOTS_EMPTY_ROUNDS,
+  IDLE_KICK_TICKS, AUTO_BOTS_EMPTY_ROUNDS, IN_MASK,
 } from '../shared/constants.js';
 import { MAPS, encodeCells } from '../shared/maps.js';
 import { createState, createPlayer, applyStatus, tileCentre } from '../shared/sim/state.js';
@@ -200,7 +200,7 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     if (!s) return;
     if (tick <= s.lastAckTick) return;                 // already simulated; too late to matter
     s.lastInputAt = state.tick;
-    s.inputs.set(tick, mask & 0x1f);
+    s.inputs.set(tick, mask & IN_MASK);
     if (s.inputs.size > INPUT_BUFFER_TICKS) {
       // Drop the oldest rather than growing without bound if a client floods us.
       const oldest = Math.min(...s.inputs.keys());
@@ -329,12 +329,20 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       st.lastTick = e.tick;
       st.victims.add(e.i);
 
+      /* `n` is the rung, and it rides along so the client never has to parse `kind`.
+       *
+       * Everything on the client that escalates with a streak — the size of the type, the chord,
+       * how fast the rainbow pours through the letters — was reading the KIND STRING and matching
+       * prefixes against it. That makes the announcement's wording part of the protocol: rename
+       * "ULTRA KILL" and three unrelated effects quietly drop to their lowest setting. The number
+       * is the fact; the words are a label for it.
+       */
       if (isAce(e.by, st)) {
         st.victims.clear();
-        onBroadcast({ t: 'streak', i: e.by, name: killer.name, kind: STREAK_ACE, ace: true });
+        onBroadcast({ t: 'streak', i: e.by, name: killer.name, kind: STREAK_ACE, ace: true, n: 6 });
       } else if (st.count >= 2) {
-        const kind = STREAK_NAMES[Math.min(st.count, 5)];
-        onBroadcast({ t: 'streak', i: e.by, name: killer.name, kind, ace: false });
+        const n = Math.min(st.count, 5);
+        onBroadcast({ t: 'streak', i: e.by, name: killer.name, kind: STREAK_NAMES[n], ace: false, n });
       }
     }
   }
@@ -506,6 +514,8 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       streaks[i] = newStreak();
       if (!carried[i]) continue;
       const p = createPlayer(i, carried[i].name);
+      // Carried across the round boundary with the seat; see setBots.
+      if (carried[i].isBot) p.isBot = true;
       state.players[i] = p;
       respawn(p);
     }
@@ -534,6 +544,14 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     sta: p.stamina, stl: p.staminaLevel, tr: p.tired ? 1 : 0,
     // Only while sliding on water, which is almost never — absent means zero.
     ...(p.slide ? { sl: p.slide } : null),
+    /* The deliberate slide. Three fields, and all three only while one is actually running or
+     * cooling down — which is the overwhelming majority of ticks omitted for everybody.
+     *
+     * `sv` is the live velocity, and the renderer needs it for the dust and the streaks; the
+     * other two are what prediction has to start its replay from, or your own slide would be
+     * re-launched or cut short every time a snapshot landed mid-slide. */
+    ...(p.slideV ? { sv: p.slideV, sd: p.slideDir, sf: p.slideFor } : null),
+    ...(p.slideCool ? { sc: p.slideCool } : null),
   });
 
   function emitSnapshot() {
@@ -728,6 +746,10 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       };
       streaks[seat] = newStreak();
       const p = createPlayer(seat, name);
+      // The one thing the simulation is told about brains: gulls will not fall to a bot's fire.
+      // See gulls.js. Never on the wire and never in hashState, so prediction is unaffected —
+      // the client does not run the gulls at all.
+      p.isBot = true;
       state.players[seat] = p;
       respawn(p);
     }
@@ -912,6 +934,18 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     respawn,
     roundMinutes: () => Math.round((roundTicks / TICK_HZ / 60) * 10) / 10,
     isBot: seat => !!seats[seat]?.isBot,
+    /**
+     * Is this seat the REAL admin — the key-holder, or the configured admin name where no key is
+     * set? Not the same question as `hostSeat`, which falls back to the longest-standing player
+     * so that a room is never without somebody who can add bots.
+     *
+     * The dangerous commands check this one. See `isOwner` in server/net.js.
+     */
+    isAdminSeat(seat) {
+      const s = seats[seat];
+      if (!s || s.isBot) return false;
+      return !!s.admin || (!!adminName && (s.name ?? '').toLowerCase() === adminName);
+    },
     /** Whether the room is topping bots up by itself right now. See AUTO_BOTS_MIN. */
     get autoBots() { return autoBots; },
     maps: () => MAPS.map(m => m.id),

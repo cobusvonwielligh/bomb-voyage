@@ -1,6 +1,8 @@
 // Keyboard to input bitmask. Arrows and WASD, per docs/RULES.md §10.
 
-import { IN_RIGHT, IN_UP, IN_LEFT, IN_DOWN, IN_BOMB } from '/shared/constants.js';
+import {
+  IN_RIGHT, IN_UP, IN_LEFT, IN_DOWN, IN_BOMB, SLIDE_DOUBLE_TAP_MS,
+} from '/shared/constants.js';
 
 const BINDINGS = {
   ArrowRight: IN_RIGHT, KeyD: IN_RIGHT,
@@ -84,11 +86,27 @@ export function createTap(ms = TAP_COOLDOWN_MS, now = () => performance.now()) {
   };
 }
 
-export function createInput({ onReserved, onEmote, onEmoteMenu, isTyping = typingSomewhere }) {
+export function createInput({ onReserved, onEmote, onEmoteMenu, isTyping = typingSomewhere,
+  now = () => performance.now() }) {
   let mask = 0;
   const down = new Set();
   // Shift held: the picker is open and WASD chooses rather than walks.
   let picking = false;
+
+  /* The slide gesture: the same direction, twice, inside SLIDE_DOUBLE_TAP_MS.
+   *
+   * Kept here rather than in the simulation on purpose. The server is told "slide" by one bit in
+   * the input mask and never learns that it came from two taps, so the gesture costs nothing on
+   * the wire, works identically under any amount of lag, and could be rebound to a key tomorrow
+   * without the rules changing at all.
+   *
+   * Tracked per DIRECTION rather than per key code, so tapping Left on the arrows and then A
+   * counts — they are the same instruction, and a player with a hand on each is not making two
+   * different requests. Auto-repeat never reaches here (see the repeat guard in keydown), which is
+   * what stops holding a direction from reading as an endless stream of taps.
+   */
+  const lastTap = new Map();      // direction bit -> timestamp of the last fresh press
+  let slideTap = false;           // armed by a double-tap, consumed by the next tick
 
   const recompute = () => {
     mask = 0;
@@ -132,6 +150,14 @@ export function createInput({ onReserved, onEmote, onEmoteMenu, isTyping = typin
     if (RESERVED[e.code]) { e.preventDefault(); onReserved?.(RESERVED[e.code]); return; }
     if (!BINDINGS[e.code]) return;
     e.preventDefault();
+    const bit = BINDINGS[e.code];
+    if (bit !== IN_BOMB) {
+      const t = now();
+      const prev = lastTap.get(bit);
+      // Armed, and the clock is cleared: a third tap starts a new pair rather than firing again.
+      if (prev !== undefined && t - prev <= SLIDE_DOUBLE_TAP_MS) { slideTap = true; lastTap.delete(bit); }
+      else lastTap.set(bit, t);
+    }
     if (!down.has(e.code)) { down.add(e.code); recompute(); }
   });
 
@@ -148,13 +174,27 @@ export function createInput({ onReserved, onEmote, onEmoteMenu, isTyping = typin
   // Losing focus mid-stride would otherwise leave you walking into a wall forever.
   // Losing focus mid-stride would otherwise leave you walking into a wall forever — and would
   // leave the picker open over a game you are no longer looking at.
-  addEventListener('blur', () => { down.clear(); recompute(); setPicking(false); });
+  addEventListener('blur', () => {
+    down.clear(); recompute(); setPicking(false);
+    // An armed slide must not survive the tab losing focus: coming back to a launch nobody asked
+    // for, several seconds after the taps, is the worst kind of surprise in a game about position.
+    lastTap.clear(); slideTap = false;
+  });
 
   return {
     /* Zero while the picker is open. The simulation reads this, so a held Shift is genuinely
      * "no input" rather than a UI overlay with movement continuing underneath it. */
     get mask() { return picking ? 0 : mask; },
     get picking() { return picking; },
+    /**
+     * Was a slide asked for? One-shot: it reads and clears, so one double-tap is one slide
+     * whatever the frame rate — several simulation steps in one frame cannot launch twice.
+     */
+    takeSlide() {
+      if (!slideTap || picking) { slideTap = false; return false; }
+      slideTap = false;
+      return true;
+    },
     /** Is this physical key down right now? Edge detection lives with the caller. */
     isDown(code) { return down.has(code); },
     clear() { down.clear(); recompute(); },

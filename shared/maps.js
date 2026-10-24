@@ -317,6 +317,29 @@ export function buildMap(def) {
   // Ice draws from its own stream, so turning some crates to ice leaves every map's layout exactly
   // as it was — one more call on `next` per soft wall would have reshuffled the whole island.
   const iceNext = rng(def.seed ^ 0x1ce1ce);
+  /* Gaps in the lattice, and they are different every single time.
+   *
+   * The even/even pillar rule gives every map the same chessboard of indestructible stone, which
+   * is the backbone of a Bomberman board and also the reason a map you have played twice holds no
+   * surprises: the walls that cannot be broken are in exactly the places you remember. Knocking
+   * one pillar in sixteen out leaves the backbone intact — the lattice is still what shapes the
+   * fight — while making every board subtly its own: a sight line where there was cover, a long
+   * diagonal that used to be blocked, a room that is now a corridor.
+   *
+   * SEEDED FROM THE CLOCK, not from `def.seed`, which is the whole point. Everything else about a
+   * map is reproducible from its seed and always has been; this one thing is deliberately not, so
+   * the same map on Friday is not the same board it was last Friday.
+   *
+   * It is safe to be random because the grid is not derived twice: the server builds it and sends
+   * the cells in the welcome (see encodeCells and world.applyWelcome), so the client draws and
+   * predicts against the exact bytes the simulation is using. Nothing here is recomputed anywhere.
+   *
+   * Its own stream, like the ice, so the layout is otherwise identical to what the seed produced.
+   * And it can only ever REMOVE stone, so it cannot wall anything off — the causeway rule above
+   * and the stranded-island check below both still hold without having to know about it.
+   */
+  const gapNext = rng(((Date.now() ^ (Math.random() * 0x7fffffff)) | 0) >>> 0);
+  const LATTICE_GAP = 1 / 16;
   const land = landMask(def, next);
   const isLand = (x, y) => x >= 0 && y >= 0 && x < w && y < h && land[y * w + x] === 1;
 
@@ -348,7 +371,11 @@ export function buildMap(def) {
         // cover behind instead of a blast arm flying off into the sea.
         type = BLOCK.IRON;
       } else if (x % 2 === 0 && y % 2 === 0 && !isCauseway(x, y)) {
-        type = BLOCK.IRON;
+        // A pillar, unless this is one of the one-in-sixteen gaps. Open sand rather than a roll
+        // on `next`: a gap has to be VISIBLE as a hole in the chessboard, and taking the normal
+        // soft-wall roll here would both hide it behind a crate and shift every subsequent draw
+        // from the layout stream — which is exactly what `gapNext` exists to avoid.
+        type = gapNext() < LATTICE_GAP ? BLOCK.FLOOR : BLOCK.IRON;
       } else {
         const r = next();
         if (r > def.density) type = BLOCK.FLOOR;

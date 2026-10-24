@@ -11,7 +11,10 @@ import {
   DRUNK_SWAY_UNITS, DRUNK_SWAY_RATE_A, DRUNK_SWAY_RATE_B,
   DRUNK_STAGGER_EVERY, DRUNK_STAGGER_TICKS,
   PUDDLE_SPEED_NUM, PUDDLE_SPEED_DEN, PUDDLE_SLIDE_TICKS,
-  IN_RIGHT, IN_UP, IN_LEFT, IN_DOWN, DIR_R, DIR_U, DIR_L, DIR_D, STATUS,
+  SLIDE_PEAK_NUM, SLIDE_PEAK_DEN, SLIDE_DRAG_NUM, SLIDE_DRAG_DEN, SLIDE_EXIT_UNITS,
+  SLIDE_MAX_TICKS, SLIDE_STAMINA_COST, SLIDE_COOLDOWN_TICKS,
+  CONFUSED_NUM, CONFUSED_DEN,
+  IN_RIGHT, IN_UP, IN_LEFT, IN_DOWN, IN_SLIDE, DIR_R, DIR_U, DIR_L, DIR_D, STATUS,
 } from '../constants.js';
 import { walkable, has, tileCentre } from './state.js';
 
@@ -75,7 +78,71 @@ export function speedOf(p) {
   let s = SPEED_UNITS_PER_TICK[Math.min(p.speed, SPEED_UNITS_PER_TICK.length - 1)];
   if (has(p, STATUS.SLOWDOWN)) s = ((s * SLOWDOWN_NUM) / SLOWDOWN_DEN) | 0;
   if (p.tired) s = ((s * STAMINA_TIRED_NUM) / STAMINA_TIRED_DEN) | 0;
+  // Seeing stars after somebody slid through you. Applied after the other two, so a tired and
+  // confused player is slower than either on its own rather than the worse of the two.
+  if (has(p, STATUS.CONFUSED)) s = ((s * CONFUSED_NUM) / CONFUSED_DEN) | 0;
   return Math.max(1, s);
+}
+
+/** The direction bit a mask is asking for, or 0. Diagonals resolve to the facing's axis. */
+function askedDir(p, mask) {
+  const dx = ((mask & IN_RIGHT) ? 1 : 0) - ((mask & IN_LEFT) ? 1 : 0);
+  const dy = ((mask & IN_DOWN) ? 1 : 0) - ((mask & IN_UP) ? 1 : 0);
+  if (!dx && !dy) return null;
+  if (dx && dy) {
+    const facingH = p.dir === DIR_L || p.dir === DIR_R;
+    return facingH ? (dx > 0 ? DIR_R : DIR_L) : (dy > 0 ? DIR_D : DIR_U);
+  }
+  return dx > 0 ? DIR_R : dx < 0 ? DIR_L : dy < 0 ? DIR_U : DIR_D;
+}
+
+/**
+ * Start a slide, if this player may have one.
+ *
+ * Deliberately strict, because every refusal here is a refusal somebody can learn: no wind, no
+ * slide; already sliding, no slide; still catching your breath from the last one, no slide. The
+ * tired latch is in there too — an exhausted pirate limps, and a limping pirate who can still
+ * cross three tiles in a third of a second would make the whole stamina system optional.
+ *
+ * Costs the stamina up front and sets a velocity, not a timer. Everything after this is drag.
+ */
+function startSlide(state, p, mask) {
+  if (p.slideV > 0 || p.slideCool > 0 || p.tired) return false;
+  if (p.stamina < SLIDE_STAMINA_COST) return false;
+  const dir = askedDir(p, mask) ?? p.dir;
+  p.stamina -= SLIDE_STAMINA_COST;
+  if (p.stamina <= 0) { p.stamina = 0; p.tired = true; }
+  p.dir = dir;
+  p.slideDir = dir;
+  // The launch, from the pace you would have walked at — boots included, statuses included.
+  p.slideV = Math.max(SLIDE_EXIT_UNITS + 1, ((speedOf(p) * SLIDE_PEAK_NUM) / SLIDE_PEAK_DEN) | 0);
+  p.slideFor = 0;
+  state.events?.push({ e: 'slide', tick: state.tick, i: p.i, x: p.x, y: p.y, d: dir });
+  return true;
+}
+
+/**
+ * One tick of a slide in progress. Returns false once it is over.
+ *
+ * The velocity is integer units a tick and loses a tenth of itself every tick, so the whole thing
+ * is a geometric series the client can replay exactly. Hitting a wall ends it immediately — a
+ * slide that kept its momentum while pressed against stone would let you hold a slide round a
+ * corner, and the one thing this mechanic must not become is a better way to walk.
+ */
+function stepSlide(state, p) {
+  const [ax, ay] = DIR_VEC[p.slideDir] ?? DIR_VEC[DIR_D];
+  const moved = moveAxis(state, p, ax, ay, p.slideV);
+  p.slideFor++;
+  p.slideV = ((p.slideV * SLIDE_DRAG_NUM) / SLIDE_DRAG_DEN) | 0;
+  // Stopped dead, out of speed, or the seatbelt: either way, put the brakes on and start the
+  // cooldown from here rather than from the launch.
+  if (!moved || p.slideV <= SLIDE_EXIT_UNITS || p.slideFor >= SLIDE_MAX_TICKS) {
+    p.slideV = 0;
+    p.slideFor = 0;
+    p.slideCool = SLIDE_COOLDOWN_TICKS;
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -368,6 +435,29 @@ export function step(state, p, mask) {
 
   // Before anything reads the position, make sure it is one we could legally be standing in.
   unstick(state, p);
+
+  if (p.slideCool > 0) p.slideCool--;
+
+  /* The slide owns the tick.
+   *
+   * While one is running the keys do nothing: no steering, no braking, no bomb-key dance to cut it
+   * short. That is the trade the stamina paid for — three tiles of commitment, and the decision
+   * was made when you double-tapped. It also means the whole thing is a function of (velocity,
+   * direction, map), which is why the client can replay it to the unit.
+   *
+   * No stamina call either way. The cost was taken in full at the launch; draining on top of that
+   * would charge twice, and regenerating mid-slide would make a slide the fastest way to rest.
+   */
+  if (p.slideV > 0) {
+    p.moving = true;
+    if (stepSlide(state, p)) return;
+    // It ended this tick. Fall through on this tick's keys, so landing out of a slide already
+    // running keeps running rather than pausing for a tick.
+  } else if ((mask & IN_SLIDE) && startSlide(state, p, mask)) {
+    p.moving = true;
+    stepSlide(state, p);
+    return;
+  }
 
   let dx = ((mask & IN_RIGHT) ? 1 : 0) - ((mask & IN_LEFT) ? 1 : 0);
   let dy = ((mask & IN_DOWN) ? 1 : 0) - ((mask & IN_UP) ? 1 : 0);

@@ -4,10 +4,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  GULL_FIRST_TICK, GULL_MAX, GULL_LOW_ALT, FIRE_TICKS, PERK, AUTO_BOTS_MIN, UNITS_PER_TILE,
+  GULL_FIRST_TICK, GULL_MAX, GULL_LOW_ALT, GULL_COINS, FIRE_TICKS, PERK, AUTO_BOTS_MIN,
+  UNITS_PER_TILE, SCORE,
 } from '../shared/constants.js';
 import { MAPS } from '../shared/maps.js';
-import { createState } from '../shared/sim/state.js';
+import { createState, createPlayer } from '../shared/sim/state.js';
 import { gulls, gullAt, gullAltitude } from '../shared/sim/gulls.js';
 import { rng } from '../shared/util/rng.js';
 import { createRoom } from '../server/room.js';
@@ -68,12 +69,13 @@ test('gulls have their own random stream, so drops and regrowth are unchanged', 
   assert.equal(s.next(), shadow(), 'the gulls drew from the simulation\'s main stream');
 });
 
-test('a gull diving into live fire is downed and drops a coin that does not use the cap', () => {
+test('a blast with nobody behind it leaves its coin on the floor, outside the round cap', () => {
   const s = withGull();
   const g = s.gulls[0];
   const shot = lowOverFloor(s, g);
   assert.ok(shot, 'this flight never went low over the island');
   s.tick = shot.t;
+  // Owner 3, with no player in that seat: a powder keg, as far as this rule is concerned.
   s.fires = [{ tx: shot.tx, ty: shot.ty, kind: 'arm', rot: 0, until: s.tick + FIRE_TICKS, owner: 3 }];
   s.events.length = 0;
   gulls(s);
@@ -85,25 +87,52 @@ test('a gull diving into live fire is downed and drops a coin that does not use 
   assert.equal(s.goldDropped, 0, 'an earned coin counted against the round\'s random gold');
 });
 
-test('the same fire does nothing to a gull cruising overhead, or to one in a blast\'s embers', () => {
+test('the shooter is paid GULL_COINS in the air, and nothing is left on the floor', () => {
   const s = withGull();
   const g = s.gulls[0];
-  // Cruising: a high tick over the map, fire right under it.
-  let t = g.t0;
-  while (gullAt(g, t).alt < 1 || gullAt(g, t).x < 0 || gullAt(g, t).y < 0) t++;
-  const at = gullAt(g, t);
-  s.tick = t;
-  s.fires = [{ tx: Math.floor(at.x / 256), ty: Math.floor(at.y / 256), kind: 'core', rot: 0,
-    until: t + FIRE_TICKS, owner: 0 }];
+  const shot = lowOverFloor(s, g);
+  s.tick = shot.t;
+  const p = createPlayer(2, 'cobus');
+  p.alive = true;
+  s.players[2] = p;
+  s.fires = [{ tx: shot.tx, ty: shot.ty, kind: 'arm', rot: 0, until: s.tick + FIRE_TICKS, owner: 2 }];
+  s.events.length = 0;
   gulls(s);
-  assert.equal(s.gulls.length, 1, 'a gull at cruising height was burned');
+  assert.equal(p.coins, GULL_COINS, 'the shooter was not paid');
+  assert.equal(p.score, SCORE.GOLD, 'one coin of XP for the shot, not three');
+  assert.equal(s.perks.length, 0, 'a coin was left on the floor as well as paid out');
+  assert.equal(s.events.find(e => e.e === 'gullhit')?.coins, GULL_COINS);
+});
 
-  // Embers: low, but the fire is past its lethal window.
+test('height is no longer a defence, but embers and bots are not shots', () => {
+  const s = withGull();
+  const g = s.gulls[0];
+
+  // Embers: over the island, but the fire is past its lethal window.
   const shot = lowOverFloor(s, g);
   s.tick = shot.t;
   s.fires = [{ tx: shot.tx, ty: shot.ty, kind: 'arm', rot: 0, until: s.tick + 2, owner: 0 }];
   gulls(s);
   assert.equal(s.gulls.length, 1, 'smoke at the end of a blast brought a gull down');
+
+  // A bot's fire, live and right underneath: the bird flies on.
+  const bot = createPlayer(0, 'Charles');
+  bot.alive = true;
+  bot.isBot = true;
+  s.players[0] = bot;
+  s.fires = [{ tx: shot.tx, ty: shot.ty, kind: 'arm', rot: 0, until: s.tick + FIRE_TICKS, owner: 0 }];
+  gulls(s);
+  assert.equal(s.gulls.length, 1, 'a bot shot a gull down');
+
+  // Cruising at full height over a person's blast: down it comes.
+  let t = s.tick;
+  while (gullAt(g, t).alt < 1 || gullAt(g, t).x < 0 || gullAt(g, t).y < 0) t++;
+  const at = gullAt(g, t);
+  s.tick = t;
+  s.fires = [{ tx: Math.floor(at.x / UNITS_PER_TILE), ty: Math.floor(at.y / UNITS_PER_TILE),
+    kind: 'core', rot: 0, until: t + FIRE_TICKS, owner: 5 }];
+  gulls(s);
+  assert.equal(s.gulls.length, 0, 'a cruising gull survived a live blast under it');
 });
 
 // ─── bots ─────────────────────────────────────────────────────────────────────

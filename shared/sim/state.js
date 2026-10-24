@@ -56,6 +56,9 @@ export function createPlayer(i, name) {
     radius: START_RADIUS,
     speed: 0,          // index into SPEED_UNITS_PER_TICK
     shields: 0,
+    /* The tick a spent shield's grace runs out. See SHIELD_GRACE_TICKS: while this is in the
+     * future nothing can touch you, so one explosion — or one chain — costs exactly one shield. */
+    shieldGrace: 0,
     status: 0,         // bitmask
     statusUntil: {},   // STATUS bit -> tick
     score: 0, kills: 0, deaths: 0,
@@ -74,6 +77,14 @@ export function createPlayer(i, name) {
     tired: false,
     // Ticks of slide left after letting go of the keys on water. See PUDDLE_SLIDE_TICKS.
     slide: 0,
+    /* The deliberate slide, from a double-tap. Three fields and they are all the state there is:
+     * the velocity in units a tick (0 when not sliding, and the only test for "am I sliding"),
+     * the direction it was launched in, and how many ticks it has run for. `slideCool` is the
+     * wait before another one. See SLIDE_* in constants.js. */
+    slideV: 0,
+    slideDir: DIR_D,
+    slideFor: 0,
+    slideCool: 0,
     respawnAt: 0,
   };
 }

@@ -12,7 +12,7 @@
 import {
   UNITS_PER_TILE, BLOCK, PERK, FIRE_TICKS, FIRE_LETHAL_TICKS, GULL_GAP_MIN_TICKS, GULL_GAP_MAX_TICKS, GULL_MAX, GULL_SPEED_UNITS,
   GULL_OFFMAP_TILES, GULL_WEAVE_UNITS, GULL_WEAVE_TICKS, GULL_DIVE_EVERY_TICKS, GULL_DIVE_TICKS,
-  GULL_LOW_ALT,
+  GULL_LOITER, GULL_COINS, SCORE,
 } from '../constants.js';
 import { tileAt } from './state.js';
 import { drop } from './perks.js';
@@ -40,7 +40,10 @@ export function gullAltitude(g, tick) {
  */
 export function gullAt(g, tick) {
   const age = tick - g.t0;
-  const f = Math.max(0, Math.min(1, age / g.dur));
+  const t = Math.max(0, Math.min(1, age / g.dur));
+  // Eased, not linear: slow across the middle of the line, which is the part over the board. See
+  // GULL_LOITER. Both ends are untouched, so the flight still starts and finishes where it says.
+  const f = t + (GULL_LOITER / TAU) * Math.sin(TAU * t);
   const ex = g.x1 - g.x0, ey = g.y1 - g.y0;
   const len = Math.hypot(ex, ey) || 1;
   // The weave is across the line of flight, so the bird wanders without ever changing course.
@@ -121,18 +124,46 @@ export function gulls(state) {
     if (!fresh || !fresh.length) continue;
 
     const at = gullAt(g, state.tick);
-    if (at.alt > GULL_LOW_ALT) continue;
+    /* Any fire it is over, at any height.
+     *
+     * It used to have to be at the bottom of a dive — GULL_LOW_ALT, about one tick in nine of the
+     * flight — and between that and a bird crossing three tiles a second the shot was mostly
+     * luck. The altitude rule is gone: if a blast reaches the tile the gull is over, the gull is
+     * down. Still only fire inside its lethal window, which is the same window that kills players.
+     *
+     * Bots' fire does not count. A bot carpets the board, so with bots in the room nearly every
+     * gull was downed by one, and the reward is meant to be for a shot somebody took.
+     */
     const tx = Math.floor(at.x / UNITS_PER_TILE), ty = Math.floor(at.y / UNITS_PER_TILE);
-    const fire = fresh.find(f => f.tx === tx && f.ty === ty);
+    const fire = fresh.find(f => f.tx === tx && f.ty === ty
+      && !(f.owner >= 0 && state.players[f.owner]?.isBot));
     if (!fire) continue;
 
     state.gulls.splice(i, 1);
     const x = Math.round(at.x), y = Math.round(at.y);
-    const spot = landing(state, tx, ty);
-    if (spot) drop(state, spot.tx, spot.ty, PERK.GOLD, false);
+    /* Paid to the shooter, in the air, the moment it falls.
+     *
+     * Three coins into the hand of whoever owned the fire — see GULL_COINS for why that is better
+     * than a coin on the floor. The XP is still one coin's worth: SCORE.GOLD is already about
+     * four kills, and three of them for one shot would make a lucky blast worth more than
+     * winning the round. The coins are the trophy; the score is the shot.
+     *
+     * A keg has no owner, so that case keeps the old behaviour and leaves a coin on the ground
+     * rather than quietly paying nobody.
+     */
+    const by = fire.owner ?? -1;
+    const killer = by >= 0 ? state.players[by] : null;
+    let spot = null;
+    if (killer) {
+      killer.coins = (killer.coins || 0) + GULL_COINS;
+      killer.score += SCORE.GOLD;
+    } else {
+      spot = landing(state, tx, ty);
+      if (spot) drop(state, spot.tx, spot.ty, PERK.GOLD, false);
+    }
     state.events.push({
-      e: 'gullhit', tick: state.tick, id: g.id, x, y,
-      by: fire.owner ?? -1,
+      e: 'gullhit', tick: state.tick, id: g.id, x, y, by,
+      ...(killer ? { coins: GULL_COINS } : null),
       ...(spot ? { cx: spot.tx, cy: spot.ty } : null),
     });
   }

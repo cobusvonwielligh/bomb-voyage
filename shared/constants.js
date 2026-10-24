@@ -62,10 +62,61 @@ export const HITBOX_REDUCED_UNITS = 10 * (UNITS_PER_TILE / TILE_PX);
 export const CORNER_ASSIST_UNITS = 112; // 0.44 tile. TUNE
 
 // Input bitmask
-export const IN_RIGHT = 1, IN_UP = 2, IN_LEFT = 4, IN_DOWN = 8, IN_BOMB = 16;
+export const IN_RIGHT = 1, IN_UP = 2, IN_LEFT = 4, IN_DOWN = 8, IN_BOMB = 16, IN_SLIDE = 32;
+// Everything a client is allowed to assert. `input` masks with this, so a crafted packet with
+// high bits set cannot reach the simulation carrying anything the keyboard cannot produce.
+export const IN_MASK = IN_RIGHT | IN_UP | IN_LEFT | IN_DOWN | IN_BOMB | IN_SLIDE;
 
 // Facing
 export const DIR_R = 0, DIR_U = 1, DIR_L = 2, DIR_D = 3;
+
+/* The slide. Double-tap a direction and go.
+ *
+ * It exists because the game had exactly one verb for distance — walking — and the whole fight is
+ * about whether you can be somewhere before a fuse ends. A slide is the answer to "I am two tiles
+ * from cover and the bomb has half a second left", and the reason it is not simply free speed is
+ * the price: a fifth of the bar per slide, so three of them is most of your wind.
+ *
+ * The physics, and all three parts matter:
+ *
+ *   SLIDE_PEAK_NUM/DEN  the launch, as a multiple of your walking pace. Three times, so the first
+ *                       tick is unmistakably not running. It scales WITH your boots
+ *                       rather than being a flat number: a booted player who slides should still
+ *                       be faster than an unbooted one who slides, or the perk stops mattering at
+ *                       exactly the moment the perk matters most.
+ *   SLIDE_DRAG_NUM/DEN  friction, applied to the velocity every tick. Ninety-four percent — the slide
+ *                       decelerates the whole way out, which is what makes it read as momentum
+ *                       rather than as a teleport, and it is the reason you can be carried past
+ *                       the turn you wanted if you start it too late. That mistake is the cost of
+ *                       using the mechanic badly, and it is a cost you can see coming.
+ *   SLIDE_EXIT_UNITS    below this pace it is over, so it ends by running out of speed rather
+ *                       than by a timer expiring. A timer gives every slide the same length
+ *                       whatever the surface or the boots; drag gives each one its own.
+ *
+ * SLIDE_MAX_TICKS is a seatbelt against a tuning accident, not the mechanic: at these numbers the
+ * exit speed arrives first, after about eighteen ticks — six tenths of a second and three and a
+ * half tiles, against the one and three quarters that running the same ticks would cover. The
+ * first pass at this was a 2.5x launch against a tenth of drag a tick, which decayed so fast that
+ * the whole slide was worth about a sixth of a tile more than walking: a stamina cost for nothing.
+ * The lesson is that the DRAG, not the launch, decides what a dash is worth.
+ */
+export const SLIDE_PEAK_NUM = 3, SLIDE_PEAK_DEN = 1;
+export const SLIDE_DRAG_NUM = 47, SLIDE_DRAG_DEN = 50;
+export const SLIDE_EXIT_UNITS = 26;
+export const SLIDE_MAX_TICKS = 30;
+// A fifth of a fresh bar, and it is taken in full at the launch rather than per tick: a slide you
+// can abort halfway through for half price is a slide nobody ever commits to.
+export const SLIDE_STAMINA_COST = 700;
+// You may not chain them. Long enough that the second slide is a decision rather than the rest of
+// the first one, short enough to still be the answer to a chase.
+export const SLIDE_COOLDOWN_TICKS = 18;
+/* How long the client gives you between the two taps.
+ *
+ * Client-side only: the server is told "slide" by a bit in the mask and never sees the taps, which
+ * is what keeps the gesture a matter of local feel rather than of latency. Long enough to be
+ * comfortable, short enough that walking left-left-left in a corridor does not launch you.
+ */
+export const SLIDE_DOUBLE_TAP_MS = 260;
 
 // ─── Bombs & fire ─────────────────────────────────────────────────────────────
 
@@ -86,12 +137,24 @@ export const FIRE_LETHAL_NUM = 2, FIRE_LETHAL_DEN = 3;
 export const FIRE_LETHAL_TICKS = Math.round((FIRE_TICKS * FIRE_LETHAL_NUM) / FIRE_LETHAL_DEN);
 export const MAX_BOMBS = 16;        // hard ceiling on bombs alive anywhere, a safety valve
 
-// What one player can have out at once. Separate from MAX_BOMBS and much lower: sixteen bombs in
-// one pair of hands is not a loadout, it is a carpet, and a map where every tile is about to
-// explode has no decisions left in it. The HUD shows the cap so the ceiling is visible, not a
-// surprise when a Bomb pickup stops doing anything.
-export const MAX_BOMBS_CARRIED = 8;
-export const MAX_RADIUS = 6;
+/* What one player can have out at once, and how far one reaches. Both five.
+ *
+ * Separate from MAX_BOMBS, the safety valve, and much lower: sixteen bombs in one pair of hands
+ * is not a loadout, it is a carpet, and a map where every tile is about to explode has no
+ * decisions left in it. The HUD shows both caps so the ceiling is visible rather than a surprise
+ * when a pickup stops doing anything.
+ *
+ * Down from eight and six. Eight bombs was most of a corridor at once and a radius of six was
+ * most of a room, so a fully kitted player did not have to aim — the two of them together cover
+ * so much floor that position stopped being the thing the game is about. Five and five still feel
+ * like a full loadout and still leave somewhere to stand.
+ *
+ * A powder keg is deliberately above the cap (POWDER_RADIUS), which is how the renderer and the
+ * sound both identify one without a flag on the wire — so this number dropping widens that gap
+ * rather than closing it.
+ */
+export const MAX_BOMBS_CARRIED = 5;
+export const MAX_RADIUS = 5;
 export const START_BOMBS = 1;
 export const START_RADIUS = 1;
 export const CHAIN_CAP_PER_TICK = 64; // safety valve, see docs/RULES.md §3
@@ -193,15 +256,33 @@ export const POWDER_GUARANTEE_TICK = Math.round(0.6 * 10 * 60 * TICK_HZ);
  * So it is a timing shot against a moving target, which is the most satisfying thing a bomb can
  * do in a game about standing still in the right place.
  *
- * The coin does not count against GOLD_MAX_PER_ROUND. That cap is about the floor paying out
- * by luck; this one was earned.
+ * The coins do not count against GOLD_MAX_PER_ROUND. That cap is about the floor paying out
+ * by luck; these were earned.
  */
 export const GULL_FIRST_TICK = 25 * TICK_HZ;         // the first one comes early, so people see it
-export const GULL_GAP_MIN_TICKS = 40 * TICK_HZ;      // then one every 40-90 s
-export const GULL_GAP_MAX_TICKS = 90 * TICK_HZ;
+// Twice as often as it was, which was 40-90 s. At that spacing most rounds saw three or four
+// birds and a player who wanted to try the shot had to wait a minute for a second attempt; a
+// trick shot nobody gets to practise is a trick shot nobody lands.
+export const GULL_GAP_MIN_TICKS = 20 * TICK_HZ;      // one every 20-45 s
+export const GULL_GAP_MAX_TICKS = 45 * TICK_HZ;
 export const GULL_MAX = 2;
-export const GULL_SPEED_UNITS = 34;                  // per tick: just under four tiles a second
+// A fifth slower than the 34 it was: about three tiles a second. Speed was doing too much of the
+// difficulty on its own — at four tiles a second the window over any one tile was shorter than a
+// fuse, so the only way to land it was to have already had a bomb there.
+export const GULL_SPEED_UNITS = 27;
 export const GULL_OFFMAP_TILES = 4;                  // how far outside the map it enters and leaves
+/* It dawdles over the island and hurries over the sea.
+ *
+ * The flight is a straight line at a constant pace, and the pace that makes the middle of it
+ * — the part over the board, the only part you can do anything about — worth aiming at is much
+ * slower than the pace that keeps the empty sea crossing from being dull. So progress along the
+ * line is eased rather than linear: `f + k·sin(2πf)/2π`, which leaves both ends where they were
+ * and runs at (1 + k·cos 2πf) of the average pace — a little over half speed across the middle,
+ * half again as fast on the way in and out. Total flight time is unchanged, so nothing else has
+ * to know. Closed form and monotonic for k < 1, which is what keeps `gullAt` a description of a
+ * flight rather than a simulation of one.
+ */
+export const GULL_LOITER = 0.45;
 export const GULL_WEAVE_UNITS = 300;                 // the side-to-side drift, a little over a tile
 export const GULL_WEAVE_TICKS = 170;                 // ...over about six seconds
 export const GULL_DIVE_EVERY_TICKS = 105;            // a dive every three and a half seconds
@@ -209,6 +290,16 @@ export const GULL_DIVE_TICKS = 27;                   // each lasting a bit under
 // The bottom of the dive, when it is low enough to burn: the middle two fifths of each dive,
 // about eleven ticks, which is one tick in nine of its flight.
 export const GULL_LOW_ALT = 0.22;
+/* What one is worth, and it goes straight to whoever lit the fire.
+ *
+ * It used to drop a single coin on the nearest clear floor tile, which was the wrong shape for
+ * the thing it was rewarding: the hard part is the shot, and a coin on the ground after it turns
+ * the hard part into a race to the spot — often won by somebody who had nothing to do with it,
+ * and sometimes by nobody at all when the only floor nearby was about to be on fire. Three,
+ * because it is the rarest thing in the game and a reward you can lose by half a second is not a
+ * reward. A blast with no owner — a powder keg — still leaves a coin on the floor; see gulls.js.
+ */
+export const GULL_COINS = 3;
 
 export const ICE_CHANCE = 0.05;
 export const PUDDLE_TICKS = 8 * TICK_HZ;
@@ -248,6 +339,10 @@ export const STAMINA_TIRED_NUM = 1, STAMINA_TIRED_DEN = 2;   // half pace when e
 // — at a half the warning and the limp arrived almost together, which is a notification rather
 // than a warning.
 export const STAMINA_SHOW_AT = 0.7;
+// Below this the gauge goes red and flashes. A third, which is also STAMINA_RECOVER_UNITS — the
+// point the exhausted latch lets go — so the warning zone and the recovery line are the same
+// line, and the red means one thing: from here, running out is a live possibility.
+export const STAMINA_LOW_AT = 1 / 3;
 // Each Stim adds this much to your ceiling, up to MAX_STAMINA_LEVELS of them. Four of them
 // takes eleven and a half seconds of running to twenty-three.
 export const STAMINA_PER_LEVEL = 750;
@@ -351,6 +446,35 @@ export const PERKS_DROPPED_ON_DEATH = 3;
 // rather than a capped pickup. Drawn on the player as a blue ring per shield — see drawShields.
 export const MAX_SHIELDS = 2;
 
+/* One shield per hit, and a moment's grace after it. Never two shields in one instant.
+ *
+ * The rule before this was "every blast that reaches you costs a shield the tick it arrives, and
+ * two at once cost two". That is defensible and it played terribly: a chain reaction or a
+ * crossfire is ONE event as far as the player is concerned, and walking into it with two shields
+ * and coming out with none — having survived, having done nothing wrong, with no chance to react
+ * in between — made the second shield feel like it had never existed. The whole reason to walk
+ * across the map for a second shield is that it is a second chance, and a second chance you can
+ * lose in the same frame as the first is not one.
+ *
+ * So a shield that absorbs a blast also buys this many ticks in which nothing can touch you:
+ * further blasts in the window are simply shrugged off, and the NEXT one after it comes out of
+ * the next shield. Eighteen ticks, six tenths of a second — comfortably longer than a blast's
+ * lethal window (FIRE_LETHAL_TICKS), so one explosion can never reach past the grace it just
+ * triggered, and short enough that it is a flinch rather than a free run through a fire.
+ */
+export const SHIELD_GRACE_TICKS = 18;
+
+/* Password length, shared so the hint text and the rule cannot drift apart.
+ *
+ * The floor is the only composition rule there is: length is the one requirement that survives
+ * contact with people, and "must contain a digit" produces "password1". The CEILING is the
+ * security-relevant half — scrypt's cost grows with its input, so an unbounded password field is
+ * an invitation to burn a core for as long as somebody holds a socket open. The enforcement lives
+ * on the server (badPassword in server/accounts.js); the client only quotes these.
+ */
+export const PASSWORD_MIN = 8;
+export const PASSWORD_MAX = 200;
+
 // ─── Statuses ─────────────────────────────────────────────────────────────────
 
 export const STATUS = {
@@ -359,6 +483,15 @@ export const STATUS = {
   // Rum. Blast arms stop hurting you; only the tile the bomb was on still does. In exchange
   // you cannot walk straight.
   DRUNK: 128,
+  /* Knocked about by somebody sliding into you. A question mark over your head, no bombs, and a
+   * quarter off your pace — for a moment. See CONFUSED_TICKS.
+   *
+   * The three together are the point. Taking the bombs away is what makes a slide a MOVE rather
+   * than a faster walk: you can barge through the pirate holding a doorway and they cannot answer
+   * by dropping one at your feet. The slowdown is small and short because it is a stumble, not a
+   * disease — and it is not CONTAGIOUS, because it did not come from a bottle.
+   */
+  CONFUSED: 256,
 };
 
 export const STATUS_TICKS = {
@@ -373,7 +506,14 @@ export const STATUS_TICKS = {
   // that the only play is to wait it out, which makes rum a timeout rather than a trade-off;
   // sixteen was still on the long side, so a quarter came off it on request.
   [STATUS.DRUNK]: 360,
+  // 45 ticks, a second and a half. Short on purpose: it is there to buy the slider the doorway,
+  // not to take somebody out of the fight. Long enough to matter, over before it is annoying.
+  [STATUS.CONFUSED]: 45,
 };
+
+// A quarter off your pace while you are seeing stars. Integer division like every other
+// multiplier here, so the sim stays float-free.
+export const CONFUSED_NUM = 3, CONFUSED_DEN = 4;
 
 /* How drunk is drunk.
  *
@@ -404,9 +544,14 @@ export const DRUNK_STAGGER_TICKS = 4;      // how long one lasts
  *
  * It started at zero, which meant anyone holding the bomb key — everyone, always — respawned on
  * the same tick they died and never saw it happen. Then ten, at which a careless rush was nearly
- * free. Fifteen is long enough that dying costs you something you feel, and still short enough
- * to watch the fight you just left, which is the other thing the wait is for. */
-export const RESPAWN_DELAY_TICKS = 15 * TICK_HZ; // 450
+ * free. Then fifteen: long enough that dying costs you something you feel, and short enough to
+ * watch the fight you just left, which is the other thing the wait is for.
+ *
+ * Thirteen and a half now — a second and a half off, on request. Measured against the rest of the
+ * round it is a small change; measured against the thing it governs, which is how long you sit
+ * still after a mistake, a second and a half is most of the difference between reading the
+ * scoreboard and waiting. */
+export const RESPAWN_DELAY_TICKS = Math.round(13.5 * TICK_HZ); // 405
 
 export const CONTAGIOUS = STATUS.PACIFISM | STATUS.SLOWDOWN | STATUS.INVISIBLE |
                           STATUS.CHANGELING | STATUS.REDUCTION | STATUS.FAST_DET;

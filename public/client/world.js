@@ -15,6 +15,8 @@ export function createWorld() {
   const w = {
     ready: false,
     you: -1,
+    // Whose seat wears the crown. Refreshed by the scores broadcast; -1 until one arrives.
+    host: -1,
     tick: 0,
     map: null,
     players: [],          // index = seat
@@ -65,6 +67,11 @@ export function createWorld() {
     p.coins = wire.c || 0;
     if (wire.sta !== undefined) { p.stamina = wire.sta; p.staminaLevel = wire.stl; p.tired = !!wire.tr; }
     p.slide = wire.sl ?? 0;
+    // The deliberate slide: absent means not sliding, which is almost every tick. See playerWire.
+    p.slideV = wire.sv ?? 0;
+    p.slideDir = wire.sd ?? p.dir;
+    p.slideFor = wire.sf ?? 0;
+    p.slideCool = wire.sc ?? 0;
     if (wire.name) p.name = wire.name;
     p.rx ??= p.x; p.ry ??= p.y;        // rendered position, smoothed for remotes
     p.trail ??= [];
@@ -189,6 +196,13 @@ export function createWorld() {
     if (wire.sta !== undefined) { me.stamina = wire.sta; me.staminaLevel = wire.stl; me.tired = !!wire.tr; }
     // Same for the slide on water: the replay below has to start from the server's count.
     me.slide = wire.sl ?? 0;
+    // And the deliberate slide, which is the one that matters most here: the velocity is a
+    // geometric decay, so a replay that started from the wrong number would diverge further every
+    // tick rather than converging.
+    me.slideV = wire.sv ?? 0;
+    me.slideDir = wire.sd ?? me.dir;
+    me.slideFor = wire.sf ?? 0;
+    me.slideCool = wire.sc ?? 0;
 
     for (const inp of w.pending) step(w, me, inp.mask);
 

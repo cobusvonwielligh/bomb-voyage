@@ -59,6 +59,13 @@ export function place(state, p, mask) {
   p.bombHeld = held;
   if (!pressed || !p.alive) return;
   if (has(p, STATUS.PACIFISM)) return;
+  // Seeing stars: somebody slid through you and for the next second and a half you cannot find
+  // the fuse. The edge above has already been consumed, so holding the key through it does not
+  // bank a bomb that fires the moment it wears off — you have to press again.
+  if (has(p, STATUS.CONFUSED)) return;
+  // A slide in progress is hands-full. Without this the slide becomes a bomb-delivery vehicle:
+  // launch, cross three tiles in a third of a second, and drop one at the far end from safety.
+  if (p.slideV > 0) return;
 
   const { tx, ty } = bombTile(state, p);
   if (bombAt(state, tx, ty)) return;
