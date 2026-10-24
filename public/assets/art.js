@@ -885,17 +885,77 @@ export function drawBomb(c, { phase = 0, colorIndex = 0 }) {
   drawBombLive(c, null, { leftS: (1 - phase) * fullS, fullS, colorIndex, t: phase * 7 });
 }
 
-/** kind: 'core' | 'arm' | 'tip'. rot in quarter turns. age 0..1 fades it out. */
-export function drawFire(c, { kind = 'core', rot = 0, age = 0 }) {
+/**
+ * One tile of a blast. kind: 'core' | 'arm' | 'tip'. rot in quarter turns.
+ *
+ * `age` is 0..1 over the blast's life and `t` is free-running seconds, and both are expected to
+ * change EVERY FRAME — the renderer feeds the smoothed tick, not the snapshot tick, so a half
+ * second of fire is thirty-odd distinct pictures at 60 Hz rather than the seven it used to be.
+ * `seed` keeps neighbouring tiles from flickering in step.
+ *
+ * Four phases over the same half second the fire always lasted:
+ *   punch   the first tenth: the tile blows out past its edges and snaps back
+ *   burn    bands that breathe, with tongues of flame licking off the edges
+ *   sparks  the core throws embers outward while it is young
+ *   smoke   the last third darkens, shrinks and lifts away as smoke — the part that no longer kills
+ */
+export function drawFire(c, { kind = 'core', rot = 0, age = 0, t = 0, seed = 0 }) {
   const S = TILE_PX;
+  const rnd = n => hash(seed * 31 + n, Math.floor(t * 24) + n * 7);   // reshuffled 24 times a second
   c.save(); c.translate(S / 2, S / 2); c.rotate(rot * Math.PI / 2);
-  c.globalAlpha = 1 - age * 0.5;
-  const w = S * (1 - age * 0.15);
+
+  const punch = age < 0.12 ? 1 + 0.22 * Math.sin((age / 0.12) * Math.PI) : 1;
+  const smoke = Math.max(0, (age - 0.66) / 0.34);
+  const breathe = 1 + 0.05 * Math.sin(t * 31 + seed * 2.1) + 0.03 * Math.sin(t * 53 + seed);
+  const w = S * (1 - age * 0.18) * punch * breathe;
+  c.globalAlpha = Math.max(0, 1 - age * 0.45 - smoke * 0.35);
+
   const band = (inset, col) => rr(c, -w / 2 + inset, -w / 2 + inset, w - inset * 2, w - inset * 2, 4, col);
-  if (kind === 'tip') { c.beginPath(); c.arc(0, 0, w / 2 - 1, 0, 7); c.fillStyle = PALETTE.fireEdge; c.fill(); }
-  else band(0, PALETTE.fireEdge);
-  band(4, PALETTE.fireMid);
-  band(9, PALETTE.fireCore);
+  const hot = smoke > 0 ? '#c4532e' : PALETTE.fireEdge;
+  if (kind === 'tip') { c.beginPath(); c.arc(0, 0, w / 2 - 1, 0, 7); c.fillStyle = hot; c.fill(); }
+  else band(0, hot);
+
+  // Tongues: a few blobs riding the outer edge, re-rolled every frame, so the edge is alive.
+  c.fillStyle = PALETTE.fireMid;
+  for (let i = 0; i < 4; i++) {
+    const side = (i + Math.floor(rnd(i) * 4)) % 4;
+    const along = (rnd(i + 9) - 0.5) * w * 0.8;
+    const out = w / 2 - 1 + rnd(i + 17) * 3 * (1 - age);
+    const [x, y] = side === 0 ? [out, along] : side === 1 ? [along, -out] : side === 2 ? [-out, along] : [along, out];
+    c.beginPath(); c.arc(x, y, 2 + rnd(i + 23) * 3 * (1 - smoke), 0, 7); c.fill();
+  }
+
+  const coreIn = 9 + 2 * Math.sin(t * 40 + seed * 3) + age * 3;
+  band(4, smoke > 0.5 ? '#e0732f' : PALETTE.fireMid);
+  if (coreIn * 2 < w - 2) band(coreIn, PALETTE.fireCore);
+
+  // Sparks off the core while it is young: short streaks flying outward and fading.
+  if (kind === 'core' && age < 0.55) {
+    c.strokeStyle = PALETTE.fireCore;
+    c.lineWidth = 1.4;
+    c.lineCap = 'round';
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + seed + rnd(i + 40) * 0.6;
+      const r0 = S * 0.25 + age * S * 1.3 * (0.6 + rnd(i + 50) * 0.5);
+      c.globalAlpha = Math.max(0, 1 - age / 0.55) * 0.9;
+      c.beginPath();
+      c.moveTo(Math.cos(a) * r0, Math.sin(a) * r0);
+      c.lineTo(Math.cos(a) * (r0 + 4), Math.sin(a) * (r0 + 4));
+      c.stroke();
+    }
+  }
+
+  // Smoke: grey puffs rising off the dying fire, in screen space so they always go UP.
+  if (smoke > 0) {
+    c.rotate(-rot * Math.PI / 2);
+    c.fillStyle = '#3a3f48';
+    for (let i = 0; i < 3; i++) {
+      const sx = (hash(seed + i, 3) - 0.5) * S * 0.6;
+      const sy = -smoke * S * (0.35 + hash(seed, i) * 0.3);
+      c.globalAlpha = 0.45 * Math.sin(smoke * Math.PI);
+      c.beginPath(); c.arc(sx, sy, 4 + smoke * 6, 0, 7); c.fill();
+    }
+  }
   c.restore();
 }
 

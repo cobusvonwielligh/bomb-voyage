@@ -1441,20 +1441,39 @@ export function createRenderer(canvas, world) {
     el.height = (map.h + P * 2) * TILE_PX;
     const c = el.getContext('2d');
     c.translate(P * TILE_PX, P * TILE_PX);
-    const band = (reachTiles, alpha, colour) => {
+    /* By distance to the nearest land, counting diagonals — every water tile within one tile of
+     * the island in ANY direction is the near band, within two the far band, and each tile is
+     * painted exactly once.
+     *
+     * It used to be painted outward from each sea-facing edge of each coast tile. That never
+     * reached the tile diagonally off a convex corner — no edge faces it — so every outside
+     * corner of every island had a dark square notched out of its shallows. It also painted a
+     * tile once per edge that faced it, so a tile in an inside corner got two coats and stood
+     * out brighter than its neighbours. */
+    const land = (x, y) => x >= 0 && y >= 0 && x < map.w && y < map.h
+      && cellType(map.cells[y * map.w + x]) !== BLOCK.WATER;
+    const near = [], far = [];
+    for (let ty = -P; ty < map.h + P; ty++) {
+      for (let tx = -P; tx < map.w + P; tx++) {
+        if (land(tx, ty)) continue;
+        let d = 3;
+        for (let dy = -2; dy <= 2 && d > 1; dy++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            if (land(tx + dx, ty + dy)) d = Math.min(d, Math.max(Math.abs(dx), Math.abs(dy)));
+          }
+        }
+        if (d <= 1) near.push(tx, ty);
+        else if (d <= 2) far.push(tx, ty);
+      }
+    }
+    const band = (tiles, alpha, colour) => {
       c.globalAlpha = Math.min(1, alpha * SHALLOWS_HEADROOM);
       c.fillStyle = colour;
-      for (const s of shoreline()) {
-        for (let n = 1; n <= reachTiles; n++) {
-          if (s.e & 1) c.fillRect((s.tx + n) * TILE_PX, s.ty * TILE_PX, TILE_PX, TILE_PX);
-          if (s.e & 4) c.fillRect((s.tx - n) * TILE_PX, s.ty * TILE_PX, TILE_PX, TILE_PX);
-          if (s.e & 2) c.fillRect(s.tx * TILE_PX, (s.ty - n) * TILE_PX, TILE_PX, TILE_PX);
-          if (s.e & 8) c.fillRect(s.tx * TILE_PX, (s.ty + n) * TILE_PX, TILE_PX, TILE_PX);
-        }
-      }
+      for (let i = 0; i < tiles.length; i += 2) c.fillRect(tiles[i] * TILE_PX, tiles[i + 1] * TILE_PX, TILE_PX, TILE_PX);
     };
-    band(2, 0.16, PALETTE.seaMid);      // the outer, deeper step
-    band(1, 0.42, PALETTE.seaLight);
+    // The near band keeps the far band's tint under it, as it always had.
+    band([...near, ...far], 0.16, PALETTE.seaMid);      // the outer, deeper step
+    band(near, 0.42, PALETTE.seaLight);
     shallowsCanvas = el; shallowsFor = map;
     return el;
   }
@@ -2327,11 +2346,13 @@ export function createRenderer(canvas, world) {
     }
 
     // Fire over the bombs that made it, under the people it is about to kill.
+    // On the smoothed tick, not the snapshot tick: world.tick moves two at a time, fifteen times a
+    // second, which held every blast on the same picture for four frames at a time.
     for (const f of world.fires) {
-      const age = 1 - Math.max(0, (f.until - world.tick) / FIRE_TICKS);
+      const age = Math.min(1, 1 - Math.max(0, (f.until - tickNow) / FIRE_TICKS));
       ctx.save();
       ctx.translate(ox + f.tx * TILE_PX, oy + f.ty * TILE_PX);
-      drawFire(ctx, { kind: f.kind, rot: f.rot, age });
+      drawFire(ctx, { kind: f.kind, rot: f.rot, age, t: seaT, seed: f.tx * 7 + f.ty * 13 });
       ctx.restore();
     }
 
