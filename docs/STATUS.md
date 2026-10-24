@@ -242,8 +242,10 @@ Ordered by how much it would change a Friday session.
 ### Worth doing
 
 1. **Bots are competent at not dying; they are not yet good at killing.** `npm run botbench`
-   (15 bots, every map, headless, ~3 s for 20 simulated minutes each) measures 0.17 suicides and
-   0.45 kills per bot per minute. It was 2.3 and 0.33 — 87% of deaths self-inflicted — and the
+   (15 bots, every map, headless, ~3 s for 20 simulated minutes each) measures 0.10 suicides and
+   0.60 kills per bot per minute — the kills up from 0.40 since bots are sometimes slow to react
+   to a bomb that is not theirs (`SURPRISE_*` in `ai.js`), which was asked for to make them a
+   little easier to kill. It was 2.3 and 0.33 — 87% of deaths self-inflicted — and the
    biggest cause was not the reasoning at all: a bot turning into a gap from just past the corner
    assist window pushed flat into the wall and froze there until its own fuse ran out (see
    `steer` in `ai.js`). Next: hunting. Bots bomb walls and wander toward the nearest player;

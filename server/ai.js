@@ -50,6 +50,20 @@ const HUNT_CHANCE = 0.7 * BOT_SKILL;
 // A lapse: on noticing the floor is about to burn, sometimes they freeze for a moment first.
 const LAPSE_CHANCE = (1 - BOT_SKILL);
 const LAPSE_TICKS = 4;
+/* Caught flat-footed by SOMEBODY ELSE'S bomb.
+ *
+ * A bot used to read a blast the tick its bomb landed and leave with most of the fuse to spare,
+ * so the only bombs that ever caught one were the ones with no way out at all. Now, for a bomb it
+ * did not place, it sometimes stands and stares until the fire is under half a second away, and
+ * only then runs — out of a single blast with a side turning that is still enough, out of a
+ * corridor it often is not. Waiting until 24 ticks were left changed nothing measurable: from
+ * there a bot still makes the turning nearly every time. At 12 it does not.
+ *
+ * Measured (a "human" bomb dropped beside a bot every four seconds, plus botbench): caught 17% →
+ * 24% of the time, bot kills 0.37 → 0.60 a minute, suicides slightly down. Its own bombs keep
+ * the short lapse: a bot knows where it just put one, and carelessness there buys suicides. */
+const SURPRISE_CHANCE = 0.3;
+const SURPRISE_NOTICE_TICKS = 12;    // 0.4 s: barely more than a tile at base speed
 
 const DESTRUCTIBLE = new Set([BLOCK.SOFT, BLOCK.REINFORCED, BLOCK.MONOLITH, BLOCK.ICE]);
 const SHRUB = new Set([BLOCK.SHRUB_WALK, BLOCK.SHRUB_SOLID]);
@@ -82,6 +96,17 @@ function reach(map, bomb, push) {
       step++;
     }
   }
+}
+
+/** Whether one of this player's own bombs can reach this tile. */
+function ownBombReaches(state, p, tx, ty) {
+  for (const b of state.bombs) {
+    if (b.owner !== p.i) continue;
+    let hit = false;
+    reach(state.map, b, (x, y) => { if (x === tx && y === ty) hit = true; });
+    if (hit) return true;
+  }
+  return false;
 }
 
 export const createBrain = () => ({
@@ -452,7 +477,9 @@ export function think(state, p, brain, danger) {
     if (!brain.inDanger) {
       brain.inDanger = true;
       brain.lapse = Math.random() < LAPSE_CHANCE ? LAPSE_TICKS : 0;
+      brain.surprised = !ownBombReaches(state, p, tx, ty) && Math.random() < SURPRISE_CHANCE;
     }
+    if (brain.surprised && here > SURPRISE_NOTICE_TICKS) return 0;
     if (brain.lapse > 0) { brain.lapse--; return 0; }
     const { dir } = flood(state, p, danger, null);
     if (dir >= 0) {
