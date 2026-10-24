@@ -186,7 +186,7 @@ test('the round in progress survives a restart', async () => {
   const dataDir = fss.mkdtempSync(path.join(os.tmpdir(), 'bv-bank-'));
   try {
     const board = createLeaderboard({ dataDir });
-    const room = createRoom({ onBroadcast: () => {}, leaderboard: board });
+    const room = createRoom({ countIn: 0, onBroadcast: () => {}, leaderboard: board });
     room.setBots(2);
     const p = room.state.players[0];
     p.score = 450; p.kills = 4; p.deaths = 1;
@@ -235,7 +235,7 @@ test('medals', async t => {
     const dataDir = fss.mkdtempSync(path.join(os.tmpdir(), 'bv-medal-'));
     try {
       const board = createLeaderboard({ dataDir });
-      const room = createRoom({ onBroadcast: () => {}, leaderboard: board });
+      const room = createRoom({ countIn: 0, onBroadcast: () => {}, leaderboard: board });
       room.setBots(scores.length);
       room.setRoundTime(0.1);
       // Freeze everyone in place for the round so the bots cannot score on their own.
@@ -289,7 +289,7 @@ test('banking twice does not pay twice', async () => {
   const dataDir = fss.mkdtempSync(path.join(os.tmpdir(), 'bv-bank2-'));
   try {
     const board = createLeaderboard({ dataDir });
-    const room = createRoom({ onBroadcast: () => {}, leaderboard: board });
+    const room = createRoom({ countIn: 0, onBroadcast: () => {}, leaderboard: board });
     room.setBots(1);
     const p = room.state.players[0];
 

@@ -966,6 +966,14 @@ function loop(now) {
     // not sending it is the difference between ignored and never asked.
     // Between rounds the server simulates nothing, so predicting would walk you off on your own.
     if (observing || roundOverUntil) continue;
+    /* The count-in: the board is frozen and the keys do nothing.
+     *
+     * Not predicted and not sent, because the server is zeroing every input until this tick
+     * (see `counting` in server/room.js) — and predicting a move the server is refusing is the
+     * rubber-band this whole gate exists to avoid. The CLOCK still advances, which is the part
+     * that matters: inputs resume stamped for the right tick the instant the freeze lifts.
+     */
+    if (world.tick < world.startsAtTick) { input.clear(); continue; }
     // The slide bit rides on this tick's mask only. `takeSlide` clears as it reads, so the five
     // steps a stalled frame can run cannot turn one double-tap into five launches.
     const mask = input.mask | (input.takeSlide() ? IN_SLIDE : 0);
@@ -1389,26 +1397,30 @@ function syncCountdown(now) {
 
 /* ─── the count-in ──────────────────────────────────────────────────────────────
  *
- * Five seconds at the top of every round, under the clock, ticking like one.
+ * Five seconds in the middle of the board at the top of every round, ticking like a clock, with
+ * NOBODY ABLE TO MOVE until it reaches zero.
  *
- * Driven from the ROUND'S OWN TICK rather than from a local timer, which is the only detail here
- * that matters: `world.tick` restarts at zero with every fresh state the server installs, so the
- * digit everybody is looking at is the same digit at the same instant, with no message to send
- * and nothing to keep in step. It also means somebody who joins four seconds into a round sees
- * "1" and then GO — the truth — rather than a fresh five seconds of their own.
+ * Driven from the ROUND'S OWN TICK rather than from a local timer, which is the detail that makes
+ * it honest: `world.tick` restarts at zero with every fresh state the server installs and
+ * `startsAtTick` comes from the same welcome, so the digit everybody is looking at is the same
+ * digit at the same instant, with no message to send and nothing to keep in step. Somebody who
+ * joins four seconds into a round sees "1" and then GO — the truth — rather than a fresh five
+ * seconds of their own.
  *
- * Presentation only. The simulation is live underneath it: the round clock is already running and
- * a bomb placed on the first tick goes off on schedule. This is the beat that tells a room full of
- * people the map has loaded and the fight is on, not a gate on the fight — gating movement is a
- * server rule and would want its own state on the wire. Easy to add if it is wanted.
+ * It is a RULE, not a caption: the room zeroes every input, people and bots alike, until the same
+ * tick (see `counting` in server/room.js), and the loop above neither predicts nor sends over the
+ * same window. The round clock is pushed out by the same five seconds, so a ten-minute round is
+ * still ten minutes of play.
  */
-const COUNT_IN_SECONDS = 5;
-const COUNT_IN_TICKS = COUNT_IN_SECONDS * TICK_HZ;
 let countInShown = -1;             // the digit on screen, so each second is written once
 
 function syncCountIn() {
   const el = $('countIn');
-  const left = COUNT_IN_TICKS - world.tick;
+  // The server's number, not ours: it is the tick the freeze lifts on, and the digit has to be
+  // counting down to the same instant the board unfreezes or it is a decoration.
+  const until = world.startsAtTick || 0;
+  if (!until) { if (countInShown !== -1) { el.classList.remove('on', 'hot'); countInShown = -1; } return; }
+  const left = until - world.tick;
   // Over, or not this round: the GO frame is left to finish its own animation.
   if (left < -TICK_HZ || !world.ready) {
     if (countInShown !== -1) { el.classList.remove('on', 'hot'); countInShown = -1; }
@@ -1416,6 +1428,7 @@ function syncCountIn() {
   }
   // 5..1 while there is time left, then 0 for the GO beat.
   const n = Math.max(0, Math.ceil(left / TICK_HZ));
+  const seconds = Math.max(1, Math.round(until / TICK_HZ));
   if (n === countInShown) return;
   countInShown = n;
 
@@ -1433,7 +1446,7 @@ function syncCountIn() {
   if (n > 0) {
     // The same voice the round clock's last seconds use, climbing the same way — so the end of
     // the count-in and the end of the round sound like the same clock.
-    sfx.play('tick', undefined, undefined, { urgency: (COUNT_IN_SECONDS - n) / COUNT_IN_SECONDS });
+    sfx.play('tick', undefined, undefined, { urgency: (seconds - n) / seconds });
   } else {
     sfx.play('go');
     renderer?.addFlash(0.2, '237,194,78');

@@ -9,7 +9,7 @@ import {
   TILE_PX, UNITS_PER_TILE, FUSE_TICKS, FIRE_TICKS, playerColor, SCORE, ROUND_INTERMISSION_MS,
   progressFor,
   STREAK_WINDOW_TICKS, STREAK_NAMES, STREAK_ACE, GAMESPEED_MIN, GAMESPEED_MAX,
-  IDLE_KICK_TICKS, AUTO_BOTS_EMPTY_ROUNDS, IN_MASK,
+  IDLE_KICK_TICKS, AUTO_BOTS_EMPTY_ROUNDS, IN_MASK, COUNT_IN_TICKS,
 } from '../shared/constants.js';
 import { MAPS, encodeCells } from '../shared/maps.js';
 import { createState, createPlayer, applyStatus, tileCentre } from '../shared/sim/state.js';
@@ -45,6 +45,14 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
   // How many bots to keep topped up while people are here; see AUTO_BOTS_MIN. Zero — the
   // default, so a test room stays exactly as its test seats it — turns the policy off.
   minBots = 0,
+  /* Ticks of frozen count-in at the top of each round. See COUNT_IN_TICKS.
+   *
+   * Overridable for the same reason `graceTicks` is: a test about input, events or medals is not
+   * a test about the count-in, and making every one of them wait five simulated seconds for the
+   * whistle would hide what they are actually asserting. Zero means the round is live on tick 0,
+   * which is what the room did before the freeze existed.
+   */
+  countIn = COUNT_IN_TICKS,
 }) {
   // Start somewhere random rather than always on the first map. Rotation between rounds works
   // fine, but a server that restarts — a deploy, a crash, a reboot — always came back to Arena,
@@ -354,14 +362,29 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     const t0 = performance.now();
     const inputs = new Array(maxPlayers).fill(0);
 
+    /* The count-in. Nobody moves, and that includes the brains.
+     *
+     * The simulation still runs — the tick advances, snapshots go out, the clock stays honest and
+     * a client that joins mid-count sees the board and the remaining digits — but every input is
+     * zero, so nothing can walk and nothing can be placed. Freezing by zeroing the INPUTS rather
+     * than by skipping the tick is what keeps it simple: there is no second code path through the
+     * simulation, no state that only exists during a count-in, and the client's clock never
+     * stalls. See COUNT_IN_TICKS.
+     *
+     * Bots are frozen by not being asked to think. A bot that thought while frozen would spend
+     * the whole count-in deciding, and arrive on the first live tick with a plan made five
+     * seconds ago — which is both wrong and unfair in the same direction.
+     */
+    const counting = state.tick < countIn;
+
     // Computed once per tick and shared by every bot — it is the same answer for all of them.
-    const danger = seats.some(s => s?.isBot) ? dangerMap(state) : null;
+    const danger = !counting && seats.some(s => s?.isBot) ? dangerMap(state) : null;
 
     for (let i = 0; i < maxPlayers; i++) {
       const s = seats[i];
       if (!s) continue;
       if (s.isBot) {
-        inputs[i] = think(state, state.players[i], s.brain, danger);
+        inputs[i] = counting ? 0 : think(state, state.players[i], s.brain, danger);
         s.lastAckTick = state.tick;
         continue;
       }
@@ -372,7 +395,14 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       }
       // Missing input repeats the last mask. A dropped packet should not make you stutter.
       s.lastAckTick = state.tick;
-      inputs[i] = s.mask;
+      inputs[i] = counting ? 0 : s.mask;
+      /* And the idle clock does not run during the count-in.
+       *
+       * A client is told not to send inputs while the board is frozen (see the loop in
+       * client/main.js), so five seconds of correct silence would otherwise count against the
+       * idle timer — and on a long enough count-in, join the round and be kicked from it.
+       */
+      if (counting) s.lastInputAt = state.tick;
 
       if (!s.connected && state.tick - s.goneSince > graceTicks) release(i);
 
@@ -420,7 +450,9 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       state.events.length = 0;      // nobody listening; do not grow without bound
     }
 
-    if (state.tick >= roundTicks) endRound();
+    // The whistle, pushed out by the count-in so the round is a full `roundTicks` of PLAY. Must
+    // agree with `roundEndsAtTick` in the welcome, or the clock on screen lies.
+    if (state.tick >= roundTicks + countIn) endRound();
   }
 
   /**
@@ -631,7 +663,12 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       // which two clients would then fight over.
       playerId: seats[seat]?.playerId ?? null,
       tick: state.tick,
-      roundEndsAtTick: roundTicks,
+      // Pushed out by the count-in, so a ten-minute round is ten minutes of PLAY. The client's
+      // clock counts down to this, so it is also what stops the bar reading 9:55 at the whistle.
+      roundEndsAtTick: roundTicks + countIn,
+      // When the freeze lifts. The client stops predicting and sending until this tick, and
+      // draws the count-in down to it; see COUNT_IN_TICKS.
+      startsAtTick: countIn,
       // A reconnect during the intermission must not be mistaken for the next round starting.
       between,
       color: playerColor(seat),

@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRoom } from '../server/room.js';
 
-const room = () => createRoom({ onBroadcast: () => {} });
+const room = () => createRoom({ countIn: 0, onBroadcast: () => {} });
 
 test('a second window on the same id is refused, with a reason', () => {
   const r = room();
@@ -46,7 +46,7 @@ test('signing out frees the seat and the name', () => {
 
 test('signing out banks the score rather than discarding it', () => {
   const banked = [];
-  const r = createRoom({
+  const r = createRoom({ countIn: 0,
     onBroadcast: () => {},
     leaderboard: { record: (id, e) => banked.push({ id, ...e }), flush: () => {}, top: () => [], get: () => null },
   });

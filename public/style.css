@@ -3793,16 +3793,21 @@ kbd.wide {
    Five seconds at the top of every round.
    ======================================== */
 
-/* Centred on the BOARD, not on the window: the side panel takes 340px off the right, and a
+/* Dead centre of the BOARD, not of the window: the side panel takes 340px off the right, and a
    count-in centred on the viewport sits visibly off to one side of the thing it is counting in.
-   The same arithmetic #centre uses, for the same reason. */
+   The same arithmetic #centre and #dead use, for the same reason.
+
+   In the middle rather than under the clock, because it is no longer a caption: nothing moves
+   until it reaches zero, so it is the only thing on screen worth looking at — and the middle is
+   where the board is empty, since everyone is standing still on their spawn. */
 #countIn {
   position: fixed;
   z-index: 10;
   pointer-events: none;
-  top: calc(var(--bar) + var(--gap) * 3);
+  top: calc(var(--bar) + var(--gap) * 2);
   left: var(--gap);
   width: calc(100vw - var(--side) - var(--gap) * 3);
+  height: calc(100vh - var(--bar) - var(--gap) * 3);
   display: grid;
   place-items: center;
   opacity: 0;
@@ -3824,7 +3829,7 @@ kbd.wide {
 
 #countIn .n {
   font-family: var(--display);
-  font-size: 64px;
+  font-size: 104px;
   line-height: 1;
   letter-spacing: 0.04em;
   /* The tick. Every whole second the class is re-applied (see the count-in block in
@@ -3835,23 +3840,23 @@ kbd.wide {
 /* The last two get hotter and bigger. By then the number is not information any more, it is a
    warning that the round is about to be live. */
 #countIn.hot .n {
-  font-size: 78px;
+  font-size: 124px;
   filter: drop-shadow(0 0 22px #edc24ebb);
 }
 #countIn .n.go {
-  font-size: 92px;
+  font-size: 146px;
   animation: countGo 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* The second hand: a thin gold arc sweeping one full turn per count, under the digit. A
    conic-gradient mask rather than an SVG stroke, so it is one element and no markup. */
 #countIn .ring {
-  width: 104px;
-  height: 104px;
+  width: 168px;
+  height: 168px;
   border-radius: 50%;
   background: conic-gradient(var(--gold) 0deg, #edc24e00 55deg, #edc24e00 360deg);
-  -webkit-mask: radial-gradient(circle, #0000 42px, #000 43px, #000 48px, #0000 49px);
-  mask: radial-gradient(circle, #0000 42px, #000 43px, #000 48px, #0000 49px);
+  -webkit-mask: radial-gradient(circle, #0000 72px, #000 73px, #000 80px, #0000 81px);
+  mask: radial-gradient(circle, #0000 72px, #000 73px, #000 80px, #0000 81px);
   animation: countSweep 1s linear infinite;
   opacity: 0.85;
 }

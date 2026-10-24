@@ -44,6 +44,11 @@ export function createWorld() {
     w.you = m.you;
     w.observing = !!m.observing;
     w.roundEndsAtTick = m.roundEndsAtTick ?? w.roundEndsAtTick;
+    /* The tick the freeze lifts on. Nothing is predicted or sent before it — see the loop in
+     * main.js — because the server is zeroing every input until then, and predicting movement
+     * the server is refusing is exactly the rubber-band this avoids. Defaults to 0 so a server
+     * that does not send it behaves as it always did. */
+    w.startsAtTick = m.startsAtTick ?? 0;
     w.tick = m.tick;
     w.players = [];
     for (const p of m.players) w.players[p.i] = hydrate(p);

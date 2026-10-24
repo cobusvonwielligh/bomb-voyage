@@ -23,7 +23,11 @@ const startServer = () => new Promise((resolve, reject) => {
     env: { ...process.env,
       PORT: String(PORT), LAG: '0', DEPLOY_TOKEN: '', MIN_BOTS: '0',
       // About the room, not about signing in. See test/password.test.js for that.
-      REQUIRE_PASSWORD: '0' },
+      REQUIRE_PASSWORD: '0',
+      // And live from tick 0: this drives inputs over a socket and asserts on the movement they
+      // produce, which five frozen seconds of count-in would simply swallow. The freeze has its
+      // own test in test/countin.test.js.
+      COUNT_IN: '0' },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   const bail = setTimeout(() => reject(new Error('server did not come up')), 10_000);

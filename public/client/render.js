@@ -3845,7 +3845,10 @@ export function createRenderer(canvas, world) {
     // a reading in it, which is the right weight for something that is on screen while you are
     // being chased and is never the thing you are looking at.
     const w = TILE_PX * 0.78, h = 2.5;
-    const x = cx - w / 2 + 2.5, y = cy;          // +2.5: room for the bolt on the left
+    // +4.5 rather than +2.5: the bolt sits in that margin, and two of those pixels are now a GAP
+    // between the glyph and the track. Touching, the bolt read as the bar's end cap rather than
+    // as a label for it.
+    const x = cx - w / 2 + 4.5, y = cy;
 
     // Fades in over the top quarter of the visible range rather than appearing at a hard edge,
     // which would read as a glitch on the frame it crossed the threshold.
@@ -3916,7 +3919,7 @@ export function createRenderer(canvas, world) {
     // the fill's own colour, so it dims and flashes with the gauge.
     c.globalAlpha = appear * flash;
     c.fillStyle = low ? '#ff5a3c' : '#ffe04a';
-    c.translate(x - 4.4, y - 2.6);
+    c.translate(x - 6.4, y - 2.6);          // 2px clear of the track's left edge
     c.scale(0.4, 0.4);
     c.beginPath();
     c.moveTo(9.5, 0); c.lineTo(3, 9); c.lineTo(7.5, 9);

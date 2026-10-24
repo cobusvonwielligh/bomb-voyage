@@ -18,7 +18,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 
 test('no event is dropped between snapshots', async () => {
   const events = [];
-  const room = createRoom({
+  const room = createRoom({ countIn: 0,
     onBroadcast: msgOrFn => {
       const m = typeof msgOrFn === 'function' ? msgOrFn(0) : msgOrFn;
       if (m.t === 'snap') events.push(...(m.ev || []));

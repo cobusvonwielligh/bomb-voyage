@@ -79,6 +79,14 @@ export const config = {
    * are about ROOMS rather than about sign-in keep being about rooms.
    */
   requirePassword: String(pick('REQUIRE_PASSWORD', 'server', 'require_password', '1')) !== '0',
+
+  /* Seconds of frozen count-in at the top of every round. 0 starts the round live.
+   *
+   * A knob because it is a rule the room enforces rather than an animation: a test that drives
+   * inputs from tick 0 sets COUNT_IN=0 and gets the old behaviour, and anybody running a private
+   * server who finds five seconds of standing still annoying can have none.
+   */
+  countIn: Math.max(0, num('COUNT_IN', 'server', 'count_in', 5)),
 };
 
 export const usingTls = Boolean(config.tlsCert && config.tlsKey);

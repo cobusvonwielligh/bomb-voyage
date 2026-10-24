@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { createRoom } from '../server/room.js';
 import { STATUS } from '../shared/constants.js';
 
-const room = (adminName = '') => createRoom({ onBroadcast: () => {}, adminName });
+const room = (adminName = '') => createRoom({ countIn: 0, onBroadcast: () => {}, adminName });
 
 test('the first player is the host', () => {
   const r = room();

@@ -88,7 +88,7 @@ test('the synchronous save â€” the one a crash uses â€” writes everyth
 test('a round won is a gold medal and XP that are still there after a restart', async () => {
   const dir = tmp();
   const lb = createLeaderboard({ dataDir: dir });
-  const room = createRoom({ onBroadcast: () => {}, leaderboard: lb });
+  const room = createRoom({ countIn: 0, onBroadcast: () => {}, leaderboard: lb });
   try {
     const { seat } = room.join('cobus-id', 'cobus');
     room.setBots(2);
@@ -110,7 +110,7 @@ test('a round won is a gold medal and XP that are still there after a restart', 
 test('progress is banked during a round, not only at its end', async () => {
   const dir = tmp();
   const lb = createLeaderboard({ dataDir: dir });
-  const room = createRoom({ onBroadcast: () => {}, leaderboard: lb });
+  const room = createRoom({ countIn: 0, onBroadcast: () => {}, leaderboard: lb });
   try {
     const { seat } = room.join('mid-id', 'mid');
     room.state.players[seat].score = SCORE.KILL;

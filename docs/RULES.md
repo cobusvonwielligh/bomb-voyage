@@ -258,6 +258,22 @@ the renderer and the sound identify one without a flag on the wire.
 
 ---
 
+## 5a. The start of a round
+
+Every round opens with a **five-second count-in**, big in the middle of the board, and **nobody
+can move** until it reaches zero — people and bots alike. The room zeroes every input until the
+tick the client is counting down to, so the number on screen and the frozen board are two views
+of one fact rather than an animation over a live game.
+
+It exists because a round used to begin with sixteen people arriving on a map none of them had
+seen, already live: the first second went on working out which pirate was yours and where the
+walls were, and anybody who already knew the map had a free head start.
+
+The round clock is pushed out by the same five seconds, so a ten-minute round is ten minutes of
+play. `count_in = 0` in config.ini starts rounds live, which is also what every room test uses.
+
+---
+
 ## 6. Death, respawn, and what you keep
 
 Touching fire kills you, unless you are Invulnerable or hold a Shield.

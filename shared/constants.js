@@ -33,6 +33,23 @@ export const MIN_ZOOM = 0.68;
 export const MAX_ZOOM = 2;
 export const ROUND_INTERMISSION_MS = 20_000;
 
+/* The count-in: five seconds at the top of every round, and NOBODY MOVES.
+ *
+ * Shared rather than a client constant, because it is a rule now and not a caption. The room
+ * zeroes every input — people and bots alike — until `state.tick` reaches this, and the client
+ * neither predicts nor sends over the same window, so the digit on screen and the frozen board
+ * are two views of one fact.
+ *
+ * The round clock is pushed out by the same amount (see `roundEndsAtTick`), so a ten-minute round
+ * is still ten minutes of play rather than nine minutes and fifty-five seconds of it.
+ *
+ * It exists because a round used to begin with sixteen people arriving on a map none of them had
+ * seen, already live: the first second was spent working out where you were, and anybody who
+ * already knew the map had a free head start. Five seconds of looking is the fairest thing a
+ * round can start with.
+ */
+export const COUNT_IN_TICKS = 5 * TICK_HZ;
+
 export const CHUNK_TILES = 8; // renderer chunk size
 
 export const MAX_PLAYERS = 16;

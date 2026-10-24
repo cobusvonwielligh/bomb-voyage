@@ -137,7 +137,7 @@ test('height is no longer a defence, but embers and bots are not shots', () => {
 
 // ─── bots ─────────────────────────────────────────────────────────────────────
 
-const room = () => createRoom({ onBroadcast: () => {}, minBots: AUTO_BOTS_MIN });
+const room = () => createRoom({ countIn: 0, onBroadcast: () => {}, minBots: AUTO_BOTS_MIN });
 
 /** Play out one (six-second) round, then start the next by hand. */
 function round(r) {

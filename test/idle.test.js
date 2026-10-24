@@ -13,7 +13,7 @@ import { IDLE_KICK_TICKS } from '../shared/constants.js';
 function room() {
   const kicked = [];
   const chat = [];
-  const r = createRoom({
+  const r = createRoom({ countIn: 0,
     onBroadcast: m => {
       const x = typeof m === 'function' ? m(0) : m;
       if (x.t === 'chat') chat.push(x.msg);

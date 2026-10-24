@@ -251,7 +251,7 @@ test('respawn can land anywhere, but lands away from people far more often', () 
   // Two properties at once, and they pull against each other: no tile may be impossible (a
   // predictable spawn is a campable spawn), and the far side of the island must dominate.
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bv-spawn-'));
-  const room = createRoom({ onBroadcast: () => {}, dataDir });
+  const room = createRoom({ countIn: 0, onBroadcast: () => {}, dataDir });
   try {
     const map = room.state.map;
     const spawns = map.spawns;

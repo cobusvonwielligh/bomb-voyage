@@ -19,7 +19,7 @@ async function withRoom(fn) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bv-scores-'));
   const leaderboard = createLeaderboard({ dataDir });
   const scores = [];
-  const room = createRoom({
+  const room = createRoom({ countIn: 0,
     onBroadcast: m => {
       const x = typeof m === 'function' ? m(0) : m;
       if (x.t === 'scores') scores.push(x);
