@@ -19,6 +19,25 @@ function deviceId() {
   } catch { return null; }            // private mode with storage blocked: no limit applies
 }
 
+/**
+ * The host's key, if this browser has one. Opened once as `/?admin=KEY`, kept, and taken out of
+ * the address bar straight away so it is not in the next link somebody copies. See `adminKey`
+ * in server/config.js.
+ */
+function adminKey() {
+  try {
+    const url = new URL(location.href);
+    const given = url.searchParams.get('admin');
+    if (given !== null) {
+      if (given) localStorage.setItem('bv.adminKey', given); else localStorage.removeItem('bv.adminKey');
+      url.searchParams.delete('admin');
+      history.replaceState(null, '', url);
+    }
+    return localStorage.getItem('bv.adminKey') || undefined;
+  } catch { return undefined; }
+}
+adminKey();
+
 export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onScores, onStreak,
   onRoundTime, onRejected }) {
   let ws = null;
@@ -42,6 +61,7 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
   const pending = new Map();
   let backoff = 0;
   let closedByUs = false;
+  let reconnectTimer = 0;
   let hello = null;
   let sinceCorrection = 0;
   let connectedAt = 0;
@@ -124,85 +144,80 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
   }
 
   function handle(m) {
-    {
-      switch (m.t) {
-        case 'welcome':
-          // localStorage, so the identity outlives the tab: it is meant to BE you, not to be
-          // this window. Two tabs therefore share it, and the server refuses the second one
-          // rather than handing one person two of sixteen seats. /logout is the way out.
-          // Guarded: a welcome with no id must not overwrite a good token with "undefined",
-          // which the server would then accept as a real id.
-          if (m.playerId) {
-            localStorage.setItem('bv.playerId', m.playerId);
-            hello = { ...hello, playerId: m.playerId };
-          }
-          connectedAt = performance.now();
-          // The rate first: the tick below is converted to a clock using it.
-          if (m.config?.gamespeed) setSpeed(m.config.gamespeed);
-          observeServerTick(m.tick);
-          clientTick = targetTick();
-          onWelcome?.(m);
-          break;
-        case 'snap': onSnap?.(m); break;
-        case 'chat': onChat?.(m); break;
-        case 'pong': {
-          const sent = pending.get(m.c);
-          if (sent !== undefined) {
-            pending.delete(m.c);
-            rtts.push(performance.now() - sent);
-            if (rtts.length > RTT_SAMPLES) rtts.shift();
-            // Rolling minimum, not an average: one jitter spike should not shove the clock.
-            observeServerTick(m.tick);
-            // The very first real RTT sample: re-seed the lead, which until now was computed as
-            // if the connection were instant. Safe because this fires microseconds after
-            // `welcome`, long before prediction has produced anything worth keeping.
-            if (rtts.length === 1) clientTick = targetTick();
-          }
-          break;
+    switch (m.t) {
+      case 'welcome':
+        // localStorage, so the identity outlives the tab: it is meant to BE you, not to be
+        // this window. Two tabs therefore share it, and the server refuses the second one
+        // rather than handing one person two of sixteen seats. /logout is the way out.
+        // Guarded: a welcome with no id must not overwrite a good token with "undefined",
+        // which the server would then accept as a real id.
+        if (m.playerId) {
+          localStorage.setItem('bv.playerId', m.playerId);
+          hello = { ...hello, playerId: m.playerId };
         }
-        case 'reject':
-          // `forget` means the stored identity is what was refused, so drop it: the next attempt
-          // then arrives as a new player instead of being turned away for the same reason.
-          if (m.forget) { try { localStorage.removeItem('bv.playerId'); } catch { /* private mode */ } }
-          closedByUs = true;
-          onStatus?.(`rejected: ${m.why}`);
-          onRejected?.(m);
-          break;
-        case 'mapchange': onWelcome?.({ ...m, mapOnly: true }); break;
-        case 'roundend': onRoundEnd?.(m); break;
-        case 'scores': onScores?.(m); break;
-        case 'streak': onStreak?.(m); break;
-        // The host changed the round length. The clock in the bar counts down to this, so a
-        // client that ignored it would show the wrong number until the next round.
-        case 'roundtime': onRoundTime?.(m); break;
-        // The host changed /gamespeed. Not optional: see `tickMs`.
-        case 'gamespeed': setSpeed(m.pct); break;
+        connectedAt = performance.now();
+        // The rate first: the tick below is converted to a clock using it.
+        if (m.config?.gamespeed) setSpeed(m.config.gamespeed);
+        observeServerTick(m.tick);
+        clientTick = targetTick();
+        onWelcome?.(m);
+        break;
+      case 'snap': onSnap?.(m); break;
+      case 'chat': onChat?.(m); break;
+      case 'pong': {
+        const sent = pending.get(m.c);
+        if (sent !== undefined) {
+          pending.delete(m.c);
+          rtts.push(performance.now() - sent);
+          if (rtts.length > RTT_SAMPLES) rtts.shift();
+          // Rolling minimum, not an average: one jitter spike should not shove the clock.
+          observeServerTick(m.tick);
+          // The very first real RTT sample: re-seed the lead, which until now was computed as
+          // if the connection were instant. Safe because this fires microseconds after
+          // `welcome`, long before prediction has produced anything worth keeping.
+          if (rtts.length === 1) clientTick = targetTick();
+        }
+        break;
       }
+      case 'reject':
+        // `forget` means the stored identity is what was refused, so drop it: the next attempt
+        // then arrives as a new player instead of being turned away for the same reason.
+        if (m.forget) { try { localStorage.removeItem('bv.playerId'); } catch { /* private mode */ } }
+        closedByUs = true;
+        onStatus?.(`rejected: ${m.why}`);
+        onRejected?.(m);
+        break;
+      case 'mapchange': onWelcome?.({ ...m, mapOnly: true }); break;
+      case 'roundend': onRoundEnd?.(m); break;
+      case 'scores': onScores?.(m); break;
+      case 'streak': onStreak?.(m); break;
+      // The host changed the round length. The clock in the bar counts down to this, so a
+      // client that ignored it would show the wrong number until the next round.
+      case 'roundtime': onRoundTime?.(m); break;
+      // The host changed /gamespeed. Not optional: see `tickMs`.
+      case 'gamespeed': setSpeed(m.pct); break;
     }
   }
 
   function onDisconnect(ev) {
-    {
-      if (closedByUs) return;
-      // Reset the backoff only after a connection that actually lasted. Resetting it in onopen
-      // means a connection that opens and immediately dies never backs off at all, which turns
-      // any repeating problem into a reconnect storm.
-      if (connectedAt && performance.now() - connectedAt > 3000) backoff = 0;
-      connectedAt = 0;
-      const wait = backoff === 0 ? 150 : Math.min(8000, backoff * 2);
-      backoff = wait;
-      onStatus?.(`reconnecting in ${(wait / 1000).toFixed(1)}s`);
-      // 4000 means another sign-in with our id took the seat. Reconnecting would take it back
-      // and the two clients would trade it forever, which is the whole thing the server's
-      // takeover limit exists to stop — so do not make it fight the limit.
-      if (ev?.code === 4000) {
-        closedByUs = true;
-        onStatus?.('signed in somewhere else');
-        return;
-      }
-      kind = null;
-      setTimeout(open, wait);
+    if (closedByUs) return;
+    // Reset the backoff only after a connection that actually lasted. Resetting it in onopen
+    // means a connection that opens and immediately dies never backs off at all, which turns
+    // any repeating problem into a reconnect storm.
+    if (connectedAt && performance.now() - connectedAt > 3000) backoff = 0;
+    connectedAt = 0;
+    const wait = backoff === 0 ? 150 : Math.min(8000, backoff * 2);
+    backoff = wait;
+    onStatus?.(`reconnecting in ${(wait / 1000).toFixed(1)}s`);
+    // 4000 means another sign-in with our id took the seat. Reconnecting would take it back
+    // and the two clients would trade it forever.
+    if (ev?.code === 4000) {
+      closedByUs = true;
+      onStatus?.('signed in somewhere else');
+      return;
     }
+    kind = null;
+    reconnectTimer = setTimeout(open, wait);
   }
 
   function ping() {
@@ -226,6 +241,7 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
         // This browser, for the server's sessions-per-browser limit. Separate from the player
         // identity, so signing out does not reset it.
         device: deviceId(),
+        adminKey: adminKey(),
       };
       open();
     },
@@ -235,6 +251,8 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
     /** Leave on purpose. Must suppress the reconnect, or we would immediately rejoin. */
     close() {
       closedByUs = true;
+      // open() clears closedByUs, so a reconnect already scheduled would otherwise rejoin.
+      clearTimeout(reconnectTimer);
       ws?.close();
       ws = null;
     },

@@ -45,6 +45,25 @@ test('the named admin outranks seat order wherever they sit', () => {
   assert.equal(r.hostSeat(), me.seat, 'the admin should be host regardless of who joined first');
 });
 
+test('the admin key outranks seat order, and the name alone does not', () => {
+  // With a key configured net.js passes no adminName, so typing the name gets you nothing.
+  const r = room();
+  r.join('p1', 'ann');
+  const squatter = r.join('p2', 'cobusvw');
+  assert.notEqual(r.hostSeat(), squatter.seat, 'a borrowed name made somebody host');
+  const me = r.join('p3', 'whoever', { admin: true });
+  assert.equal(r.hostSeat(), me.seat);
+});
+
+test('the key is checked again on every reconnect', () => {
+  const r = room();
+  r.join('p1', 'ann');
+  const me = r.join('p2', 'cobus', { admin: true });
+  r.disconnect(me.seat);
+  r.join('p2', 'cobus');
+  assert.notEqual(r.hostSeat(), me.seat, 'a resume without the key kept the privilege');
+});
+
 test('bots are never the host', () => {
   const r = room();
   r.setBots(3);

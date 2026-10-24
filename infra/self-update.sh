@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
-# Pull the latest main and restart. Triggered by POST /deploy, which GitHub Actions calls after
-# the tests pass. Runs detached from the request that started it, because it restarts that
-# process. Requires /opt/bomb-voyage to be a git clone, plus the sudoers drop-in bootstrap.sh
-# installs (three exact commands, nothing broader).
+# Pull the latest main and restart. Triggered by POST /deploy. Runs detached from the request
+# that started it, because it restarts that process. Requires /opt/bomb-voyage to be a git clone.
 
 set -euo pipefail
 
 APP=/opt/bomb-voyage
 DATA=/var/lib/bomb-voyage
-UNIT=/etc/systemd/system/bomb-voyage.service
 
 # This script is spawned by the server, so it inherits the unit's sandbox — and the unit sets
 # ProtectHome=true. /home is therefore invisible: ssh cannot read ~/.ssh and npm cannot write
@@ -30,10 +27,14 @@ echo "$BEFORE -> $AFTER"
 
 if [ "$BEFORE" != "$AFTER" ] || [ ! -d node_modules ]; then
   npm ci --omit=dev --silent
+  # npm ci deletes the QUIC addon compiled on this box; put it back, as infra/deploy.sh does.
+  STASH=$DATA/webtransport.node
+  DEST=$APP/node_modules/@fails-components/webtransport-transport-http3-quiche/build_linux_x64/Release
+  if [ -f "$STASH" ]; then mkdir -p "$DEST" && cp -f "$STASH" "$DEST/webtransport.node"; fi
 fi
 
-# The unit file can change with the code. These three commands are exactly what sudoers allows.
-sudo -n /usr/bin/cp "$APP/infra/bomb-voyage.service" "$UNIT"
-sudo -n /usr/bin/systemctl daemon-reload
-sudo -n /usr/bin/systemctl restart bomb-voyage
-echo "restarted"
+# The unit sets NoNewPrivileges, so sudo is impossible from here — on purpose. Ask the server to
+# shut down cleanly instead (it banks the round first) and Restart=always brings up the new code.
+# A changed unit file is therefore only installed by `npm run deploy`, which comes in over SSH.
+echo "restarting"
+kill -TERM "${BV_SERVER_PID:?the server passes its pid}"

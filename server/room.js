@@ -12,7 +12,7 @@ import {
   IDLE_KICK_TICKS, AUTO_BOTS_EMPTY_ROUNDS,
 } from '../shared/constants.js';
 import { MAPS, encodeCells } from '../shared/maps.js';
-import { createState, createPlayer, expireStatuses, applyStatus, tileCentre } from '../shared/sim/state.js';
+import { createState, createPlayer, applyStatus, tileCentre } from '../shared/sim/state.js';
 import { blocked, unstick } from '../shared/sim/movement.js';
 import { tick as simTick } from '../shared/sim/round.js';
 import { gullWire } from '../shared/sim/gulls.js';
@@ -111,7 +111,8 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     streaks[seat] = newStreak();
   }
 
-  function join(playerId, name) {
+  /** @param admin this connection presented the admin key; see `adminKey` in server/config.js. */
+  function join(playerId, name, { admin = false } = {}) {
     const existing = findSeatByPlayerId(playerId);
 
     if (existing >= 0) {
@@ -131,6 +132,7 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       held.goneSince = 0;
       held.lastInputAt = state.tick;
       held.name = name || held.name;
+      held.admin = admin;
       if (state.players[existing]) state.players[existing].name = held.name;
       topUpBots();
       return { seat: existing, resumed: true, playerId, displaced: null };
@@ -149,7 +151,7 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
 
     const id = playerId || `p_${seat}_${Date.now().toString(36)}_${(Math.random() * 1e6) | 0}`;
     seats[seat] = {
-      playerId: id, name, mask: 0, inputs: new Map(), lastAckTick: 0,
+      playerId: id, name, admin, mask: 0, inputs: new Map(), lastAckTick: 0,
       connected: true, goneSince: 0, lastInputAt: state.tick,
     };
     streaks[seat] = newStreak();
@@ -677,7 +679,8 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
   /**
    * Who is in charge.
    *
-   * The named admin whenever they are connected, and otherwise the longest-standing human — the
+   * The admin whenever they are connected (the seat that joined with the admin key, or with
+   * `adminName` where no key is configured), and otherwise the longest-standing human — the
    * lowest occupied seat, which is the first person who joined and has not left. A room always
    * has exactly one host while anybody is in it, and losing one promotes the next without
    * anybody having to do anything.
@@ -688,7 +691,7 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       const s = seats[i];
       if (!s || s.isBot || !s.connected) continue;
       if (first < 0) first = i;
-      if (adminName && (s.name ?? '').toLowerCase() === adminName) { admin = i; break; }
+      if (s.admin || (adminName && (s.name ?? '').toLowerCase() === adminName)) { admin = i; break; }
     }
     return admin >= 0 ? admin : first;
   }

@@ -1,6 +1,8 @@
 # Bomb Voyage — Where We Stand
 
-Last updated: **2026-10-24**. Live on `bombvoyage.online`. 294 tests (the three deploy-webhook smoke tests need bash, so CI runs those).
+Last updated: **2026-10-24**, at **v1.0.0**. Live on `bombvoyage.online`. 314 tests, all of which
+now pass on Windows as well as in CI. The security check that went into 1.0 is
+[DEPLOY.md](DEPLOY.md) §12.
 
 This document replaces the "⬜ The game: not started" line in the README. The game is built, the
 whole plan in [PLAN.md](PLAN.md) has been walked through, and several decisions in it have since
@@ -195,7 +197,7 @@ Every one of these is in `shared/constants.js`. Nothing is inline.
 | Speed | `[27, 35, 43, 51, 59]` units/tick by boot count — 3.2 to 6.9 tiles/s |
 | Caps | 8 bombs, radius 6, 4 boots, 2 shields, 4 stims |
 | Stamina | 3450 tenths (+750 per stim), empty = half pace until a third is back |
-| Respawn | 10 s, then weighted-random across every legal spawn |
+| Respawn | 15 s, then weighted-random across every legal spawn |
 | Perk drops | 35% base, scaled by what is on the floor and how fast it is taken |
 | Rum | 2.7% of drops. Softens damage, sways your walk, rolls your camera for 12 s |
 | Gold | 2.1% of drops, ≤5 a round. 400 XP. Changes nothing about the round — it is a collectible |
@@ -228,6 +230,8 @@ is the index.
 | Scores lost on deploy | Only written at round end and disconnect, and `leaderboard.stop()` was not awaited before `process.exit` |
 | Stuck in one tile after `/gamespeed` | The client clock and fixed-step loop always ran at 30 Hz. At 200% every input was stamped for a tick the server had already simulated and was dropped; at 50% the server's input buffer evicted the ones it needed next. The client now scales both by the server's rate (`gamespeed` message, `welcome.config.gamespeed`) |
 | Searching `server/net.js` returned nothing | The file held raw control bytes inside a character class, so grep and `git diff` treated it as binary and said nothing at all. `test/sources.test.js` now fails on any raw control byte |
+| The server restarting for everybody | Three ways for one person to end the process: `GET /%` (`decodeURIComponent` throws), typing `/logout` (it called helpers that only existed inside `attachHub`), and a hello or input whose fields were objects with a non-function `toString`. Any throw inside a request or message handler reached the uncaught-exception handler, which exits. Handlers now catch, and wire values are coerced by type |
+| Anybody could be host | The admin was whoever typed the admin's name, and the name is in a public repository. It is now `[admin] key` in config.ini |
 
 ---
 
@@ -254,8 +258,9 @@ Ordered by how much it would change a Friday session.
 ### Known-and-fine
 
 - `playerWire` omits `moving` for remotes; the client derives it from drawn movement instead.
-- `close()` leaves the reconnect timer armed. Harmless, because `closedByUs` gates it.
 - Bans are in memory only and clear on restart. Deliberate: there is no `/unban`.
+- Careers are keyed by name, so anyone can play under yours. The worst they can do is add to it;
+  accounts remain a non-goal.
 
 ### Explicitly not doing
 
@@ -276,5 +281,7 @@ Accounts, payments, matchmaking, mobile, anti-cheat, a persistent world. Unchang
 - **Bots:** `min_bots` in config.ini (env `MIN_BOTS`), default 6, 0 switches the automatic top-up
   off. `/healthz` reports `autoBots`.
 - **Host commands:** `/restart`, `/godmode`, `/kick`, `/map`, `/gamespeed`, `/roundtime`. The host
-  is the named admin when present and the longest-standing human otherwise, so a room is never
-  left without someone who can run it.
+  is the admin when present and the longest-standing human otherwise, so a room is never left
+  without someone who can run it. The admin is the browser holding `[admin] key` from the
+  server's config.ini — open `https://bombvoyage.online/?admin=<key>` once, on each browser you
+  host from.

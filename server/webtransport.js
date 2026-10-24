@@ -14,8 +14,17 @@
 
 import { EventEmitter } from 'node:events';
 import { encodeFrame, createFramer, pickChannel } from '../shared/wire.js';
+import { MAX_MESSAGE_BYTES } from '../shared/constants.js';
 
 const encoder = new TextEncoder();
+
+/** "1.2.3.4:5678" or "[::1]:5678" → the address alone. Null when the library gave us nothing. */
+export const peerIp = peer => {
+  const s = String(peer ?? '');
+  const colon = s.lastIndexOf(':');
+  const ip = (colon > 0 ? s.slice(0, colon) : s).replace(/^\[|\]$/g, '');
+  return ip && ip !== 'undefined' ? ip : null;
+};
 
 /**
  * One WebTransport session, pretending to be a `ws` WebSocket.
@@ -133,8 +142,14 @@ export async function startWebTransport({ port, cert, privKey, path = '/wt', onS
 
     // One bidirectional stream carries everything that must arrive in order. The client opens
     // it immediately after connecting, so waiting for it is the handshake.
+    // A session that never opens its stream is given ten seconds, not forever: otherwise every
+    // half-open session from a misbehaving client is held for the life of the process.
     const streams = session.incomingBidirectionalStreams.getReader();
-    const { value: stream } = await streams.read();
+    let timer;
+    const { value: stream } = await Promise.race([
+      streams.read(),
+      new Promise(resolve => { timer = setTimeout(() => resolve({}), 10_000); }),
+    ]).finally(() => clearTimeout(timer));
     if (!stream) { log.warn?.('webtransport: session opened no stream'); session.close(); return; }
     log.log?.('webtransport: stream open, session live');
 
@@ -145,10 +160,11 @@ export async function startWebTransport({ port, cert, privKey, path = '/wt', onS
     catch { /* no datagram support: everything falls back to the stream, which still works */ }
 
     let heard = 0;
+    // Capped at the WebSocket's limit, so neither pipe accepts a message the other would refuse.
     const push = createFramer(msg => {
       if (heard++ === 0) log.log?.(`webtransport: first message in (${msg.t})`);
       socket.emit('message', JSON.stringify(msg));
-    });
+    }, { maxBytes: MAX_MESSAGE_BYTES });
 
     /* Hand the socket over BEFORE anything can be read off the wire.
      *
@@ -159,7 +175,7 @@ export async function startWebTransport({ port, cert, privKey, path = '/wt', onS
      * perfectly and then sat there receiving nothing, which looks like a server bug anywhere but
      * here.
      */
-    onSocket(socket);
+    onSocket(socket, peerIp(session.peerAddress));
 
     // Reliable half.
     (async () => {

@@ -68,9 +68,13 @@ adding an optional message safe.
   "t": "hello",
   "name": "Cobus",
   "playerId": "p_8f2a...",      // from localStorage, or null for a new player
-  "clientVersion": 1
+  "device": "6c1e...",          // random per-browser id, for the two-sessions-per-browser limit
+  "observe": false,             // true to spectate without a seat
+  "adminKey": "..."             // only from the host's browser; see [admin] key in config.ini
 }
 ```
+
+Every field is type-checked on arrival; a value of the wrong type is treated as absent.
 
 Server replies `welcome` or `reject`.
 

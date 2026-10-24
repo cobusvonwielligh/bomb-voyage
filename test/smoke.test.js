@@ -69,6 +69,16 @@ test('deployment spine', async t => {
     }
   });
 
+  await t.test('a malformed URL is refused, not fatal', async () => {
+    // `GET /%` used to throw out of decodeURIComponent, and the uncaught-exception handler then
+    // exited the process: one request restarted the game for everybody.
+    for (const p of ['/%', '/%E0%A4%A', '/shared/%zz']) {
+      const res = await fetch(base + p);
+      assert.ok(res.status >= 400 && res.status < 500, `${p} answered ${res.status}`);
+    }
+    assert.equal((await fetch(base + '/healthz')).status, 200, 'the server died');
+  });
+
   await t.test('health reports players', async () => {
     const h = await (await fetch(base + '/healthz')).json();
     assert.equal(h.ok, true);
@@ -120,13 +130,32 @@ test('deployment spine', async t => {
     assert.ok('version' in h, 'CI compares this against the commit it pushed');
   });
 
+  await t.test('/logout signs out without taking the server with it', async () => {
+    // The command once called helpers that only existed inside attachHub, so typing it threw a
+    // ReferenceError out of the message handler and ended the process.
+    const ws = new WebSocket(`ws://127.0.0.1:${PORT}/ws`);
+    await once(ws, 'open');
+    ws.send(JSON.stringify({ t: 'hello', name: 'leaver' }));
+    await once(ws, 'message');
+    const closed = once(ws, 'close');
+    ws.send(JSON.stringify({ t: 'chat', msg: '/logout' }));
+    const [code] = await closed;
+    assert.equal(code, 4002);
+    assert.equal((await (await fetch(base + '/healthz')).json()).players, 0);
+  });
+
   await t.test('ignores junk instead of dying', async () => {
     const ws = new WebSocket(`ws://127.0.0.1:${PORT}/ws`);
     await once(ws, 'open');
     ws.send('not json');
     ws.send(JSON.stringify({ t: 'no-such-type', weird: true }));
     ws.send(JSON.stringify({ nope: 1 }));
-    ws.send(JSON.stringify({ t: 'hello', name: null }));
+    // Objects whose toString and valueOf are not functions: `String()` or `| 0` on one throws, and
+    // each of these once ended the process.
+    const poison = { toString: 1, valueOf: 1 };
+    ws.send(JSON.stringify({ t: 'input', tick: poison, m: poison }));
+    ws.send(JSON.stringify({ t: 'chat', msg: poison }));
+    ws.send(JSON.stringify({ t: 'hello', name: poison, adminKey: poison }));
     const [raw] = await once(ws, 'message');
     assert.equal(JSON.parse(raw).t, 'welcome', 'still alive and seating after junk');
     ws.close();

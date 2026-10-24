@@ -224,7 +224,7 @@ Touching fire kills you, unless you are Invulnerable or hold a Shield.
 - **Death** drops your stats to the starting values (1 bomb, radius 1, 0 boots) and clears all
   statuses.
 - On death you drop **up to 3 perks** on nearby free tiles, so a good kill is rewarded.
-- You respawn by pressing **SPACE** after a **10-second** cooldown, with **90 ticks (3 s)**
+- You respawn by pressing **SPACE** after a **15-second** cooldown, with **90 ticks (3 s)**
   Invulnerability.
 
 **Where you respawn.** Every legal spawn is a candidate, weighted by the *square* of the
@@ -441,7 +441,8 @@ present, every bot is removed. A host who removes bots by hand — `/kick bot N`
 name, or `/bots` lower than it is — switches the top-up off, and it stays off until the room has
 emptied and sat empty for those two rounds. Asking for *more* bots never switches it off.
 
-**The host is a role, not a name.** It is the configured admin while they are connected and the
+**The host is a role, not a name.** It is the admin while they are connected — the browser that
+presents the key in `config.ini`, never merely somebody who typed the admin's name — and the
 longest-standing human otherwise, so a room is never left without somebody who can restart it —
 which is the whole reason the commands exist. It passes down the instant they leave, and the
 scoreboard shows a crown so you can see who has it.

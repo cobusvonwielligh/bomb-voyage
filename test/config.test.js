@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseIni } from '../server/config.js';
+import { parseIni, sameSecret } from '../server/config.js';
+import { playerName } from '../server/net.js';
 
 test('ini parsing', async t => {
   await t.test('sections, comments, and values with = in them', () => {
@@ -30,4 +31,19 @@ test('ini parsing', async t => {
   await t.test('junk does not throw', () => {
     assert.doesNotThrow(() => parseIni('[unclosed\nno-equals-here\n\n[]\n= orphan'));
   });
+});
+
+test('secrets compare only when they match exactly, and blank never matches', () => {
+  assert.equal(sameSecret('abc', 'abc'), true);
+  assert.equal(sameSecret('abd', 'abc'), false);
+  assert.equal(sameSecret('abcd', 'abc'), false, 'a longer guess with the right prefix');
+  assert.equal(sameSecret(undefined, 'abc'), false);
+  assert.equal(sameSecret('', ''), false, 'an unset key would let everybody in');
+  assert.equal(sameSecret(undefined, ''), false);
+});
+
+test('a name cannot pass for the server in chat', () => {
+  assert.equal(playerName('SERVER'), 'anon');
+  assert.equal(playerName(' server '), 'anon');
+  assert.equal(playerName('servers'), 'servers');
 });

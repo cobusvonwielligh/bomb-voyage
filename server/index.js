@@ -5,10 +5,9 @@ import http from 'node:http';
 import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { attachHub } from './net.js';
-import { config, usingTls, ROOT } from './config.js';
+import { config, usingTls, ROOT, sameSecret } from './config.js';
 import { canonicalTarget } from './canonical.js';
 import { createLeaderboard } from './leaderboard.js';
 import { startWebTransport } from './webtransport.js';
@@ -55,11 +54,18 @@ const CSP = [
   "connect-src 'self' ws: wss:",
   "object-src 'none'",
   "base-uri 'none'",
+  // Nobody may frame the game: no clickjacking the host into typing /kick.
+  "frame-ancestors 'none'",
 ].join('; ');
 
+/** `decodeURIComponent` throws on a stray `%`, and a throw in here used to take the process down. */
+function decodePath(urlPath) {
+  try { return decodeURIComponent(urlPath.split('?')[0]); } catch { return null; }
+}
+
 function resolveFile(urlPath) {
-  const clean = decodeURIComponent(urlPath.split('?')[0]);
-  if (clean.includes('\0') || clean.split('/').includes('..')) return null;
+  const clean = decodePath(urlPath);
+  if (clean === null || clean.includes('\0') || clean.includes('\\') || clean.split('/').includes('..')) return null;
   for (const { prefix, dir } of MOUNTS) {
     if (!clean.startsWith(prefix)) continue;
     let rel = clean.slice(prefix.length) || 'index.html';
@@ -84,12 +90,7 @@ function handleDeploy(req, res) {
   // No token configured (any laptop) means the endpoint does not exist at all.
   if (!config.deployToken) return false;
 
-  const given = req.headers['x-deploy-token'];
-  const want = config.deployToken;
-  const a = Buffer.from(String(given ?? ''));
-  const b = Buffer.from(want);
-  const ok = a.length === b.length && crypto.timingSafeEqual(a, b);
-
+  const ok = sameSecret(req.headers['x-deploy-token'], config.deployToken);
   const who = req.socket.remoteAddress;
   if (req.method !== 'POST' || !ok) {
     // Deliberately a 404, not a 401: an unauthenticated caller learns nothing about the endpoint.
@@ -107,9 +108,13 @@ function handleDeploy(req, res) {
 
   console.log(`deploy: accepted from ${who}, self-update starting`);
   // Detached, because the script restarts this very process. Answer first, then die.
+  // The script restarts us by signalling this pid: the unit sets NoNewPrivileges, so it cannot sudo.
   const child = spawn('bash', [config.deployScript], {
     cwd: ROOT, detached: true, stdio: 'ignore',
+    env: { ...process.env, BV_SERVER_PID: String(process.pid) },
   });
+  // An unhandled 'error' (no bash on this machine) would otherwise be an uncaught exception.
+  child.on('error', err => console.warn(`deploy: could not start the update (${err.message})`));
   child.unref();
 
   res.writeHead(202, { 'Content-Type': 'application/json' });
@@ -122,7 +127,19 @@ function handleDeploy(req, res) {
 const started = Date.now();
 const guard = createGuard();
 
+/* A throw while answering one request must never become an uncaught exception: that handler
+ * exits the process, so a single malformed URL was enough to restart the game for everybody. */
 function handle(req, res) {
+  try {
+    serve(req, res);
+  } catch (err) {
+    console.warn(`request ${req.method} ${String(req.url).slice(0, 200)} failed (${err.message})`);
+    if (!res.headersSent) res.writeHead(400, { 'Content-Type': 'text/plain' });
+    res.end();
+  }
+}
+
+function serve(req, res) {
   // Flood protection first, before any work is spent on the request. See server/guard.js.
   if (!guard.allowRequest(req.socket.remoteAddress)) {
     res.writeHead(429, { 'Retry-After': '2', 'Content-Type': 'text/plain' });
@@ -131,6 +148,9 @@ function handle(req, res) {
   res.setHeader('Content-Security-Policy', CSP);
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
+  // Over TLS only: the browser then refuses plain HTTP to this name for a year, so nobody on the
+  // office wifi can be quietly served a downgraded page.
+  if (usingTls) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
 
   const url = req.url.split('?')[0];
 
@@ -246,13 +266,6 @@ function range416(res, size) {
   res.end('range not satisfiable');
 }
 
-/**
- * What is actually running, for /healthz.
- *
- * `.version` is written by infra/deploy.sh and wins, because a manual deploy rsyncs the working
- * tree without touching `.git` — reading the git sha alone would report the last *pulled*
- * commit, not the code on disk. Falls back to .git/HEAD for a self-update, and to null locally.
- */
 /** The semantic version, read once out of package.json. `npm run tag` is what moves it. */
 let cachedPkg;
 function pkgVersion() {
@@ -263,6 +276,13 @@ function pkgVersion() {
   return cachedPkg;
 }
 
+/**
+ * What is actually running, for /healthz.
+ *
+ * `.version` is written by infra/deploy.sh and wins, because a manual deploy rsyncs the working
+ * tree without touching `.git` — reading the git sha alone would report the last *pulled*
+ * commit, not the code on disk. Falls back to .git/HEAD for a self-update, and to null locally.
+ */
 let cachedVersion;
 function version() {
   if (cachedVersion !== undefined) return cachedVersion;
@@ -285,6 +305,18 @@ const server = usingTls
   ? https.createServer(
       { cert: fs.readFileSync(config.tlsCert), key: fs.readFileSync(config.tlsKey) }, handle)
   : http.createServer(handle);
+hardenTimeouts(server);
+
+/* Node's defaults wait a minute for headers and five for a body, so a few hundred connections
+ * that send one header byte every few seconds tie the box up without ever tripping the request
+ * guard. Every request here is a GET or an empty POST: ten seconds is generous. Upgraded
+ * WebSockets leave the HTTP server's books and are unaffected. */
+function hardenTimeouts(s) {
+  s.headersTimeout = 10_000;
+  s.requestTimeout = 15_000;
+  s.maxHeadersCount = 64;
+  return s;
+}
 
 const leaderboard = createLeaderboard({ dataDir: config.dataDir });
 const hub = attachHub(server, { ...config, leaderboard, guard });
@@ -306,7 +338,7 @@ if (usingTls) {
     port: config.port,
     cert: fs.readFileSync(config.tlsCert, 'utf8'),
     privKey: fs.readFileSync(config.tlsKey, 'utf8'),
-    onSocket: ws => hub.attachSocket(ws),
+    onSocket: (ws, ip) => hub.attachSocket(ws, ip),
   }).then(h => { wt = h; }).catch(err => console.warn(`webtransport: ${err.message}`));
 }
 
@@ -319,23 +351,16 @@ server.listen(config.port, () => {
 
 // Plain HTTP exists only to bounce people to HTTPS and to answer ACME challenges.
 if (usingTls && config.redirectPort) {
-  http.createServer((req, res) => {
+  hardenTimeouts(http.createServer((req, res) => {
+    if (!guard.allowRequest(req.socket.remoteAddress)) {
+      res.writeHead(429, { 'Retry-After': '2' });
+      return res.end();
+    }
     res.writeHead(301, { Location: `https://${config.publicHost}${req.url}` });
     res.end();
-  }).listen(config.redirectPort);
+  })).listen(config.redirectPort);
 }
 
-/* Shutting down has to finish writing before it exits.
- *
- * Two bugs lived here. The scores of everyone still playing were only ever written at a round
- * boundary, so a deploy in the middle of a ten-minute round discarded it — and on a build day
- * that is most deploys. And `leaderboard.stop()` returns a promise that nothing awaited, while
- * `server.close` could call `process.exit` first, so even the writes that were queued could be
- * cut off halfway.
- *
- * Now: bank the round, await the save, then exit. The three-second backstop stays, because a
- * shutdown that hangs is worse than one that loses a few points.
- */
 /* A crash is the shutdown nobody planned, and it used to save nothing: everything earned since
  * the last round boundary was simply gone. Bank and write synchronously — there is no event loop
  * worth trusting at this point — then exit non-zero so systemd restarts us. */
@@ -349,6 +374,17 @@ process.on('unhandledRejection', err => {
   console.error('unhandled rejection', err);
 });
 
+/* Shutting down has to finish writing before it exits.
+ *
+ * Two bugs lived here. The scores of everyone still playing were only ever written at a round
+ * boundary, so a deploy in the middle of a ten-minute round discarded it — and on a build day
+ * that is most deploys. And `leaderboard.stop()` returns a promise that nothing awaited, while
+ * `server.close` could call `process.exit` first, so even the writes that were queued could be
+ * cut off halfway.
+ *
+ * Now: bank the round, await the save, then exit. The three-second backstop stays, because a
+ * shutdown that hangs is worse than one that loses a few points.
+ */
 let shuttingDown = false;
 for (const sig of ['SIGTERM', 'SIGINT']) {
   process.on(sig, async () => {

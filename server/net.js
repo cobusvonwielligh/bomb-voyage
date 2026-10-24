@@ -9,16 +9,28 @@ import {
 } from '../shared/constants.js';
 import { createRoom } from './room.js';
 import { createGuard, addressOf } from './guard.js';
+import { sameSecret } from './config.js';
 
 // Open sessions — playing or watching — one browser may hold at once. See claimDevice.
 export const MAX_SESSIONS_PER_DEVICE = 2;
 
+/* Wire values are coerced by type, never by `String()` or `| 0`: both call the object's own
+ * toString/valueOf, and `{"toString":1,"valueOf":1}` off the wire makes either one throw. */
+const text = raw => (typeof raw === 'string' ? raw : typeof raw === 'number' ? String(raw) : '');
+const int = raw => (typeof raw === 'number' ? raw | 0 : 0);
+
 /** Strip control characters, trim, cap length. Names are rendered with textContent, never HTML. */
 export const sanitizeName = raw =>
-  String(raw ?? '')
+  text(raw)
     .replace(/[\x00-\x1f\x7f]/g, '')
     .trim()
     .slice(0, NAME_MAX_CHARS) || 'anon';
+
+/** A sanitised name that cannot pass for the server's own announcements in chat. */
+export const playerName = raw => {
+  const name = sanitizeName(raw);
+  return name.toLowerCase() === 'server' ? 'anon' : name;
+};
 
 /** "30s", "45m", "2h 15m" — short enough to fit in a reject reason. */
 export function humanDuration(ms) {
@@ -72,7 +84,7 @@ export function createBans({ now = Date.now } = {}) {
  * A factory taking its dependencies rather than a closure inside attachHub, so the parsing and
  * the permission checks can be tested without a socket, a port or a running room.
  */
-export function createCommands({ room, config, reply, announce, kick, bans }) {
+export function createCommands({ room, config, reply, announce, kick, signOut, bans }) {
   const PUBLIC = `commands: /bots N (0-${config.maxPlayers - 1}) · /who · /logout · /help`;
   const ADMIN = 'admin: /restart · /godmode · /kick bot N · /kick NAME [hours] · ' +
     `/map 0-${room.maps().length - 1} · /gamespeed ${GAMESPEED_MIN}-${GAMESPEED_MAX} · ` +
@@ -135,15 +147,9 @@ export function createCommands({ room, config, reply, announce, kick, bans }) {
 
       case 'logout':
       case 'signout': {
-        const who = room.state.players[seat]?.name ?? '?';
-        // Tell this client to forget its stored id BEFORE the seat goes, or the close races the
-        // message and it reconnects straight back into the identity it just gave up.
-        sendTo(ws, { t: 'reject', why: 'signed out', forget: true });
-        room.logout(seat);
-        bySeat.delete(seat);
-        announce(`${who} signed out`);
-        ws.close(4002, 'signed out');
-        return;
+        const who = nameOf(seat);
+        signOut(ws, seat);
+        return announce(`${who} signed out`);
       }
 
       case 'who':
@@ -271,7 +277,8 @@ export function attachHub(server, config) {
 
   const room = createRoom({
     onBroadcast: broadcast,
-    adminName: config.adminName,
+    // With a key configured the name grants nothing: see `adminKey` in server/config.js.
+    adminName: config.adminKey ? '' : config.adminName,
     // The room decided this seat is gone. Close the socket too, or the client sits there happily
     // predicting into a seat that no longer exists.
     onKick: (seat, why) => {
@@ -313,7 +320,22 @@ export function attachHub(server, config) {
     return info;
   }
 
-  const commands = createCommands({ room, config, reply, announce, kick, bans });
+  /**
+   * Give a seat up for good, at the player's own request.
+   *
+   * The client is told to forget its stored id BEFORE the seat goes, or the close races the
+   * message and it reconnects straight back into the identity it just gave up. Marked like a
+   * kick, so the close handler does not put a seat that may already be someone else's on hold.
+   */
+  function signOut(ws, seat) {
+    sendTo(ws, { t: 'reject', why: 'signed out', forget: true });
+    room.logout(seat);
+    ws.bvKicked = true;
+    bySeat.delete(seat);
+    ws.close(4002, 'signed out');
+  }
+
+  const commands = createCommands({ room, config, reply, announce, kick, signOut, bans });
 
   /**
    * One connected player, whatever pipe they arrived down.
@@ -324,8 +346,8 @@ export function attachHub(server, config) {
    * stays honest: one protocol, one implementation, two pipes.
    */
   function handleSocket(ws, req) {
-    // Set by verifyClient for WebSocket; WebTransport sessions arrive without one and are only
-    // budgeted per socket.
+    // Set by verifyClient for WebSocket and by attachSocket for WebTransport; `guard.closed` gives
+    // the address its slot back when the socket goes.
     ws.bvIp = req?.bvIp ?? null;
     let seat = -1;
     let lastChat = 0;
@@ -352,7 +374,14 @@ export function attachHub(server, config) {
       let msg;
       try { msg = JSON.parse(raw); } catch { return; }
       if (!msg || typeof msg.t !== 'string') return;
+      // One player's message going wrong is logged, not thrown: an uncaught exception ends the
+      // process, and with it everybody's round. /logout once did exactly that.
+      try { onMessage(msg); } catch (err) {
+        console.error(`message ${msg.t} from seat ${seat} failed`, err);
+      }
+    });
 
+    function onMessage(msg) {
       switch (msg.t) {
         case 'hello': {
           if (seat >= 0 || watchers.has(ws)) return;
@@ -378,14 +407,14 @@ export function attachHub(server, config) {
           }
           const playerId = typeof msg.playerId === 'string' && msg.playerId.length <= 64
             ? msg.playerId : `p_${randomUUID()}`;
-          const name = sanitizeName(msg.name);
+          const name = playerName(msg.name);
 
           const banned = bans.remainingMs(name);
           if (banned > 0) {
             return sendTo(ws, { t: 'reject', why: `banned, ${humanDuration(banned)} left` });
           }
 
-          const res = room.join(playerId, name);
+          const res = room.join(playerId, name, { admin: sameSecret(msg.adminKey, config.adminKey) });
           if (res.seat < 0) {
             // `forget` tells the client its stored identity is the problem, so it can offer to
             // drop it rather than leaving somebody stuck on a screen that just says no.
@@ -414,28 +443,28 @@ export function attachHub(server, config) {
 
         case 'input':
           if (seat < 0) return;
-          room.input(seat, msg.tick | 0, msg.m | 0);
+          room.input(seat, int(msg.tick), int(msg.m));
           break;
 
         case 'chat': {
           if (seat < 0) return;
           const now = Date.now();
-          const text = String(msg.msg ?? '').replace(/[\x00-\x1f\x7f]/g, '').slice(0, CHAT_MAX_CHARS);
-          if (!text) return;
+          const said = text(msg.msg).replace(/[\x00-\x1f\x7f]/g, '').slice(0, CHAT_MAX_CHARS);
+          if (!said) return;
 
           // Commands get their own, much shorter throttle. The one-second chat limit exists to
           // stop someone flooding the channel; applying it to /bots meant a second command typed
           // straight after the first silently vanished, which reads as a broken feature.
-          if (text[0] === '/') {
+          if (said[0] === '/') {
             if (now - lastCommand < 250) return;
             lastCommand = now;
-            commands.run(ws, seat, text);
+            commands.run(ws, seat, said);
             break;
           }
 
           if (now - lastChat < CHAT_MIN_INTERVAL_MS) return;
           lastChat = now;
-          broadcast({ t: 'chat', i: seat, name: room.state.players[seat]?.name ?? '?', msg: text });
+          broadcast({ t: 'chat', i: seat, name: room.state.players[seat]?.name ?? '?', msg: said });
           break;
         }
 
@@ -449,7 +478,7 @@ export function attachHub(server, config) {
 
         // Unknown types are ignored on purpose — that is the forward-compatibility story.
       }
-    });
+    }
 
     ws.on('close', () => {
       releaseDevice(ws);
@@ -458,7 +487,6 @@ export function attachHub(server, config) {
       if (seat < 0) return;
       // Kicked sockets have already given the seat up, and it may have a new occupant by now.
       if (ws.bvKicked) return;
-      watchers.delete(ws);
       if (bySeat.get(seat) === ws) bySeat.delete(seat);
       // The seat, the score and the position are held for a while; see RECONNECT_GRACE_TICKS.
       room.disconnect(seat);
@@ -488,11 +516,13 @@ export function attachHub(server, config) {
     /**
      * Adopt a socket from another transport. It must present the parts of the ws API that
      * handleSocket uses: send, close, readyState/OPEN, ping, and message/close/error events.
+     * `ip` is the peer address, held to the same per-address limits as a WebSocket.
      */
-    attachSocket(ws) {
+    attachSocket(ws, ip = null) {
+      if (ip && !guard.allowConnect(ip)) { ws.close(1008, 'too many connections'); return; }
       extraSockets.add(ws);
       ws.once('close', () => extraSockets.delete(ws));
-      handleSocket(ws);
+      handleSocket(ws, { bvIp: ip });
     },
     get transportCounts() {
       let wt = 0;

@@ -7,6 +7,7 @@
 // is the committed template. On the server the real file lives at /opt/bomb-voyage/config.ini
 // and is excluded from rsync, so a deploy never overwrites it.
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -61,10 +62,19 @@ export const config = {
   lag: num('LAG', 'dev', 'lag', 0),
   jitter: num('JITTER', 'dev', 'jitter', 0),
 
-  // Who may use the admin chat commands. This is a name check, and names are not secret — it
-  // keeps honest colleagues from typing /restart mid-round, and nothing more. If that ever
-  // matters, make it a token in config.ini and compare with timingSafeEqual.
+  // Who is always host. With a key set, it is whoever's browser presents the key — opened once
+  // as /?admin=KEY, then remembered. Without one it falls back to the name, which is fine on a
+  // laptop and nowhere else: names are not secret, and this one is in a public repository.
+  adminKey: pick('ADMIN_KEY', 'admin', 'key', ''),
   adminName: String(pick('ADMIN_NAME', 'admin', 'name', 'cobusvw')).toLowerCase(),
 };
 
 export const usingTls = Boolean(config.tlsCert && config.tlsKey);
+
+/** Constant-time comparison of a presented secret against the configured one. Blank never matches. */
+export function sameSecret(given, want) {
+  if (!want || typeof given !== 'string') return false;
+  const a = Buffer.from(given);
+  const b = Buffer.from(String(want));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}

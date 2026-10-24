@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { encodeFrame, createFramer, pickChannel, DATAGRAM_SAFE_BYTES } from '../shared/wire.js';
+import { peerIp } from '../server/webtransport.js';
 
 const bytes = s => new TextEncoder().encode(s);
 const collect = () => { const got = []; return { got, push: createFramer(m => got.push(m)) }; };
@@ -109,4 +110,12 @@ test('the websocket defers to an in-flight webtransport attempt', () => {
   const race = Number(src.match(/const RACE_MS = (\d+)/)[1]);
   assert.ok(prefer > 0 && prefer < race, `PREFER_MS ${prefer} must sit inside RACE_MS ${race}`);
   assert.ok(prefer <= 500, `${prefer}ms is long enough to feel on the join screen`);
+});
+
+test('a WebTransport peer address is reduced to the address alone', () => {
+  assert.equal(peerIp('1.2.3.4:5678'), '1.2.3.4');
+  assert.equal(peerIp('[::1]:443'), '::1');
+  assert.equal(peerIp('::ffff:1.2.3.4:5678'), '::ffff:1.2.3.4');
+  assert.equal(peerIp(undefined), null);
+  assert.equal(peerIp('undefined:undefined'), null);
 });

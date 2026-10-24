@@ -103,7 +103,9 @@ fi
 cd "$APP_DIR"
 [ -f package.json ] && npm ci --omit=dev --silent || true
 
-echo "==> sudoers for self-update (three exact commands, nothing broader)"
+# Used by infra/deploy.sh over SSH. The service itself cannot sudo at all: the unit sets
+# NoNewPrivileges, and self-update.sh restarts by signalling the server instead.
+echo "==> sudoers for deploys (three exact commands, nothing broader)"
 sudo tee /etc/sudoers.d/bomb-voyage >/dev/null <<SUDO
 Cmnd_Alias BOMB_VOYAGE = /usr/bin/systemctl restart bomb-voyage, \\
                          /usr/bin/systemctl daemon-reload, \\
@@ -118,10 +120,13 @@ sudo visudo -c -f /etc/sudoers.d/bomb-voyage >/dev/null
 # Guard the file test rather than relying on 2>/dev/null: with `set -o pipefail` a missing file
 # makes the whole pipeline fail and takes the script with it.
 TOKEN=""
+ADMIN_KEY=""
 if [ -f "$APP_DIR/config.ini" ]; then
   TOKEN=$(sed -n 's/^ *token *= *//p' "$APP_DIR/config.ini" | head -1 || true)
+  ADMIN_KEY=$(sed -n 's/^ *key *= *//p' "$APP_DIR/config.ini" | head -1 || true)
 fi
 [ -n "$TOKEN" ] || TOKEN=$(openssl rand -hex 32)
+[ -n "$ADMIN_KEY" ] || ADMIN_KEY=$(openssl rand -hex 16)
 
 write_config() {
   cat > "$APP_DIR/config.ini" <<CFG
@@ -137,6 +142,9 @@ max_players   = 16
 
 [deploy]
 token = $TOKEN
+
+[admin]
+key = $ADMIN_KEY
 
 [dev]
 lag    = 0
@@ -224,3 +232,5 @@ echo
 echo "GitHub repo secrets to set (Settings > Secrets and variables > Actions):"
 echo "  DEPLOY_URL   = https://$HOST/deploy"
 echo "  DEPLOY_TOKEN = $TOKEN"
+echo
+echo "Host link, open once in your own browser: https://$HOST/?admin=$ADMIN_KEY"

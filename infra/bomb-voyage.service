@@ -16,10 +16,18 @@ RestartSec=2
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 
-NoNewPrivileges=false
+# ec2-user can sudo anything, so this is what stops a hole in the game becoming root on the box.
+# It is also why infra/self-update.sh restarts the service by signalling it rather than via sudo.
+NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=full
+PrivateDevices=true
+ProtectSystem=strict
 ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
 ReadWritePaths=/var/lib/bomb-voyage /opt/bomb-voyage
 
 StandardOutput=journal

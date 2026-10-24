@@ -139,6 +139,8 @@ Precedence is **environment variable > `config.ini` > built-in default**, so a o
 | | `min_bots` | `MIN_BOTS` | `6` | Bots kept topped up while anyone plays; 0 turns it off |
 | `deploy` | `token` | `DEPLOY_TOKEN` | blank | Secret for `POST /deploy`. **Blank disables the endpoint entirely** — correct on a laptop. |
 | | `ssh_host` / `ssh_user` / `ssh_key` | same | — | Used by `infra/deploy.sh`. |
+| `admin` | `key` | `ADMIN_KEY` | blank | Whoever's browser presents it is always host. Open `https://<host>/?admin=<key>` once; the browser keeps it and the address bar drops it. `bootstrap.sh` generates one. |
+| | `name` | `ADMIN_NAME` | `cobusvw` | Only used when `key` is blank, which is right on a laptop and wrong anywhere else: names are not secret. |
 | `dev` | `lag` / `jitter` | `LAG` / `JITTER` | `0` | Outbound delay in ms. The process **refuses to start** if either is non-zero while TLS is configured. |
 
 Local development needs no file at all: `npm start` → `http://localhost:8080`.
@@ -161,7 +163,7 @@ push to main ─► GitHub Actions ─► npm ci && npm test
                      server runs infra/self-update.sh:
                      git reset --hard origin/main
                      npm ci --omit=dev
-                     systemctl restart bomb-voyage
+                     SIGTERM to the server → systemd restarts it
                                       │
                       Actions polls /healthz until
                       "version" equals the pushed sha
@@ -180,6 +182,9 @@ The endpoint is deliberately unhelpful to strangers:
 - 10-second cooldown, so a stuck workflow cannot restart the box in a loop.
 - No token configured → the route does not exist at all. That is the default everywhere except
   the server.
+- The script cannot sudo: the unit sets `NoNewPrivileges`. It restarts the server by sending it
+  SIGTERM (which banks the round) and letting `Restart=always` bring the new code up. A changed
+  unit file is therefore only installed by `npm run deploy`, which comes in over SSH.
 
 ### Secrets to set once
 
@@ -309,7 +314,8 @@ Free for a year, about $12/month after.
 |---|---|
 | **CI deploy returns 404** | Wrong `DEPLOY_TOKEN`, or `config.ini` on the server has no `[deploy] token`. The endpoint answers 404 to anything it does not like, on purpose. |
 | **CI deploy returns 429** | Two deploys within 10 s. The workflow `concurrency` group should prevent it; check for a manual `curl`. |
-| **Deploy accepted but version never changes** | `sudo journalctl -u bomb-voyage` plus `/var/lib/bomb-voyage/self-update.log`. Usually the sudoers drop-in is missing — re-run `bootstrap.sh`. |
+| **Deploy accepted but version never changes** | `sudo journalctl -u bomb-voyage` plus `/var/lib/bomb-voyage/self-update.log`. Usually the deploy key cannot fetch — re-run `bootstrap.sh`. |
+| **Nobody has host commands, including you** | Your browser has no admin key yet, or an old one. Open `https://<host>/?admin=<key>` once; the key is `[admin] key` in the server's `config.ini`. |
 | **Server came up on 8080 without TLS** | `config.ini` is missing or has blank `tls_cert`. The service reads only that file now; `/etc/bomb-voyage.env` is no longer used. |
 | **No music in the browser** | Autoplay is blocked until a gesture. The page arms a one-shot click/keypress listener; if it still fails, check the console for an AudioContext error. |
 | **All ports time out** (22, 80, 443) | Security group does not have the rule, *or* the Elastic IP is not associated with a running instance. A timeout means the packet was dropped; a *refused* would mean it arrived and nothing was listening. |
@@ -317,3 +323,25 @@ Free for a year, about $12/month after.
 | `certbot` fails with a connection error | Port 80 not open, or DNS not yet pointing at the box. `dig +short <host>` must return the Elastic IP. |
 | Service dies on start | `journalctl -u bomb-voyage -n 50`. Usually a cert path or a port permission — check `AmbientCapabilities` survived in the unit file. |
 | Page loads, WebSocket does not | Mixed content (page on https, socket on ws). The client derives the scheme from `location.protocol`; if you hardcoded one, that is the bug. |
+
+---
+
+## 12. Security
+
+What stands between the internet and the box, checked end to end on 2026-10-24 for v1.0.0.
+
+| Layer | What it does |
+|---|---|
+| **Security group** | 443 and 80 to the world, 22 to one address. sshd logged no attempt from anywhere else in the three days checked. |
+| **sshd** | Keys only, no root login, no X11, three tries per connection — `/etc/ssh/sshd_config.d/00-bomb-voyage.conf`, put there by hand (not by `bootstrap.sh`). |
+| **The service** | Runs as `ec2-user` with `NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome` and a private `/tmp`. `ec2-user` can sudo anything, so `NoNewPrivileges` is the line that keeps a hole in the game from becoming root. |
+| **HTTP** | Per-address token bucket (40/s, burst 200) on both listeners; headers must arrive within 10 s; `GET /%`-style junk is a 404, never an exception. CSP `default-src 'self'`, `frame-ancestors 'none'`, HSTS, `nosniff`. |
+| **Sockets** | WebSocket *and* WebTransport share the per-address limits: 90 connects a minute (burst 40), 64 open at once, 120 messages a second per socket, 4 KB per message. A socket that keeps flooding is closed. |
+| **Messages** | Every field is type-checked, and a message handler that throws is logged and dropped rather than taking the process down. |
+| **Host commands** | Gated by `[admin] key`, compared in constant time. Without it the host is the longest-standing human, as before. |
+| **`/deploy`** | 404 to anything but a POST with the right token; 10 s cooldown. |
+| **Secrets** | `config.ini` only, `chmod 600`, never in git (the history was checked). |
+
+The regressions that were found doing that check — a stray `%` in a URL, `/logout`, and a message
+field whose `toString` is not a function each ended the process — are locked in by
+`test/smoke.test.js`.
