@@ -879,9 +879,10 @@ export function createRenderer(canvas, world) {
    *
    *   SLOW     the listener eases each band over a quarter of a second up and most of one down,
    *            and the bars ease again here on top of that.
-   *   SMOOTH   neighbouring bands are blurred together, and every strip of coast reads its
-   *            height at its exact position between two bands — so the coast is one continuous
-   *            rolling profile, not a staircase where one stretch hands over to the next.
+   *   STILL    the coast is cut into short straight runs, each run one band, and a whole run
+   *            rises and falls together straight out from its wall. Nothing ever moves ALONG the
+   *            coast — an earlier version interpolated between bands and the peaks slid sideways,
+   *            which read as the whole shoreline flowing.
    *   FINE     each tile is split into a grid: EQ_SUB blocks outward and two across, small
    *            inset blocks rather than whole-tile slabs. More resolution, far less weight.
    *
@@ -989,9 +990,15 @@ export function createRenderer(canvas, world) {
   }
 
   /**
-   * The coast, cut into strips: two per sea-facing tile edge, each half a tile wide, each with
-   * its own continuous position along the spectrum (0 bass … 1 treble). Cached per map.
+   * The coast, cut into strips — two per sea-facing tile edge, each half a tile wide — and the
+   * strips grouped into RUNS: up to EQ_RUN tiles of one straight wall, facing one way. A whole
+   * run takes one band and rises and falls as one, straight out from its wall.
+   *
+   * Runs, not per-strip heights, because heights read between neighbouring bands made the peaks
+   * slide sideways along the shore, and the coast looked like it was flowing. Now nothing moves
+   * along the coast at all: every bar only grows and shrinks perpendicular to its wall.
    */
+  const EQ_RUN = 4;
   function coastEq() {
     if (eqFor === world.map && eqCoast.length) return eqCoast;
     eqFor = world.map;
@@ -999,24 +1006,44 @@ export function createRenderer(canvas, world) {
     const S = TILE_PX, step = S / EQ_SUB, half = S / 2;
     const [lx, ly, lw, lh] = landBounds();
     const cx = lx + lw / 2, cy = ly + lh / 2;
+    const walls = new Map();          // "dx,dy,line" -> tiles along that line facing that way
     for (const s of shoreline()) {
       for (const [bit, dx, dy] of [[1, 1, 0], [4, -1, 0], [2, 0, -1], [8, 0, 1]]) {
         if (!(s.e & bit)) continue;
-        for (let h = 0; h < 2; h++) {
-          // Where this half-strip sits along the coast, in tiles, for its spectrum position.
-          const mx = dx ? s.tx + 0.5 + dx * 0.5 : s.tx + 0.25 + h * 0.5;
-          const my = dy ? s.ty + 0.5 + dy * 0.5 : s.ty + 0.25 + h * 0.5;
-          const pos = Math.abs(Math.atan2(mx - cx, my - cy)) / Math.PI;   // 0 below, 1 above
-          eqCoast.push({
-            // First block, the one touching the rock, and how to step outward from it.
-            x: dx > 0 ? (s.tx + 1) * S : dx < 0 ? s.tx * S - step : s.tx * S + h * half,
-            y: dy > 0 ? (s.ty + 1) * S : dy < 0 ? s.ty * S - step : s.ty * S + h * half,
-            sx: dx * step, sy: dy * step,
-            w: dx ? step : half, h: dy ? step : half,
-            pos, shade: Math.min(EQ_SHADES - 1, (pos * EQ_SHADES) | 0),
-          });
-        }
+        const key = `${dx},${dy},${dx ? s.tx : s.ty}`;
+        if (!walls.has(key)) walls.set(key, []);
+        walls.get(key).push(s);
       }
+    }
+    for (const [key, tiles] of walls) {
+      const [dx, dy] = key.split(',').map(Number);
+      const along = s => (dx ? s.ty : s.tx);
+      tiles.sort((a, b) => along(a) - along(b));
+      // Contiguous runs along the wall, cut at EQ_RUN tiles.
+      let run = [];
+      const flush = () => {
+        if (!run.length) return;
+        const mx = run.reduce((t, s) => t + s.tx, 0) / run.length + 0.5 + dx * 0.5;
+        const my = run.reduce((t, s) => t + s.ty, 0) / run.length + 0.5 + dy * 0.5;
+        const pos = Math.abs(Math.atan2(mx - cx, my - cy)) / Math.PI;   // 0 below, 1 above
+        for (const s of run) {
+          for (let h = 0; h < 2; h++) {
+            eqCoast.push({
+              x: dx > 0 ? (s.tx + 1) * S : dx < 0 ? s.tx * S - step : s.tx * S + h * half,
+              y: dy > 0 ? (s.ty + 1) * S : dy < 0 ? s.ty * S - step : s.ty * S + h * half,
+              sx: dx * step, sy: dy * step,
+              w: dx ? step : half, h: dy ? step : half,
+              pos, shade: Math.min(EQ_SHADES - 1, (pos * EQ_SHADES) | 0),
+            });
+          }
+        }
+        run = [];
+      };
+      for (const s of tiles) {
+        if (run.length && (along(s) !== along(run[run.length - 1]) + 1 || run.length >= EQ_RUN)) flush();
+        run.push(s);
+      }
+      flush();
     }
     eqCoast.sort((a, b) => a.shade - b.shade);         // one fillStyle change per shade
     return eqCoast;
@@ -1027,24 +1054,20 @@ export function createRenderer(canvas, world) {
     if (!eq || !eq.length) return;
     const n = eq.length;
     if (eqLen.length !== n) { eqLen = new Float32Array(n); eqBlur = new Float32Array(n); }
-    const k = 1 - Math.exp(-dtMs / 260);               // a second, slower glide on top
+    // Slow. Over half a second to rise and well over a second to settle, on top of the
+    // listener's own easing: the coast should breathe, not twitch.
+    const up = 1 - Math.exp(-dtMs / 650), down = 1 - Math.exp(-dtMs / 1400);
     for (let b = 0; b < n; b++) {
-      // The smoothed bands live lower than the raw ones did (peaks are rounded off), so the map
-      // starts a little lower too — otherwise slowing the bars down would also have shortened
-      // them, and the reduction would have been far more than the half that was asked for.
+      // The smoothed bands live lower than the raw ones did, so the map starts lower too.
       const target = Math.max(0, Math.min(1, (eq[b] - 0.26) / 0.5)) * EQ_MAX;
-      eqLen[b] += (target - eqLen[b]) * k;
+      eqLen[b] += (target - eqLen[b]) * (target > eqLen[b] ? up : down);
     }
-    // Blur across neighbouring bands, twice, so no band stands up on its own like a post. The
-    // eased lengths are left alone; the blur is only what is drawn.
-    eqBlur.set(eqLen);
-    for (let pass = 0; pass < 2; pass++) {
-      let prev = eqBlur[0];
-      for (let b = 0; b < n; b++) {
-        const cur = eqBlur[b], next = eqBlur[Math.min(n - 1, b + 1)];
-        eqBlur[b] = prev * 0.25 + cur * 0.5 + next * 0.25;
-        prev = cur;
-      }
+    // One gentle blur across neighbouring bands, so no band stands up on its own like a post.
+    let prev = eqLen[0];
+    for (let b = 0; b < n; b++) {
+      const cur = eqLen[b], next = eqLen[Math.min(n - 1, b + 1)];
+      eqBlur[b] = prev * 0.25 + cur * 0.5 + next * 0.25;
+      prev = cur;
     }
     let any = false;
     for (let b = 0; b < n; b++) if (eqBlur[b] > 0.04) { any = true; break; }
@@ -1054,9 +1077,8 @@ export function createRenderer(canvas, world) {
     let shade = -1;
     const deepest = EQ_MAX * EQ_SUB;
     for (const c of coastEq()) {
-      // Read the height at this strip's exact place between two bands.
-      const f = c.pos * (n - 1), b0 = f | 0, b1 = Math.min(n - 1, b0 + 1), t = f - b0;
-      const L = (eqBlur[b0] * (1 - t) + eqBlur[b1] * t) * EQ_SUB;     // in blocks
+      // The run's own band — one height for the whole run, so nothing slides along the coast.
+      const L = eqBlur[Math.min(n - 1, Math.round(c.pos * (n - 1)))] * EQ_SUB;   // in blocks
       if (L < 0.15) continue;
       if (c.shade !== shade) { shade = c.shade; ctx.fillStyle = EQ_COLOURS[shade]; }
       const blocks = Math.ceil(L);

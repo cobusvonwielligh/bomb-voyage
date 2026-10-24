@@ -114,12 +114,12 @@ test('the equaliser moves with the music, band by band, and never jumps', () => 
   const an = fakeAnalyser(0.5);
   const lo = [], hi = [];
   let prev = null, maxStep = 0;
-  // Twenty seconds, measured over the last eight: each band's sense of "usual" takes a few
+  // Thirty seconds, measured over the last ten: each band's sense of "usual" takes a few
   // seconds to settle, and before then every band is still sliding toward it.
-  for (let f = 0; f < 20 * FPS; f++) {
+  for (let f = 0; f < 30 * FPS; f++) {
     const out = listen(an, true, 1000 / FPS);
     assert.equal(out.eq.length, EQ_BANDS);
-    if (f > 12 * FPS) {
+    if (f > 20 * FPS) {
       lo.push(out.eq[2]); hi.push(out.eq[EQ_BANDS - 3]);
       if (prev) for (let b = 0; b < EQ_BANDS; b++) maxStep = Math.max(maxStep, Math.abs(out.eq[b] - prev[b]));
       prev = Float32Array.from(out.eq);
@@ -127,9 +127,9 @@ test('the equaliser moves with the music, band by band, and never jumps', () => 
     an.tick();
   }
   const range = a => Math.max(...a) - Math.min(...a);
-  assert.ok(range(lo) > 0.1, `bass bar only moved ${range(lo).toFixed(2)}`);
+  assert.ok(range(lo) > 0.05, `bass bar only moved ${range(lo).toFixed(2)}`);
   assert.ok(range(lo) > range(hi) * 2, 'the treble bar moved as much as the bass bar on a kick');
-  assert.ok(maxStep < 0.05, `a band moved ${maxStep.toFixed(3)} in one frame — that is a jump`);
+  assert.ok(maxStep < 0.02, `a band moved ${maxStep.toFixed(3)} in one frame — that is a jump`);
 });
 
 test('accents answer musical events that are not kicks', () => {

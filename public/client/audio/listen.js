@@ -75,7 +75,7 @@ const HISTORY = 40;               // frames of delay line; ~650 ms at 60 fps
  * settle, and a longer history so a band's "usual" does not chase every phrase. */
 export const EQ_BANDS = 24;
 const EQ_LO = 45, EQ_HI = 11000;
-const EQ_ATTACK_MS = 240, EQ_RELEASE_MS = 750;
+const EQ_ATTACK_MS = 500, EQ_RELEASE_MS = 1400;
 const EQ_HISTORY_MS = 4500;
 
 /* Accents: an onset ANYWHERE in the spectrum, not just the kick. Ambient beds have almost no
