@@ -1138,8 +1138,8 @@ export function createRenderer(canvas, world) {
        * full bulk is there if you look and gone if you do not. Then the same stone again, at
        * full strength but clipped to the waterline, which is the part that breaks the surface. */
       const wlx = x, wly = y + k.r * 0.16, wrx = k.r * 0.9, wry = k.r * 0.64;
-      for (const l of k.lumps) lump(l, 1.04, '#1c3a4c', 0.22);        // submerged stone, sea-tinted
-      for (const l of k.lumps) lump(l, 0.9, '#21323f', 0.14);         // its darker heart
+      for (const l of k.lumps) lump(l, 1.04, '#1c3a4c', 0.11);        // submerged stone, sea-tinted
+      for (const l of k.lumps) lump(l, 0.9, '#21323f', 0.07);         // its darker heart
       ctx.save();
       ctx.beginPath();
       ctx.ellipse(wlx, wly, wrx, wry, 0, 0, 7);
@@ -2014,7 +2014,8 @@ export function createRenderer(canvas, world) {
           // Born as the fire dies: the arms first, the core a beat later.
           delay: (c.kind === 'core' ? 0.3 : 0.18) + Math.random() * 0.22,
           age: 0,
-          life: (keg ? 2.6 : 1.8) + Math.random() * 0.9,
+          // 40% shorter than it was, on request: it clears while the next fight is starting.
+          life: ((keg ? 2.6 : 1.8) + Math.random() * 0.9) * 0.6,
           r0: TILE_PX * (0.28 + Math.random() * 0.12) * (keg ? 1.3 : 1),
           grow: TILE_PX * (0.55 + Math.random() * 0.35) * (keg ? 1.5 : 1),
           rise: 10 + Math.random() * 10,                 // px/s, slowing as it goes
