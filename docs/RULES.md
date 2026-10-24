@@ -260,10 +260,21 @@ the renderer and the sound identify one without a flag on the wire.
 ---
 
 **Moss.** Patches of growth over the sand and every kind of stone, spanning several tiles at a
-time, from value noise at two frequencies — one that decides where a patch is and one that breaks
-its edge. Paint, nothing more: no rule anywhere reads it, it never changes what you can walk
-through, and it replaced the green shrub blocks, which were the one colour on the board that
-answered to nothing and, worse, made a walkable tile look like a wall.
+time. Three frequencies of value noise, each answering a different question: one every six tiles
+decides where a patch *is*, one a little over a tile makes its edge ragged, and one a third of a
+tile thins it from the inside so a patch has clumps and holes rather than being a field. It is
+drawn as a few dozen overlapping soft blobs sampled in world coordinates — never a tile-shaped
+anything — clipped to the tiles that can carry it, so a patch runs over a wall and onto the sand
+and stops dead at a crate.
+
+Paint, nothing more: no rule anywhere reads it, it never changes what you can walk through, and it
+replaced the green shrub blocks, which were the one colour on the board that answered to nothing
+and, worse, made a walkable tile look like a wall.
+
+**Under the boulders.** Every rock out in the sea is the top of something wider: a blurred, almost
+invisible mass in the deep water's own colour, drawn under the rock and its shadow. It is the only
+cue that says the water around a boulder is shallow, and it is what stops the rock reading as a
+sticker on a flat surface.
 
 **Light.** The map's sun (a hash of its name, pointing anywhere in a half-circle) now lights the
 blocks themselves rather than only throwing shadows: a gradient across each one along the light's

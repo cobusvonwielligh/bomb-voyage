@@ -651,10 +651,36 @@ export function createRenderer(canvas, world) {
    *
    * Baked into the chunk cache, so all of it costs nothing per frame.
    */
-  const MOSS_LOW = 5;            // tiles per cell of the patch noise
-  const MOSS_HIGH = 1.7;         // and of the edge-breaking noise
-  const MOSS_AT = 0.56;          // above this there is moss; the margin above it is its density
-  const MOSS_MAX = 0.3;          // alpha at the heart of a patch
+  /* The pattern, and the shape of it.
+   *
+   * Three frequencies, and each one is answering a different question:
+   *
+   *   MOSS_PATCH  where a patch IS. A cell every six tiles, so a patch is a feature of the
+   *               island rather than of a tile — it runs along a wall, fills the inside of a
+   *               bay, climbs over the corner of a block and carries on.
+   *   MOSS_BREAK  whether its edge is ragged. Just over a tile, which is the scale at which the
+   *               eye reads "irregular" rather than "noisy".
+   *   MOSS_GRAIN  the density WITHIN a patch, at a third of a tile. This is what stops the
+   *               middle of a patch being a flat field of green: moss grows in clumps, with the
+   *               stone showing through between them.
+   *
+   * All three are the same bilinear value noise sampled in WORLD coordinates, which is the whole
+   * reason it does not look like a tile effect: a tile asks the field what is at its position and
+   * gets an answer that continues into its neighbours.
+   */
+  const MOSS_PATCH = 6;
+  const MOSS_BREAK = 1.3;
+  const MOSS_GRAIN = 0.34;
+  const MOSS_AT = 0.54;          // above this there is moss; the margin above it is its density
+  /* Alpha at the heart of a patch, and it is deliberately low.
+   *
+   * The first pass at this was 0.3 of a saturated green painted over the whole tile, and the
+   * report was the honest one: it stood out. Moss on old stone is not a colour, it is a slight
+   * shift in one — darker, duller, a little cooler than the stone under it — and the thing that
+   * makes it read as moss is the SHAPE, not the saturation. So the alpha came down by nearly
+   * half and everything that was spent on colour is spent on edges instead.
+   */
+  const MOSS_MAX = 0.17;
 
   const smooth = t => t * t * (3 - 2 * t);
 
@@ -668,12 +694,23 @@ export function createRenderer(canvas, world) {
     return (a + (b - a) * tx) * (1 - ty) + (c + (d - c) * tx) * ty;
   }
 
-  /** How mossy this tile is, 0..1. Two frequencies: one for the patch, one for its edge. */
-  function mossAt(tx, ty) {
-    const patch = noiseAt(tx, ty, MOSS_LOW, 0x6d055);
-    const edge = noiseAt(tx, ty, MOSS_HIGH, 0x9e3779);
-    const v = patch * 0.78 + edge * 0.22;
-    return v <= MOSS_AT ? 0 : Math.min(1, (v - MOSS_AT) / (1 - MOSS_AT));
+  /**
+   * How mossy a point is, 0..1, in TILE coordinates with a fraction.
+   *
+   * Sampled per blob rather than per tile, which is the difference between moss and green
+   * squares: the patch term decides the area, the break term ruins its outline, and the grain
+   * term thins it out from the inside so a patch has holes in it.
+   */
+  function mossAt(x, y) {
+    const patch = noiseAt(x, y, MOSS_PATCH, 0x6d055);
+    const edge = noiseAt(x, y, MOSS_BREAK, 0x9e3779);
+    const v = patch * 0.76 + edge * 0.24;
+    if (v <= MOSS_AT) return 0;
+    const strength = Math.min(1, (v - MOSS_AT) / 0.3);
+    // The grain bites hardest at the thin edges of a patch and barely at all in its heart, so a
+    // patch fades out through clumps rather than through transparency.
+    const grain = noiseAt(x, y, MOSS_GRAIN, 0x5eed9);
+    return Math.max(0, strength - (1 - strength) * 0.8 - (0.5 - grain) * 0.55);
   }
 
   /* What moss grows on: the sand and every kind of stone. Not a crate — wood on a beach for a few
@@ -681,57 +718,118 @@ export function createRenderer(canvas, world) {
    * has to stay instantly readable as breakable. Not ice, not water, not a keg. */
   const MOSSY = new Set([BLOCK.FLOOR, BLOCK.REINFORCED, BLOCK.MONOLITH, BLOCK.IRON, BLOCK.COLUMN]);
 
-  /** Moss over one chunk, after the blocks and their lighting, before the occlusion. */
+  /* Two greens, both pulled a long way toward the island's own palette.
+   *
+   * Picked by sampling an olive and a sage against the sand and the rock rather than by being
+   * chosen as greens: anything with real saturation in it reads as a sprite laid on top, because
+   * nothing else on this island is green. The darker one is the body of a clump and the lighter
+   * one is the few millimetres of it that catch the light.
+   */
+  const MOSS_DARK = '58,74,45';
+  const MOSS_LIT = '122,140,86';
+
+  /* One blob per third of a tile, which is the resolution the pattern is actually drawn at.
+   *
+   * Nine samples per tile, each a soft radial gradient about two thirds of a tile across. They
+   * overlap heavily, so a patch is built out of a few dozen overlapping circles with no edge of
+   * their own — and because the field is continuous, the blobs on either side of a tile boundary
+   * are part of the same shape. That is the entire trick: there is no rectangle anywhere in it.
+   */
+  const MOSS_STEP = 1 / 3;
+
+  function mossSprite(tone) {
+    const el = document.createElement('canvas');
+    const R = Math.ceil(TILE_PX * 0.62);
+    el.width = el.height = R * 2;
+    const c = el.getContext('2d');
+    const g = c.createRadialGradient(R, R, 0, R, R, R);
+    // No hard stop anywhere in it: a blob with an edge is a dot, and a hundred dots is a texture.
+    g.addColorStop(0, `rgba(${tone},0.85)`);
+    g.addColorStop(0.45, `rgba(${tone},0.4)`);
+    g.addColorStop(0.78, `rgba(${tone},0.1)`);
+    g.addColorStop(1, `rgba(${tone},0)`);
+    c.fillStyle = g;
+    c.fillRect(0, 0, R * 2, R * 2);
+    return el;
+  }
+  let mossDark = null, mossLit = null;
+
+  /**
+   * Moss over one chunk, after the blocks and their lighting, before the occlusion.
+   *
+   * Clipped to the union of the chunk's mossy tiles — built as one path, so a patch spreads
+   * across tile boundaries freely and stops dead at the edge of a crate or a puddle, which is
+   * exactly how growth behaves: it covers what it can grow on and nothing else.
+   */
   function mossPass(cc, cx, cy, map) {
     const S = TILE_PX;
+    mossDark ??= mossSprite(MOSS_DARK);
+    mossLit ??= mossSprite(MOSS_LIT);
+
+    // The clip. One path for the whole chunk rather than a save/clip/restore per tile: it is the
+    // thing that lets a blob straddle two tiles.
+    const area = new Path2D();
+    let any = false;
     for (let j = 0; j < CHUNK_TILES; j++) {
       for (let i = 0; i < CHUNK_TILES; i++) {
         const tx = cx * CHUNK_TILES + i, ty = cy * CHUNK_TILES + j;
         if (tx < 0 || ty < 0 || tx >= map.w || ty >= map.h) continue;
         const type = cellType(map.cells[ty * map.w + tx]);
         if (!MOSSY.has(type)) continue;
-        const m = mossAt(tx, ty);
-        if (m <= 0.02) continue;
-
-        const x = i * S, y = j * S;
-        cc.save();
-        cc.beginPath();
-        cc.roundRect(x, y, S, S, type === BLOCK.IRON ? ROCK_RADIUS
-          : type === BLOCK.FLOOR ? 0 : STONE_RADIUS);
-        cc.clip();
-
-        /* The wash, in two tones so a patch is not one flat colour: a cool green over the whole
-         * tile and a warmer, lighter one on a quarter of it, at a sub-tile offset from the noise
-         * so the two layers never line up into a grid. */
-        cc.globalAlpha = m * MOSS_MAX;
-        cc.fillStyle = '#4a6b3a';
-        cc.fillRect(x, y, S, S);
-        cc.globalAlpha = m * MOSS_MAX * 0.55;
-        cc.fillStyle = '#6f8f46';
-        const ox2 = noiseAt(tx * 3 + 11, ty * 3 + 7, 2.3, 0x1055) * S * 0.5;
-        const oy2 = noiseAt(tx * 3 + 5, ty * 3 + 13, 2.3, 0x2055) * S * 0.5;
-        cc.fillRect(x + ox2, y + oy2, S * 0.6, S * 0.6);
-
-        /* And the texture: a scatter of darker specks, more of them the denser the patch. Without
-         * these a mossy tile is a green tint; with them it is something growing. */
-        const n = Math.round(m * 9);
-        cc.fillStyle = 'rgba(32,54,26,0.5)';
-        for (let k = 0; k < n; k++) {
-          const hx = hash01((tx * 911 + k * 37) ^ (ty * 557));
-          const hy = hash01((ty * 911 + k * 53) ^ (tx * 331));
-          cc.globalAlpha = m * 0.55;
-          cc.fillRect(x + hx * (S - 3), y + hy * (S - 3), 2, 2);
-        }
-        /* A rim of lighter growth along the top edge of a mossy BLOCK, because moss on a solid
-         * thing catches the light on the face that is up. Floor gets none: there is no face. */
-        if (type !== BLOCK.FLOOR) {
-          cc.globalAlpha = m * 0.3;
-          cc.fillStyle = '#8bae57';
-          cc.fillRect(x + 2, y + 1, S - 4, 2);
-        }
-        cc.restore();
+        any = true;
+        const r = type === BLOCK.FLOOR ? 0 : type === BLOCK.IRON ? ROCK_RADIUS : STONE_RADIUS;
+        area.roundRect(i * S, j * S, S, S, r);
       }
     }
+    if (!any) return;
+
+    cc.save();
+    cc.clip(area);
+
+    /* Sampled one tile WIDER than the chunk on every side.
+     *
+     * A blob is two thirds of a tile across, so one centred just outside the chunk still reaches
+     * into it. Skipping those would leave a faint seam along every chunk boundary — visible
+     * exactly where the pattern is supposed to prove it does not know about the grid.
+     */
+    const x0 = cx * CHUNK_TILES - 1, y0 = cy * CHUNK_TILES - 1;
+    const x1 = x0 + CHUNK_TILES + 2, y1 = y0 + CHUNK_TILES + 2;
+    const R = mossDark.width / 2;
+
+    for (let ty = y0; ty <= y1; ty += MOSS_STEP) {
+      for (let tx = x0; tx <= x1; tx += MOSS_STEP) {
+        const m = mossAt(tx, ty);
+        if (m <= 0.04) continue;
+
+        /* Jittered off the sampling grid, by the field itself.
+         *
+         * Without this the blob centres sit on a lattice a third of a tile apart, and at the
+         * thin end of a patch — where only a few blobs survive the threshold — that lattice is
+         * visible as a dotted texture. The offset is deterministic in the sample position, so it
+         * is the same jitter forever.
+         */
+        const jx = (noiseAt(tx * 7 + 3, ty * 7 + 11, 0.5, 0x3a7c1) - 0.5) * S * 0.42;
+        const jy = (noiseAt(tx * 7 + 17, ty * 7 + 5, 0.5, 0x8b115) - 0.5) * S * 0.42;
+        const px = (tx - cx * CHUNK_TILES) * S + S / 2 + jx;
+        const py = (ty - cy * CHUNK_TILES) * S + S / 2 + jy;
+
+        // Size varies with density as well as alpha, so the edge of a patch is made of smaller
+        // clumps rather than fainter ones of the same size.
+        const scale = 0.55 + m * 0.6;
+        const w = R * 2 * scale;
+        cc.globalAlpha = m * MOSS_MAX;
+        cc.drawImage(mossDark, px - w / 2, py - w / 2, w, w);
+
+        // And the lit half, offset a little toward the light and only where the moss is thick.
+        if (m > 0.45) {
+          cc.globalAlpha = (m - 0.45) * MOSS_MAX * 1.1;
+          const lw = w * 0.6;
+          cc.drawImage(mossLit, px - lw / 2 - 1.5, py - lw / 2 - 2, lw, lw);
+        }
+      }
+    }
+    cc.restore();
+    cc.globalAlpha = 1;
   }
 
   /* The two AO stamps, baked once: an edge and an inside corner.
@@ -1464,6 +1562,25 @@ export function createRenderer(canvas, world) {
           squash: 0.72 + Math.random() * 0.3,
           turn: Math.random() * Math.PI,
         })),
+        /* The mass of it under the water: bigger than what breaks the surface, and barely there.
+         *
+         * A boulder in the sea is the top of something, and the thing it is the top of is wider
+         * than it is. Drawn first, at a tenth of the alpha, in the sea's own deep colour, it
+         * reads as the bottom seen through a few metres of water — which is the one cue that
+         * tells you the water around a rock is SHALLOW, and the reason the rock stops looking
+         * like a sticker on a flat surface.
+         *
+         * Its own set of lumps, bigger and flatter than the ones above the surface and offset
+         * further, so the base is not a scaled copy of the boulder — a silhouette that echoes
+         * the shape on top of it reads as a shadow rather than as rock.
+         */
+        base: Array.from({ length: 5 }, () => ({
+          dx: (Math.random() - 0.5) * r * 1.9,
+          dy: (Math.random() - 0.5) * r * 1.5,
+          r: r * (0.75 + Math.random() * 0.85),
+          squash: 0.55 + Math.random() * 0.4,
+          turn: Math.random() * Math.PI,
+        })),
         phase: Math.random() * Math.PI * 2,
       });
     }
@@ -1477,6 +1594,37 @@ export function createRenderer(canvas, world) {
       // Everything below is drawn inside this one alpha, so the rock sits at the same distance
       // from the eye as the ship does.
       ctx.globalAlpha = ROCK_ALPHA;
+
+      /* What it is the top of, under the water, before anything else.
+       *
+       * Two layers of the same lumps — a wide faint one and a tighter slightly darker one — in
+       * the deep sea's colour rather than in stone's, because that is what a rock looks like
+       * through water: not a grey rock dimmed, but the water above it going darker. Blurred where
+       * the browser has a filter, since the one thing that would give it away is an edge: a
+       * crisp outline reads as something floating ON the surface, and the whole point of this is
+       * that it is beneath one.
+       *
+       * Drawn before the shadow and the boulder, so both land on top of it.
+       */
+      const canBlurRock = 'filter' in ctx;
+      ctx.save();
+      if (canBlurRock) ctx.filter = 'blur(4px)';
+      for (const l of k.base) {
+        ctx.globalAlpha = ROCK_ALPHA * 0.1;
+        ctx.fillStyle = '#143247';
+        ctx.beginPath();
+        ctx.ellipse(x + l.dx, y + l.dy, l.r * 1.25, l.r * l.squash * 1.25, l.turn, 0, 7);
+        ctx.fill();
+      }
+      for (const l of k.base) {
+        ctx.globalAlpha = ROCK_ALPHA * 0.09;
+        ctx.fillStyle = '#0d2335';
+        ctx.beginPath();
+        ctx.ellipse(x + l.dx * 0.7, y + l.dy * 0.7, l.r * 0.85, l.r * l.squash * 0.85, l.turn, 0, 7);
+        ctx.fill();
+      }
+      if (canBlurRock) ctx.filter = 'none';
+      ctx.restore();
 
       /* The rock's own shadow, on the water, before anything else it draws.
        *
