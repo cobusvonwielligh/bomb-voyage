@@ -118,6 +118,15 @@ test('nothing in the picker can be left invisible by an animation that never run
     'the picker uses a backwards fill, which hides it before the animation starts');
 });
 
+test('a bubble is narrow, and wraps rather than spreading across the board', () => {
+  /* Width is the expensive dimension: a wide bubble covers the tiles either side of the
+   * speaker, which is where whatever is chasing you is standing. Height is free. */
+  assert.match(render, /function wrap\(text, max\)/, 'the wrap helper is gone');
+  assert.match(render, /wrap\(s\.text, 92\)/, 'the bubble is no longer wrapped narrow');
+  assert.ok(!/const w = Math\.min\(190/.test(render),
+    'the bubble is back to one wide line up to 190px');
+});
+
 test('a bubble follows the player and is drawn in screen space', () => {
   // Board space would scale the text down with the island at the zoom floor — which is exactly
   // when the board is busiest and the words matter most.

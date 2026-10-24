@@ -2341,6 +2341,24 @@ export function createRenderer(canvas, world) {
    * It follows the player while it is up, because a bubble pinned to where somebody WAS is a
    * bubble pointing at nothing by the time you look at it.
    */
+  /* Greedy word wrap against the CURRENT font — so the caller sets the font first.
+   *
+   * A word longer than the whole line (a pasted URL, sixteen w's) is left to overhang its line
+   * rather than broken mid-word: the box is measured off the widest line either way, so the
+   * bubble still fits it, and a mid-word break is harder to read than a wide line is.
+   */
+  function wrap(text, max) {
+    const out = [];
+    let line = '';
+    for (const word of text.split(' ')) {
+      const next = line ? `${line} ${word}` : word;
+      if (line && ctx.measureText(next).width > max) { out.push(line); line = word; }
+      else line = next;
+    }
+    if (line) out.push(line);
+    return out;
+  }
+
   function drawSays(ox, oy, zoom) {
     if (!says.size) return;
     const now = performance.now();
@@ -2368,14 +2386,23 @@ export function createRenderer(canvas, world) {
       if (a <= 0.01) continue;
       const rise = (1 - outT) * 10;
 
-      // Emoji need a bigger box than words do, and a single glyph in a word-sized bubble looks
-      // like a mistake. Measured rather than guessed, so a long name or a short word both fit.
+      // Emoji need a slightly bigger box than words do; a single glyph in a word-sized bubble
+      // looks like a mistake. Both are measured rather than guessed.
       const emoji = s.emoji;
       ctx.font = emoji
-        ? '26px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", system-ui, sans-serif'
-        : '600 12px ui-sans-serif, system-ui, sans-serif';
-      const w = Math.min(190, ctx.measureText(s.text).width + (emoji ? 18 : 20));
-      const h = emoji ? 38 : 22;
+        ? '19px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", system-ui, sans-serif'
+        : '600 10px ui-sans-serif, system-ui, sans-serif';
+      /* Wrapped NARROW — 92px, about three words a line.
+       *
+       * A bubble is read out of the corner of your eye while something is chasing you, and a
+       * wide one spreads across the board covering the two tiles either side of the speaker,
+       * which is exactly where the thing chasing you is. Taller is cheap; wider is not. */
+      const lines = emoji ? [s.text] : wrap(s.text, 92);
+      let tw = 0;
+      for (const ln of lines) tw = Math.max(tw, ctx.measureText(ln).width);
+      const LINE = 12;
+      const w = tw + (emoji ? 14 : 16);
+      const h = emoji ? 28 : lines.length * LINE + 8;
       const x = bx, y = by - rise;
 
       ctx.globalAlpha = a;
@@ -2394,7 +2421,10 @@ export function createRenderer(canvas, world) {
       ctx.stroke();
 
       ctx.fillStyle = '#16202b';
-      ctx.fillText(s.text, x, y - h / 2 + (emoji ? 1 : 0));
+      if (emoji) ctx.fillText(s.text, x, y - h / 2 + 1);
+      else for (const [n, ln] of lines.entries()) {
+        ctx.fillText(ln, x, y - h + 4 + LINE * (n + 0.5));
+      }
     }
     ctx.restore();
   }
