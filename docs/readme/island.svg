@@ -1,0 +1,257 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 400" width="1280" height="400" role="img" aria-label="A round in eight seconds: drop a bomb, get clear, the blast breaks walls and drops loot, a seagull passes overhead">
+  <defs>
+    <radialGradient id="deep" cx="50%" cy="45%" r="70%">
+      <stop offset="0" stop-color="#1d5176"/>
+      <stop offset="0.55" stop-color="#0f2b40"/>
+      <stop offset="1" stop-color="#06121d"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#edc24e"/>
+      <stop offset="0.35" stop-color="#c4683a"/>
+      <stop offset="0.6" stop-color="#801e32"/>
+      <stop offset="1" stop-color="#edc24e"/>
+    </linearGradient>
+    <radialGradient id="fire" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#fff4c2"/>
+      <stop offset="0.45" stop-color="#ff9b3d"/>
+      <stop offset="1" stop-color="#e63f27"/>
+    </radialGradient>
+    <linearGradient id="armH" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e63f27"/>
+      <stop offset="0.3" stop-color="#ff9b3d"/>
+      <stop offset="0.5" stop-color="#fff4c2"/>
+      <stop offset="0.7" stop-color="#ff9b3d"/>
+      <stop offset="1" stop-color="#e63f27"/>
+    </linearGradient>
+    <linearGradient id="armV" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#e63f27"/>
+      <stop offset="0.3" stop-color="#ff9b3d"/>
+      <stop offset="0.5" stop-color="#fff4c2"/>
+      <stop offset="0.7" stop-color="#ff9b3d"/>
+      <stop offset="1" stop-color="#e63f27"/>
+    </linearGradient>
+    <radialGradient id="coin" cx="40%" cy="35%" r="65%">
+      <stop offset="0" stop-color="#fff3b0"/>
+      <stop offset="0.5" stop-color="#ffd21f"/>
+      <stop offset="1" stop-color="#a06a12"/>
+    </radialGradient>
+    <clipPath id="frame"><rect width="1280" height="400" rx="22"/></clipPath>
+
+    <!-- One wall tile, one crate, one rock, one pillar: the island's building blocks. -->
+    <g id="crate">
+      <rect x="2" y="2" width="32" height="32" rx="4" fill="#8a6b4a"/>
+      <rect x="2" y="2" width="32" height="5" rx="2" fill="#a3825d"/>
+      <path d="M7 10 L29 30 M29 10 L7 30" stroke="#5e4630" stroke-width="2.5"/>
+      <rect x="2" y="2" width="32" height="32" rx="4" fill="none" stroke="#161b24" stroke-width="1.5"/>
+    </g>
+    <g id="rock">
+      <rect width="36" height="36" fill="#2b241d"/>
+      <ellipse cx="12" cy="13" rx="11" ry="9" fill="#4a4036"/>
+      <ellipse cx="25" cy="22" rx="10" ry="9" fill="#4a4036"/>
+      <ellipse cx="10" cy="10" rx="5" ry="3.5" fill="#6b5e4f"/>
+      <ellipse cx="23" cy="19" rx="4.5" ry="3" fill="#6b5e4f"/>
+    </g>
+    <g id="pillar">
+      <rect x="2" y="2" width="32" height="32" rx="5" fill="#59627a"/>
+      <rect x="2" y="2" width="32" height="6" rx="3" fill="#6f7a95"/>
+      <rect x="2" y="2" width="32" height="32" rx="5" fill="none" stroke="#161b24" stroke-width="1.5"/>
+    </g>
+    <!-- A pirate from above: boots, coat in the player's colour, sash, head and red bandana. -->
+    <g id="pirateBody">
+      <ellipse cx="0" cy="12" rx="11" ry="4" fill="#000" opacity="0.35"/>
+      <rect x="-8" y="6" width="6" height="7" rx="2" fill="#4a3728"/>
+      <rect x="2" y="6" width="6" height="7" rx="2" fill="#4a3728"/>
+      <rect x="-10" y="-6" width="20" height="16" rx="6" fill="currentColor"/>
+      <rect x="-10" y="1" width="20" height="3.5" fill="#e8dcc0"/>
+      <circle cx="0" cy="-10" r="8" fill="#e8b68a"/>
+      <path d="M-8 -12 A8 8 0 0 1 8 -12 L8 -10 L-8 -10 Z" fill="#c0392b"/>
+      <circle cx="-2.8" cy="-8.5" r="1.3" fill="#14181f"/>
+      <rect x="0.5" y="-10" width="4" height="3.4" rx="1" fill="#14181f"/>
+    </g>
+    <!-- A herring gull from above, the same shape the game draws. -->
+    <g id="gull">
+      <path d="M3.6 -2.4 C4.8 -6 5.4 -9.6 4.4 -11.6 C1.5 -15.6 -4 -21 -7 -22.4 C-7.5 -19.6 -6.4 -15.6 -4.6 -12.4 C-5.6 -8.8 -5.2 -4.8 -4.2 -2.4 Z" fill="#aab6c1" stroke="#18202a" stroke-opacity="0.6" stroke-width="0.9"/>
+      <path d="M3.6 2.4 C4.8 6 5.4 9.6 4.4 11.6 C1.5 15.6 -4 21 -7 22.4 C-7.5 19.6 -6.4 15.6 -4.6 12.4 C-5.6 8.8 -5.2 4.8 -4.2 2.4 Z" fill="#aab6c1" stroke="#18202a" stroke-opacity="0.6" stroke-width="0.9"/>
+      <path d="M-1 -16.5 C-3 -18.6 -5 -20.6 -7 -22.4 C-7.4 -20.5 -6.9 -18.6 -6.2 -16.8 Z M-1 16.5 C-3 18.6 -5 20.6 -7 22.4 C-7.4 20.5 -6.9 18.6 -6.2 16.8 Z" fill="#191c21"/>
+      <path d="M-7.5 -2.5 L-13.2 -3.1 Q-14 0 -13.2 3.1 L-7.5 2.5 Z" fill="#f5f7f8"/>
+      <ellipse cx="0.5" cy="0" rx="10" ry="3.7" fill="#f5f7f8" stroke="#18202a" stroke-opacity="0.6" stroke-width="0.8"/>
+      <ellipse cx="-0.8" cy="0" rx="5.4" ry="2.7" fill="#aab6c1"/>
+      <circle cx="8.6" cy="0" r="3" fill="#f5f7f8"/>
+      <path d="M11.1 -0.95 L14.8 -0.2 Q15.4 0.3 14.6 0.6 L11.1 0.95 Z" fill="#f0c43a"/>
+    </g>
+  </defs>
+
+  <g clip-path="url(#frame)">
+    <rect width="1280" height="400" fill="url(#deep)"/>
+
+    <!-- Open water: drifting crests either side of the island. -->
+    <g fill="none" stroke="#2d7f94" stroke-width="2" stroke-linecap="round" opacity="0.5">
+      <path d="M-200 60 q30 -8 60 0 t60 0 t60 0 t60 0 t60 0 t60 0 t60 0 t60 0 t60 0">
+        <animateTransform attributeName="transform" type="translate" values="0 0; 120 0" dur="6s" repeatCount="indefinite"/>
+      </path>
+      <path d="M-200 200 q30 -8 60 0 t60 0 t60 0 t60 0 t60 0 t60 0 t60 0 t60 0">
+        <animateTransform attributeName="transform" type="translate" values="0 0; 120 0" dur="8s" repeatCount="indefinite"/>
+      </path>
+      <path d="M-200 330 q30 -8 60 0 t60 0 t60 0 t60 0 t60 0 t60 0 t60 0 t60 0 t60 0">
+        <animateTransform attributeName="transform" type="translate" values="0 0; 120 0" dur="7s" repeatCount="indefinite"/>
+      </path>
+      <path d="M960 110 q30 -8 60 0 t60 0 t60 0 t60 0 t60 0 t60 0 t60 0">
+        <animateTransform attributeName="transform" type="translate" values="0 0; 120 0" dur="7.5s" repeatCount="indefinite"/>
+      </path>
+      <path d="M940 260 q30 -8 60 0 t60 0 t60 0 t60 0 t60 0 t60 0 t60 0">
+        <animateTransform attributeName="transform" type="translate" values="0 0; 120 0" dur="6.5s" repeatCount="indefinite"/>
+      </path>
+    </g>
+
+    <!-- The shallows, then the island. -->
+    <rect x="304" y="-2" width="672" height="384" rx="18" fill="#2d7f94" opacity="0.35"/>
+    <rect x="320" y="12" width="640" height="356" rx="12" fill="#2d7f94" opacity="0.35"/>
+
+    <g transform="translate(334 28)">
+      <!-- Rock all the way round. -->
+      <g>
+        <use href="#rock" x="0" y="0"/><use href="#rock" x="36" y="0"/><use href="#rock" x="72" y="0"/><use href="#rock" x="108" y="0"/><use href="#rock" x="144" y="0"/><use href="#rock" x="180" y="0"/><use href="#rock" x="216" y="0"/><use href="#rock" x="252" y="0"/><use href="#rock" x="288" y="0"/><use href="#rock" x="324" y="0"/><use href="#rock" x="360" y="0"/><use href="#rock" x="396" y="0"/><use href="#rock" x="432" y="0"/><use href="#rock" x="468" y="0"/><use href="#rock" x="504" y="0"/><use href="#rock" x="540" y="0"/><use href="#rock" x="576" y="0"/>
+        <use href="#rock" x="0" y="288"/><use href="#rock" x="36" y="288"/><use href="#rock" x="72" y="288"/><use href="#rock" x="108" y="288"/><use href="#rock" x="144" y="288"/><use href="#rock" x="180" y="288"/><use href="#rock" x="216" y="288"/><use href="#rock" x="252" y="288"/><use href="#rock" x="288" y="288"/><use href="#rock" x="324" y="288"/><use href="#rock" x="360" y="288"/><use href="#rock" x="396" y="288"/><use href="#rock" x="432" y="288"/><use href="#rock" x="468" y="288"/><use href="#rock" x="504" y="288"/><use href="#rock" x="540" y="288"/><use href="#rock" x="576" y="288"/>
+        <use href="#rock" x="0" y="36"/><use href="#rock" x="0" y="72"/><use href="#rock" x="0" y="108"/><use href="#rock" x="0" y="144"/><use href="#rock" x="0" y="180"/><use href="#rock" x="0" y="216"/><use href="#rock" x="0" y="252"/>
+        <use href="#rock" x="576" y="36"/><use href="#rock" x="576" y="72"/><use href="#rock" x="576" y="108"/><use href="#rock" x="576" y="144"/><use href="#rock" x="576" y="180"/><use href="#rock" x="576" y="216"/><use href="#rock" x="576" y="252"/>
+      </g>
+      <!-- Packed sand. -->
+      <rect x="36" y="36" width="540" height="252" fill="#2c3442"/>
+      <g fill="#333d4d">
+        <rect x="72" y="36" width="36" height="36"/><rect x="144" y="72" width="36" height="36"/><rect x="252" y="108" width="36" height="36"/><rect x="396" y="72" width="36" height="36"/><rect x="468" y="180" width="36" height="36"/><rect x="180" y="216" width="36" height="36"/><rect x="324" y="252" width="36" height="36"/><rect x="540" y="108" width="36" height="36"/>
+      </g>
+
+      <!-- Pillars, and the walls nobody has opened yet. -->
+      <use href="#pillar" x="72" y="72"/><use href="#pillar" x="360" y="72"/><use href="#pillar" x="504" y="72"/>
+      <use href="#pillar" x="72" y="216"/><use href="#pillar" x="360" y="216"/><use href="#pillar" x="504" y="216"/>
+      <use href="#crate" x="324" y="72"/><use href="#crate" x="396" y="144"/><use href="#crate" x="468" y="108"/>
+      <use href="#crate" x="108" y="216"/><use href="#crate" x="180" y="252"/><use href="#crate" x="252" y="36"/>
+      <use href="#crate" x="432" y="36"/><use href="#crate" x="540" y="180"/><use href="#crate" x="36" y="108"/>
+      <!-- Ice. -->
+      <g transform="translate(468 180)">
+        <rect x="2" y="2" width="32" height="32" rx="4" fill="#9fd7ee"/>
+        <path d="M6 8 L14 16 L10 26 M20 6 L24 18 L30 22" stroke="#e9f8ff" stroke-width="1.6" fill="none"/>
+        <rect x="2" y="2" width="32" height="32" rx="4" fill="none" stroke="#3f7f9e" stroke-width="1.5"/>
+      </g>
+
+      <!-- The two walls this blast is going to open. They grow back at the end of the loop. -->
+      <g>
+        <use href="#crate" x="288" y="144"/>
+        <use href="#crate" x="216" y="216"/>
+        <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;0.455;0.5;0.95;1" dur="8s" repeatCount="indefinite"/>
+      </g>
+
+      <!-- The loot: a gold coin where the wall was. -->
+      <g transform="translate(306 162)" opacity="0">
+        <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.5;0.53;0.92;0.95;1" dur="8s" repeatCount="indefinite"/>
+        <ellipse cx="0" cy="9" rx="9" ry="3" fill="#000" opacity="0.3"/>
+        <g>
+          <animateTransform attributeName="transform" type="translate" values="0 0; 0 -3; 0 0" dur="1.2s" repeatCount="indefinite"/>
+          <ellipse cx="1.2" cy="1.2" rx="8.5" ry="9" fill="#a06a12"/>
+          <ellipse cx="0" cy="0" rx="8.5" ry="9" fill="url(#coin)"/>
+          <ellipse cx="0" cy="0" rx="5" ry="5.6" fill="none" stroke="#7d5410" stroke-opacity="0.6" stroke-width="1.2"/>
+        </g>
+        <circle r="6" fill="none" stroke="#ffd86b" stroke-width="1.5">
+          <animate attributeName="r" values="6;6;24;24" keyTimes="0;0.5;0.62;1" dur="8s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0;0;1;0;0" keyTimes="0;0.5;0.52;0.62;1" dur="8s" repeatCount="indefinite"/>
+        </circle>
+      </g>
+
+      <!-- The bomb: dropped at 1.2 s, a fuse that sparks, and a pulse that quickens. -->
+      <g transform="translate(234 162)" opacity="0">
+        <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.15;0.155;0.45;0.455;1" dur="8s" repeatCount="indefinite"/>
+        <ellipse cx="0" cy="10" rx="10" ry="3.5" fill="#000" opacity="0.35"/>
+        <g>
+          <animateTransform attributeName="transform" type="scale" values="1;1.08;1;1.1;1;1.14;1" dur="2.4s" begin="1.2s" repeatCount="indefinite"/>
+          <circle r="12" fill="#0b0e13" stroke="#5fd8f0" stroke-width="2.5"/>
+          <circle cx="-4" cy="-4" r="4" fill="#fff" opacity="0.4"/>
+          <path d="M4 -10 Q10 -16 7 -21" stroke="#3a4455" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+          <circle cx="7" cy="-22" r="3.5" fill="#fff4c2">
+            <animate attributeName="r" values="2.5;4.5;3;5;2.5" dur="0.3s" repeatCount="indefinite"/>
+          </circle>
+          <circle cx="7" cy="-22" r="7" fill="#ff9b3d" opacity="0.35"/>
+        </g>
+      </g>
+
+      <!-- The blast: radius two, a cross, reaching the two crates and stopping at them. -->
+      <g opacity="0">
+        <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.45;0.455;0.5;0.53;1" dur="8s" repeatCount="indefinite"/>
+        <rect x="144" y="146" width="180" height="32" rx="14" fill="url(#armH)"/>
+        <rect x="218" y="72" width="32" height="180" rx="14" fill="url(#armV)"/>
+        <circle cx="234" cy="162" r="26" fill="url(#fire)"/>
+        <circle cx="234" cy="162" r="40" fill="#fff4c2" opacity="0.35">
+          <animate attributeName="r" values="20;20;60;60" keyTimes="0;0.45;0.52;1" dur="8s" repeatCount="indefinite"/>
+        </circle>
+      </g>
+
+      <!-- You, in teal: walk right, drop the bomb, and get out of its row and its column. -->
+      <g color="#5fd8f0">
+        <animateMotion dur="8s" repeatCount="indefinite" calcMode="linear"
+          path="M126 162 L234 162 L162 162 L162 90"
+          keyPoints="0;0.4286;0.4286;0.7143;1;1;0;0" keyTimes="0;0.15;0.17;0.25;0.33;0.95;0.96;1"/>
+        <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;0.93;0.95;0.97;1" dur="8s" repeatCount="indefinite"/>
+        <use href="#pirateBody"/>
+        <text y="-22" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="10" fill="#f6e7a9" stroke="#000" stroke-opacity="0.75" stroke-width="3" paint-order="stroke">you</text>
+      </g>
+
+      <!-- Somebody else, in rose, minding their own business on the far side. -->
+      <g color="#e87a9a">
+        <animateMotion dur="5s" repeatCount="indefinite" path="M450 270 L522 270 L450 270"/>
+        <use href="#pirateBody"/>
+      </g>
+
+      <!-- A gull overhead, its shadow sliding in beneath it as it dives. -->
+      <g opacity="0">
+        <animate attributeName="opacity" values="0;0;0.32;0.32;0;0" keyTimes="0;0.55;0.6;0.9;0.95;1" dur="8s" repeatCount="indefinite"/>
+        <g>
+          <animateMotion dur="8s" repeatCount="indefinite" path="M-60 160 C 120 100, 300 180, 660 90"
+            keyPoints="0;0;1;1" keyTimes="0;0.55;0.95;1" calcMode="linear"/>
+          <g transform="translate(16 26) rotate(-8)"><use href="#gull" fill="#000" opacity="1"/></g>
+        </g>
+      </g>
+      <g opacity="0">
+        <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.55;0.6;0.9;0.95;1" dur="8s" repeatCount="indefinite"/>
+        <g>
+          <animateMotion dur="8s" repeatCount="indefinite" path="M-60 120 C 120 60, 300 140, 660 50"
+            keyPoints="0;0;1;1" keyTimes="0;0.55;0.95;1" calcMode="linear" rotate="auto"/>
+          <g transform="scale(1.6)">
+            <use href="#gull">
+              <animateTransform attributeName="transform" type="scale" values="1 1; 1 0.55; 1 1" dur="0.45s" repeatCount="indefinite"/>
+            </use>
+          </g>
+        </g>
+      </g>
+    </g>
+
+    <!-- What is happening, left, in four beats. -->
+    <g font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="800" letter-spacing="3" font-size="17">
+      <g fill="#f6e7a9">
+        <text x="40" y="150" opacity="0">01 · DROP<animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.04;0.2;0.24;1" dur="8s" repeatCount="indefinite"/></text>
+        <text x="40" y="150" opacity="0">02 · RUN<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.2;0.24;0.43;0.46;1" dur="8s" repeatCount="indefinite"/></text>
+        <text x="40" y="150" opacity="0">03 · BOOM<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.44;0.46;0.62;0.66;1" dur="8s" repeatCount="indefinite"/></text>
+        <text x="40" y="150" opacity="0">04 · LOOT<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.62;0.66;0.92;0.96;1" dur="8s" repeatCount="indefinite"/></text>
+      </g>
+      <g fill="#c9b48a" font-weight="600" letter-spacing="1" font-size="14">
+        <text x="40" y="178" opacity="0">Bombs go where you face.<animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.04;0.2;0.24;1" dur="8s" repeatCount="indefinite"/></text>
+        <text x="40" y="178" opacity="0">Out of its row and column.<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.2;0.24;0.43;0.46;1" dur="8s" repeatCount="indefinite"/></text>
+        <text x="40" y="178" opacity="0">Walls break. Chains chain.<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.44;0.46;0.62;0.66;1" dur="8s" repeatCount="indefinite"/></text>
+        <text x="40" y="178" opacity="0">Grab it first. Mind the gulls.<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.62;0.66;0.92;0.96;1" dur="8s" repeatCount="indefinite"/></text>
+      </g>
+      <rect x="40" y="196" width="200" height="2" fill="url(#rim)" opacity="0.7"/>
+    </g>
+
+    <!-- And the perks, right. -->
+    <g font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" letter-spacing="1">
+      <text x="1010" y="104" fill="#f6e7a9" font-size="15" letter-spacing="3" font-weight="800">ON THE FLOOR</text>
+      <circle cx="1018" cy="134" r="6" fill="#7e93d6"/><text x="1034" y="139" fill="#e8eef7">+1 Bomb</text>
+      <circle cx="1018" cy="162" r="6" fill="#ff9b4a"/><text x="1034" y="167" fill="#e8eef7">+1 Fire</text>
+      <circle cx="1018" cy="190" r="6" fill="#5fd8f0"/><text x="1034" y="195" fill="#e8eef7">Boots</text>
+      <circle cx="1018" cy="218" r="6" fill="#5ad1a0"/><text x="1034" y="223" fill="#e8eef7">Shield</text>
+      <circle cx="1018" cy="246" r="6" fill="#ffe04a"/><text x="1034" y="251" fill="#e8eef7">Stim</text>
+      <circle cx="1018" cy="274" r="6" fill="#d99a55"/><text x="1034" y="279" fill="#e8eef7">Rum <tspan fill="#9aa6b5" font-weight="500">(careful)</tspan></text>
+      <circle cx="1018" cy="302" r="6" fill="#ffd21f"><animate attributeName="r" values="6;7.5;6" dur="1.6s" repeatCount="indefinite"/></circle><text x="1034" y="307" fill="#ffd21f">Gold</text>
+    </g>
+
+    <rect x="1.5" y="1.5" width="1277" height="397" rx="21" fill="none" stroke="url(#rim)" stroke-width="3" opacity="0.85"/>
+  </g>
+</svg>

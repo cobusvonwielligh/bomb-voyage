@@ -1,149 +1,163 @@
-# Bomb Voyage
+<p align="center">
+  <a href="https://bombvoyage.online">
+    <img src="docs/readme/banner.svg" alt="Bomb Voyage — sixteen pirates, one island, light the fuse and run" width="100%">
+  </a>
+</p>
 
-A lightweight 16-player browser bomb game for Friday-afternoon games at eezi, inspired by
-Bomberman, [Game of Bombs](https://gameofbombs.com) and Crazy Arcade.
+<p align="center">
+  <a href="https://bombvoyage.online"><img alt="Play now at bombvoyage.online" src="https://img.shields.io/badge/%E2%96%B6%20PLAY%20NOW-bombvoyage.online-edc24e?style=for-the-badge&labelColor=2a1018"></a>
+  <img alt="Up to 16 players" src="https://img.shields.io/badge/players-up%20to%2016-c4683a?style=for-the-badge&labelColor=2a1018">
+  <img alt="Runs in the browser, nothing to install" src="https://img.shields.io/badge/install-nothing-a83442?style=for-the-badge&labelColor=2a1018">
+  <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-801e32?style=for-the-badge&labelColor=2a1018"></a>
+</p>
 
-**Live:** https://bombvoyage.online · **Health:** [/healthz](https://bombvoyage.online/healthz)
-· **Sprites:** [/art-preview.html](https://bombvoyage.online/art-preview.html)
-· **Where we stand:** [docs/STATUS.md](docs/STATUS.md)
+<p align="center">
+  <b>The office bomb game.</b> Open a link, type a name, and you are on the island with up to
+  fifteen colleagues — dropping bombs, cracking crates, chaining powder kegs and racing for gold.
+  <br>
+  Inspired by <b>Bomberman</b>, <b>Game of Bombs</b> and <b>Crazy Arcade</b>.
+</p>
 
----
+<br>
 
-## Status
+<p align="center">
+  <img src="docs/readme/island.svg" alt="A round in eight seconds: drop a bomb, get clear, the blast breaks walls and drops loot, a gull passes overhead" width="100%">
+</p>
 
-**The game is built and live.** Read [docs/STATUS.md](docs/STATUS.md) first — it is the current
-state of play, what changed direction, and what is still missing. `docs/PLAN.md` is the original
-work breakdown and is now history.
+## ⚓ Why teams play it
+
+<table>
+  <tr>
+    <td width="33%" valign="top">
+      <h3>🏴‍☠️ Zero friction</h3>
+      Nothing to install, no accounts, no sign-up. A link and a name, and you are playing in
+      under ten seconds — on any modern desktop browser.
+    </td>
+    <td width="33%" valign="top">
+      <h3>⚡ Feels instant</h3>
+      Your own moves are predicted the moment you press a key, and every explosion is
+      computed on your screen at the same instant as on the server. Nobody dies to lag.
+    </td>
+    <td width="33%" valign="top">
+      <h3>🤖 Never an empty island</h3>
+      Bots join the moment someone arrives, so the first two players on a Friday still have a
+      fight. When everyone has gone home, the bots leave too.
+    </td>
+  </tr>
+  <tr>
+    <td width="33%" valign="top">
+      <h3>🛡️ Friendly to IT</h3>
+      One hostname, one port, plain HTTPS. No third-party domains and no plugins, so a
+      locked-down office network only has to allow one thing.
+    </td>
+    <td width="33%" valign="top">
+      <h3>🏆 Something to play for</h3>
+      Levels, ranks, gold, silver and bronze medals and an all-time leaderboard that carries
+      over from round to round and week to week.
+    </td>
+    <td width="33%" valign="top">
+      <h3>🎨 Hand-made world</h3>
+      Every pirate, crate, wave and gull is drawn in code, with a soundtrack and sound design
+      that follow the action — the sea even moves to the music.
+    </td>
+  </tr>
+</table>
+
+## 🎮 How to play
+
+<table>
+  <tr><td><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> or arrow keys</td><td>Move</td></tr>
+  <tr><td><kbd>Space</kbd> or <kbd>K</kbd></td><td>Drop a bomb — it lands on the tile you face. When down, respawn</td></tr>
+  <tr><td>Hold <kbd>Shift</kbd> + a direction</td><td>Emote over your head</td></tr>
+  <tr><td><kbd>Enter</kbd></td><td>Chat</td></tr>
+  <tr><td><kbd>Tab</kbd></td><td>Scoreboard and the all-time board</td></tr>
+  <tr><td><kbd>Esc</kbd></td><td>Close a panel, or leave</td></tr>
+</table>
+
+Rounds last ten minutes across five islands. Bomb your rivals, survive the blasts, and finish
+the round on top of the board.
+
+## 🏝️ On the island
 
 | | |
 |---|---|
-| ✅ The game | 16 players, 5 maps, 10-minute rounds, bots, perks, stamina, powder kegs |
-| ✅ Transport | **WebTransport over QUIC**, racing WebSocket, whichever connects first wins |
-| ✅ Deployment | TLS, systemd, reboot-safe, one-level rollback, ~6 s end to end |
-| ✅ Tests | 294, `node --test`, no framework. Green on every push. |
-| ✅ Domain | `bombvoyage.online`, canonical. Aliases redirect to it. |
-| ✅ Observer mode | Spectate from the menu, or from the death card without losing your seat to nobody |
+| 💣 **Bombs & fire** | Blasts run in a cross and stop at walls. Catch another bomb and it goes off too — chains are where rounds are won. |
+| 🛢️ **Powder kegs** | Rare barrels that erupt in a huge blast the moment they break. At least one every round. |
+| 🧊 **Ice** | Melts into a puddle when hit: half pace, and you slide when you let go. |
+| 🏃 **Stamina** | Sprint for about ten seconds, then you limp. Stopping to catch your breath is a decision. |
+| 🎁 **Perks** | Extra bombs, bigger fire, boots, a shield, stim for stamina — and rum, which makes you tough and very hard to steer. |
+| 🪙 **Gold** | The rarest drop. Changes nothing in the round, counts for everything on the leaderboard. |
+| 🕊️ **Seagulls** | They cross the sky now and then. Catch one in a blast at the bottom of its dive and it drops gold. Watch its shadow. |
+| 🔥 **Kill streaks** | Double, triple, ultra, rampage — and an **ACE** for wiping out the whole island in one run. |
+| 👀 **Spectate** | Watch without taking a seat, even when the island is full. |
 
-Measured round trip from Cape Town to the box: **62 ms min / 73 ms median**, and a QUIC session
-is ready in about **50 ms**. The netcode is designed to survive 180 ms, so there is headroom.
+## 🧭 Run your own island
 
----
-
-## What this is
-
-- Up to **16 players**, 5 maps, 10-minute rounds (`/roundtime` to change it live).
-- Grid-based bomb-and-run rules in the Bomberman tradition, familiar to anyone who has played
-  Game of Bombs or Crazy Arcade, plus **stamina**, **powder kegs** and **seagulls** of our own.
-- **Bots keep you company.** The moment someone joins there are at least six; after two rounds
-  with nobody there they leave. A host who removes bots by hand is not overruled.
-- One server, one hostname, one port — **443, both TCP and UDP**. No CDNs, no third-party
-  domains, no build step.
-- Vanilla JS on the client, Node on the server. Two runtime dependencies: `ws` and the
-  WebTransport/QUIC pair. No framework.
-- Art is generated in code — nothing inside the game is an image. Four decorative PNGs on the
-  landing page and a font are the only binary art.
-- Audio is **four produced files** — `assets/audio/{theme,drift,suspend,undertow}.mp3`, about
-  three minutes each, cycling. Each is named after the slot it fills, so the synthesised
-  version of that slot is its automatic fallback. Every sound effect is still generated.
-
-What it is **not**: see [docs/DESIGN.md](docs/DESIGN.md) → Non-goals. Short version: no accounts,
-no payments, no persistent world, no mobile, no matchmaking, no anti-cheat.
-
----
-
-## Run it locally
+Bomb Voyage is a single small Node.js server with no database. To try it on your own machine:
 
 ```bash
-npm install                        # ws, plus the WebTransport pair
-cp config.example.ini config.ini   # optional — defaults work without it
-npm start                          # http://localhost:8080
-npm test                           # 294 tests, node --test, no framework
+npm install
+npm start            # then open http://localhost:8080 in two tabs
 ```
 
-WebTransport needs TLS and a native addon, so locally you get WebSocket and the client never
-notices. That is the same fallback everybody behind a UDP-blocking firewall gets in production.
+Settings live in an optional `config.ini` (copy `config.example.ini`), and any of them can be set
+as an environment variable instead:
 
-Open two tabs. No database, no Docker.
-
-**`config.ini` is gitignored** and holds every setting and secret; `config.example.ini` is the
-committed template. Environment variables override it, so `LAG=200 npm start` works without
-editing anything. Full table: [docs/DEPLOY.md](docs/DEPLOY.md) §5.
-
-**Develop with the lag shim on.** This is the single highest-value habit on the project:
-
-```bash
-npm run dev          # LAG=200 JITTER=40 — what a bad connection feels like
-```
-
-If your own character ever feels delayed at that setting, that is the bug, and it outranks
-everything else. See [docs/NETCODE.md](docs/NETCODE.md) §7.
-
-## Deploy
-
-Manual, and quick — about **6 seconds** end to end. Pushes your working tree, uncommitted work
-included.
-
-```bash
-npm run deploy        # tests, then deploy          ~6s
-npm run deploy:fast   # skip the tests              ~5s
-npm run rollback      # back to the previous deploy ~2s
-npm run logs          # follow the server journal
-```
-
-Ctrl-C is safe at any point: if it lands before `sync`, the server has not been touched.
-
-What makes it fast — one multiplexed SSH connection for every remote step instead of a handshake
-each, `npm ci` only when `package-lock.json` actually changed, and a hardlinked snapshot so
-rollback is a directory swap rather than a transfer. Rollback is its own undo: run it twice and
-you are back where you started.
-
-GitHub Actions runs the tests on every push but **does not deploy**. The server still has a
-token-gated `POST /deploy`, so switching automatic deploys on later is a job block plus two
-repo secrets — [docs/DEPLOY.md](docs/DEPLOY.md) §6.
-
-First-time server setup, the domain switch, and operations:
-[docs/DEPLOY.md](docs/DEPLOY.md).
-
----
-
-## Repo map
-
-| Path | What lives here | Slice |
+| Setting | Default | |
 |---|---|---|
-| `docs/` | The spec. Read before writing code. | — |
-| `shared/` | Code imported by **both** server and client. Tuning constants, pure sim systems. | FOUND (frozen), MOVE, BOOM, LOOT, PLAGUE |
-| `server/` | Node process: static serving, WebSocket hub, authoritative loop, persistence. | NET, ROUND |
-| `public/` | Everything the browser downloads. Served raw, no bundler. | — |
-| `public/client/` | Game client: prediction, renderer, input, audio. | MOVE, ARENA, SHELL, ART |
-| `public/assets/` | `art.js` — everything in the game, drawn from shapes. Then `img/`, `fonts/`, `audio/`. | ART, ARENA |
-| `infra/` | `bootstrap.sh` (once per box), `deploy.sh`, systemd unit. | DEPLOY |
-| `test/` | `node --test` suites. | whichever slice owns the system |
+| `port` | `8080` | Where the game is served |
+| `max_players` | `16` | Seats on the island |
+| `min_bots` | `6` | Bots kept in the game while anyone is playing (`0` to switch off) |
 
-Slice boundaries and file ownership: [docs/PLAN.md](docs/PLAN.md) §2 and
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §5. What each file actually does today:
-[docs/STATUS.md](docs/STATUS.md) §3.
+For a public server, see the deployment guide in [docs/DEPLOY.md](docs/DEPLOY.md).
 
----
+<details>
+<summary><b>Host commands</b> — for whoever is running the room</summary>
+<br>
 
-## Key decisions already made
+The host is the longest-standing player in the room, shown with a crown on the scoreboard. When
+they leave, the role passes on automatically.
 
-Settled. Reopen one before writing code, not after.
+| Command | |
+|---|---|
+| `/restart` | Start the round over |
+| `/map 0-4` | Switch island |
+| `/roundtime 0.1-60` | Round length in minutes, live |
+| `/gamespeed 10-200` | Speed the whole game up or slow it down |
+| `/bots N` | Set the number of bots (anyone can use this) |
+| `/kick NAME` | Remove a player |
 
-| Decision | Why | Detail |
-|---|---|---|
-| JSON, not a binary codec | 16 players is tiny. Debuggable in devtools, on either transport. | [PROTOCOL.md](docs/PROTOCOL.md) |
-| Two transports, raced, never one | QUIC where UDP is allowed; WebSocket where it is not. Nobody is ever locked out. | [NETCODE.md](docs/NETCODE.md) §8 |
-| Explosions are **derived**, not pushed | Fuse is deterministic, so a 180 ms client predicts fire perfectly and nobody dies to lag | [NETCODE.md](docs/NETCODE.md) |
-| Players do not collide with each other | Deletes the entire "I'm seeing you 150 ms in the past" problem | [RULES.md](docs/RULES.md) |
-| No build step, raw ES modules | One less thing to break at 16:45 on a Friday | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| systemd, not Docker | One process, one dependency. Deploy is an rsync, not an image build. | [DEPLOY.md](docs/DEPLOY.md) §1 |
-| Art is drawn in code from shapes | No sprite sheets to version, free recolouring per player | [ART-AUDIO.md](docs/ART-AUDIO.md) |
-| One port, one hostname, TLS on 443 | Corporate IT unblocks one thing | [DEPLOY.md](docs/DEPLOY.md) §2 |
+</details>
 
----
+## 🛠️ Under the hood
 
-## Credits
+- **Vanilla JavaScript** in the browser and **Node.js** on the server. No framework, no build
+  step, two runtime dependencies.
+- **WebTransport over QUIC** where the network allows it, with **WebSocket** as an automatic
+  fallback — players never notice which one they got.
+- **A shared, deterministic simulation.** Browser and server run the same game rules, so your
+  movement and every explosion are predicted locally and almost never corrected.
+- **Art and sound effects generated in code**, with four produced music tracks.
+- **294 automated tests**, run with Node's built-in test runner on every push.
 
-Inspired by Bomberman, Game of Bombs and Crazy Arcade. Built for private office play, not as a
-product. Do not copy anyone's art assets into this repo — everything here is drawn from scratch
-in code.
+| Read more | |
+|---|---|
+| [Design](docs/DESIGN.md) | What the game is for, and what it deliberately is not |
+| [Rules](docs/RULES.md) | Every rule and number in the game |
+| [Netcode](docs/NETCODE.md) | How it stays responsive on a slow connection |
+| [Art & audio](docs/ART-AUDIO.md) | The look, the sound, and how both are made |
+| [Architecture](docs/ARCHITECTURE.md) · [Protocol](docs/PROTOCOL.md) | For developers |
+| [Status](docs/STATUS.md) | What is built and what is next |
+
+## 📜 Credits & licence
+
+Inspired by **Bomberman**, **Game of Bombs** and **Crazy Arcade**. No art from any of them is
+used — everything in the game is original.
+
+Code is released under the [MIT licence](LICENSE). The display typeface is used under its own
+licence, included alongside it in `public/assets/fonts/`.
+
+<p align="center">
+  <img src="public/assets/img/avatar.png" alt="" width="72"><br>
+  <sub>Made with too many powder kegs at <b>eezi</b>.</sub>
+</p>
