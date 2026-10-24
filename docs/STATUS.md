@@ -75,8 +75,10 @@ it and nobody else — and the only one rare enough to be an event rather than a
   a third. Regenerates twice as fast standing still, so stopping is a decision rather than a
   punishment. See [RULES.md](RULES.md) §9.
 - **Ice.** One soft wall in twenty. A blast melts it into water on its own tile and the four
-  beside it, for four seconds: half pace, and you slide when you let go. The water is in the
-  snapshot, not derived from events, because prediction reads it. See [RULES.md](RULES.md) §4.
+  beside it, for **eight seconds**: half pace, and you slide when you let go. Eight because at
+  four the puddle was gone before anyone but the person who made it could reach it — a rare
+  thing that evaporates before you can cross to it is a rare thing nobody uses. The water is in
+  the snapshot, not derived from events, because prediction reads it. See [RULES.md](RULES.md) §4.
 - **The sea listens to the music.** Bass swells the waves, energy speeds the current, the highs
   glitter, and every beat rolls a swell out from the coast. See [ART-AUDIO.md](ART-AUDIO.md) §6.
 - **Powder kegs.** A destructible block that detonates at radius 7 on the tick it breaks. At most
