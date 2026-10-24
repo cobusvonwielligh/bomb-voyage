@@ -36,7 +36,16 @@ export const PALETTE = {
 
   // The sea, and the rock the island is made of. The rock is brown-grey boulder, not the blue
   // slate the walls are: the coast has to read as a different material from the level.
-  seaDeep: '#0a1a2e', seaMid: '#123252', seaLight: '#1d5176', foam: '#cfe7f5',
+  /* The sea, lifted and turned toward the Caribbean.
+   *
+   * Every tone is lighter and greener than it was — #0a1a2e was ink, and ink is what deep cold
+   * water looks like. Warm shallow water over sand is a green-blue, and it is BRIGHT: the giveaway
+   * is not the hue, it is that you can see through it. Pulling the whole ramp up and rotating it
+   * toward cyan does that without touching anything that reads the palette.
+   *
+   * Kept dark enough that sixteen saturated players still pop off it, which is the one rule the
+   * sea is not allowed to break. */
+  seaDeep: '#0f2b40', seaMid: '#1a4f68', seaLight: '#2d7f94', foam: '#d8f1f7',
   rock: '#4a4036', rockLit: '#6b5e4f', rockTop: '#857665', rockDark: '#2b241d', sand: '#6e6346',
 };
 

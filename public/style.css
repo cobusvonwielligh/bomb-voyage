@@ -16,9 +16,9 @@
  * Licence lives beside it in assets/fonts/clegan-LICENSE.txt: free for personal use, which is
  * what this is. */
 @font-face {
-  font-family: 'Clegan';
-  src: url('/assets/fonts/clegan.ttf') format('truetype');
-  font-display: block;        /* no flash of fallback on the title; it is the first thing seen */
+  font-family: "Clegan";
+  src: url("/assets/fonts/clegan.ttf") format("truetype");
+  font-display: block; /* no flash of fallback on the title; it is the first thing seen */
 }
 
 :root {
@@ -49,10 +49,10 @@
   --gold: #edc24e;
   --gold-low: #a06a12;
 
-  --gold-lit: #f6e7a9;      /* the top of a filled button */
-  --gold-deep: #c08d22;     /* the bottom of one */
-  --gold-shadow: #6d4709;   /* and the hard shadow under it */
-  --on-gold: #2a1a04;       /* text that sits on a filled accent — 8.9:1 */
+  --gold-lit: #f6e7a9; /* the top of a filled button */
+  --gold-deep: #c08d22; /* the bottom of one */
+  --gold-shadow: #6d4709; /* and the hard shadow under it */
+  --on-gold: #2a1a04; /* text that sits on a filled accent — 8.9:1 */
 
   /* Cast gold, as a paintable background. Clipped to text by `.cast` below.
    *
@@ -70,11 +70,25 @@
        works out wider than the whole word — so instead of a travelling glint it very slightly
        brightened everything, all the time, and the sweep was invisible. A specular highlight
        you cannot see the edges of is not a highlight, it is exposure. */
-    linear-gradient(104deg,
-      #ffffff00 42%, #ffffff00 46%, #fffffff2 50%, #ffffff00 54%, #ffffff00 58%),
-    linear-gradient(180deg,
-      #7d5410 0%, #b8841f 14%, var(--gold-hi) 33%, #f0cf6a 44%,
-      var(--gold) 56%, #b8841f 70%, #f2d479 84%, #6d4709 100%);
+    linear-gradient(
+      104deg,
+      #ffffff00 42%,
+      #ffffff00 46%,
+      #fffffff2 50%,
+      #ffffff00 54%,
+      #ffffff00 58%
+    ),
+    linear-gradient(
+      180deg,
+      #7d5410 0%,
+      #b8841f 14%,
+      var(--gold-hi) 33%,
+      #f0cf6a 44%,
+      var(--gold) 56%,
+      #b8841f 70%,
+      #f2d479 84%,
+      #6d4709 100%
+    );
   --panel: #1a2029;
   --ink: #e8eef7;
   --dim: #92a0b4;
@@ -86,10 +100,11 @@
   --good: #5ad1a0;
 
   /* The display face, for large type only. */
-  --display: 'Clegan', ui-monospace, monospace;
+  --display: "Clegan", ui-monospace, monospace;
   /* Condensed humanist sans for anything you read mid-round. Falls back the whole way down. */
-  --text: 'Bahnschrift', 'DIN Alternate', 'Avenir Next Condensed', 'Segoe UI Semibold',
-          'Helvetica Neue', system-ui, sans-serif;
+  --text:
+    "Bahnschrift", "DIN Alternate", "Avenir Next Condensed",
+    "Segoe UI Semibold", "Helvetica Neue", system-ui, sans-serif;
   /* Tabular figures for numbers that tick, so the timer does not shuffle sideways every second. */
   --nums: ui-monospace, SFMono-Regular, Menlo, monospace;
 
@@ -99,7 +114,9 @@
    * Four zero-blur offsets draw the outline, the wide blur lifts it off whatever is behind.
    * Only usable where the fill is opaque — #title clips a gradient through transparent glyphs,
    * so a shadow would show through the inside of every letter and it uses a filter instead. */
-  --rim: 1.5px 0 0 #000, -1.5px 0 0 #000, 0 1.5px 0 #000, 0 -1.5px 0 #000, 0 0 12px #000b;
+  --rim:
+    1.5px 0 0 #000, -1.5px 0 0 #000, 0 1.5px 0 #000, 0 -1.5px 0 #000,
+    0 0 12px #000b;
 
   /* The thin dark outline every piece of cast type carries.
    *
@@ -109,8 +126,18 @@
    * the inside of every glyph. Thin — 1px, not the 1.5 the old flat rim used — because its job
    * here is to give the metal an edge, not to make the word legible. Too thick and the letters
    * stop looking cast and start looking stickered on. */
-  --cast-edge:
-    drop-shadow(1px 0 0 #1c1304) drop-shadow(-1px 0 0 #1c1304)
+  /* The drop shadow under every centre-screen announcement — YOU DIED and the kill streaks
+   * alike. One token, because they appear in the same place seconds apart and two different
+   * weights of shadow on the same spot reads as one of them being broken.
+   *
+   * Heavy on purpose: these land over a board full of fire and sixteen saturated players, and a
+   * banner that does not sit clearly in FRONT of all that is a banner nobody reads in time. */
+  --banner-shadow:
+    0 4px 0 #000,
+    0 8px 18px #000d,
+    0 14px 36px #000a;
+
+  --cast-edge: drop-shadow(1px 0 0 #1c1304) drop-shadow(-1px 0 0 #1c1304)
     drop-shadow(0 1px 0 #1c1304) drop-shadow(0 -1px 0 #1c1304);
 
   /* A robot head: antenna, squared skull, two eyes. Inline so it can be a CSS mask and take
@@ -126,7 +153,7 @@
    * rectangle reading as a hole cut in the screen, which is what large unbroken fills do on a
    * dark page. Nothing here costs a request or a decode. */
   --weave:
-    repeating-linear-gradient(45deg,  #ffffff05 0 1px, #00000000 1px 4px),
+    repeating-linear-gradient(45deg, #ffffff05 0 1px, #00000000 1px 4px),
     repeating-linear-gradient(-45deg, #ffffff03 0 1px, #00000000 1px 5px),
     radial-gradient(120% 90% at 12% 0%, #ffffff0a, #ffffff00 58%);
 
@@ -153,47 +180,114 @@
 /* ─── medals and podium rows, shared by every board ──────────────────────────── */
 
 .medal {
-  display: inline-block; width: 19px; height: 22px; vertical-align: -6px;
+  display: inline-block;
+  width: 19px;
+  height: 22px;
+  vertical-align: -6px;
   background: center / contain no-repeat;
   filter: drop-shadow(0 1px 1px #000b);
 }
-.medal.m1 { background-image: var(--medal-1); }
-.medal.m2 { background-image: var(--medal-2); }
-.medal.m3 { background-image: var(--medal-3); }
-/* Gold catches the light now and then: one slow glint every few seconds, not a strobe. */
-.medal.m1 { animation: medalGlint 4.5s ease-in-out infinite; }
-@keyframes medalGlint {
-  0%, 82%, 100% { filter: drop-shadow(0 1px 1px #000b); }
-  88% { filter: drop-shadow(0 1px 1px #000b) drop-shadow(0 0 5px #fff1a8cc) brightness(1.18); }
+.medal.m1 {
+  background-image: var(--medal-1);
 }
-@media (prefers-reduced-motion: reduce) { .medal.m1 { animation: none; } }
+.medal.m2 {
+  background-image: var(--medal-2);
+}
+.medal.m3 {
+  background-image: var(--medal-3);
+}
+/* Gold catches the light now and then: one slow glint every few seconds, not a strobe. */
+.medal.m1 {
+  animation: medalGlint 4.5s ease-in-out infinite;
+}
+@keyframes medalGlint {
+  0%,
+  82%,
+  100% {
+    filter: drop-shadow(0 1px 1px #000b);
+  }
+  88% {
+    filter: drop-shadow(0 1px 1px #000b) drop-shadow(0 0 5px #fff1a8cc)
+      brightness(1.18);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .medal.m1 {
+    animation: none;
+  }
+}
 
 /* Lifetime medal counts: three small medals, each with its count. A zero is dimmed, not
  * removed, so the column keeps one shape all the way down and "no silver yet" still reads. */
-.medal.mini { width: 14px; height: 17px; vertical-align: -4px; animation: none; }
-.tally { display: inline-flex; gap: 9px; font-family: var(--nums); font-variant-numeric: tabular-nums; }
-.tally .t { display: inline-flex; align-items: center; gap: 3px; min-width: 2.6ch; }
-.tally .t.zero { opacity: .3; }
-.tally.none { color: var(--dim); }
-#cardMedals { display: flex; align-items: center; gap: 8px; margin-top: 7px; font-size: 13px; }
-#cardMedals:empty { display: none; }
-#cardMedals .k {
-  color: var(--dim); font-size: 9px; text-transform: uppercase;
-  letter-spacing: .14em; font-family: var(--text);
+.medal.mini {
+  width: 14px;
+  height: 17px;
+  vertical-align: -4px;
+  animation: none;
 }
-body.observing #cardMedals { display: none; }
+.tally {
+  display: inline-flex;
+  gap: 9px;
+  font-family: var(--nums);
+  font-variant-numeric: tabular-nums;
+}
+.tally .t {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 2.6ch;
+}
+.tally .t.zero {
+  opacity: 0.3;
+}
+.tally.none {
+  color: var(--dim);
+}
+#cardMedals {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 13px;
+}
+#cardMedals:empty {
+  display: none;
+}
+#cardMedals .k {
+  color: var(--dim);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-family: var(--text);
+  margin-right: 8px;
+}
+body.observing #cardMedals {
+  display: none;
+}
 
-.p1 { background: var(--tint-1); }
-.p2 { background: var(--tint-2); }
-.p3 { background: var(--tint-3); }
+.p1 {
+  background: var(--tint-1);
+}
+.p2 {
+  background: var(--tint-2);
+}
+.p3 {
+  background: var(--tint-3);
+}
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
-html, body {
-  height: 100%; margin: 0; overflow: hidden;
-  background: #0d1117; color: var(--ink);
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #0d1117;
+  color: var(--ink);
   font: 15px/1.5 var(--text);
-  letter-spacing: .02em;
+  letter-spacing: 0.02em;
 }
 
 /* ─── layout ──────────────────────────────────────────────────────────────────
@@ -202,7 +296,11 @@ html, body {
  * bars and the whole island is on screen at once.
  */
 
-:root { --bar: 52px; --side: 340px; --gap: 10px; }
+:root {
+  --bar: 52px;
+  --side: 340px;
+  --gap: 10px;
+}
 
 /* Explicit width and height, not `auto` with four insets.
  *
@@ -218,16 +316,23 @@ canvas#game {
   width: calc(100vw - var(--side) - var(--gap) * 3);
   height: calc(100vh - var(--bar) - var(--gap) * 3);
   display: block;
-  background: #0a1a2e;        /* the sea, so a frame that has not painted yet is not a flash */
+  background: #0f2b40; /* the sea, so a frame that has not painted yet is not a flash. Keep in
+                          step with PALETTE.seaDeep in art.js. */
   image-rendering: pixelated;
   border-radius: 8px;
 }
 
 /* Below this the side panel costs more than it gives: drop it, and let the board have the lot. */
 @media (max-width: 1080px) {
-  :root { --side: 0px; }
-  #side { display: none; }
-  canvas#game { width: calc(100vw - var(--gap) * 2); }
+  :root {
+    --side: 0px;
+  }
+  #side {
+    display: none;
+  }
+  canvas#game {
+    width: calc(100vw - var(--gap) * 2);
+  }
 }
 
 /* ─── the moving gradient ─────────────────────────────────────────────────────
@@ -239,9 +344,17 @@ canvas#game {
  * the brightest thing on screen, and the brightest thing on screen should be a player or a fire.
  */
 
-@property --spin { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+@property --spin {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
 
-@keyframes spin { to { --spin: 360deg; } }
+@keyframes spin {
+  to {
+    --spin: 360deg;
+  }
+}
 
 /* ─── cast gold ───────────────────────────────────────────────────────────────
  * Poured metal, for display type. `--cast` above is the paint; this is the brush.
@@ -271,32 +384,53 @@ canvas#game {
 }
 
 @supports ((-webkit-background-clip: text) or (background-clip: text)) {
-.cast {
-  background: var(--cast);
-  /* The sweep layer is three times the width of the text so it can travel across it; the metal
+  .cast {
+    background: var(--cast);
+    /* The sweep layer is three times the width of the text so it can travel across it; the metal
      underneath is fixed. Order matches the two layers in --cast. */
-  background-size: 260% 100%, 100% 100%;
-  background-position: 120% 0, 0 0;
-  background-repeat: no-repeat;
-  -webkit-background-clip: text; background-clip: text;
-  -webkit-text-fill-color: transparent; color: transparent;
-  text-shadow: none;
-  filter: var(--cast-edge) drop-shadow(0 2px 1px #0009) drop-shadow(0 0 16px #edc24e3d);
-  animation: castShine 7s linear infinite;
-}
+    background-size:
+      260% 100%,
+      100% 100%;
+    background-position:
+      120% 0,
+      0 0;
+    background-repeat: no-repeat;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    text-shadow: none;
+    filter: var(--cast-edge) drop-shadow(0 2px 1px #0009)
+      drop-shadow(0 0 16px #edc24e3d);
+    animation: castShine 7s linear infinite;
+  }
 }
 
 /* -120% to 120% rather than 0 to 100%: the band has to start and finish entirely OFF the text,
    or the loop has a visible moment where it sits still at one end. */
 @keyframes castShine {
-  from { background-position: -120% 0, 0 0; }
-  to   { background-position: 220% 0, 0 0; }
+  from {
+    background-position:
+      -120% 0,
+      0 0;
+  }
+  to {
+    background-position:
+      220% 0,
+      0 0;
+  }
 }
 
 /* The shine is a flourish and the outline is not. Reduced motion keeps the metal and the edge
    and parks the highlight where it looks best, which is just off centre. */
 @media (prefers-reduced-motion: reduce) {
-  .cast, .castSm { animation: none; background-position: 42% 0, 0 0; }
+  .cast,
+  .castSm {
+    animation: none;
+    background-position:
+      42% 0,
+      0 0;
+  }
 }
 
 /* ─── cast gold, small ─────────────────────────────────────────────────────────
@@ -345,17 +479,28 @@ canvas#game {
    */
   .castSm[data-text]::after {
     content: attr(data-text);
-    position: absolute; inset: 0;
-    background: linear-gradient(180deg, #a06a12 0%, var(--gold-hi) 34%, var(--gold) 62%, #8a5a10 100%);
-    -webkit-background-clip: text; background-clip: text;
-    -webkit-text-fill-color: transparent; color: transparent;
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      180deg,
+      #a06a12 0%,
+      var(--gold-hi) 34%,
+      var(--gold) 62%,
+      #8a5a10 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
     /* The thin edge, as a stroke rather than drop-shadows — no filter, no layer. Under the
        fill, or it eats half a pixel off every stem, which at this size is most of the stem. */
     -webkit-text-stroke: 0.9px #140d02;
     paint-order: stroke fill;
     text-shadow: none;
     /* Match the parent's clipping exactly, or a long name's metal outruns its own shadow. */
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     pointer-events: none;
   }
 }
@@ -367,12 +512,22 @@ canvas#game {
     /* Texture first, so it lies over the fill and under the content. All three are clipped to
        the padding box, or the weave would run through the animated border and muddy it. */
     var(--weave) padding-box,
-    linear-gradient(var(--panel-fill, #11161ee6), var(--panel-fill, #11161ee6)) padding-box,
+    linear-gradient(var(--panel-fill, #11161ee6), var(--panel-fill, #11161ee6))
+      padding-box,
     /* Centred on the bottom-right corner rather than the middle: the sweep then runs across the
        whole panel in one direction instead of pinwheeling about its centre, which reads as light
        moving past rather than as a spinning wheel. */
-    conic-gradient(from var(--spin) at 100% 100%,
-      #c7b057, #ce8c6e, #c4837e, #b490da, #7badd3, #78b39b, #c7b057) border-box;
+    conic-gradient(
+        from var(--spin) at 100% 100%,
+        #c7b057,
+        #ce8c6e,
+        #c4837e,
+        #b490da,
+        #7badd3,
+        #78b39b,
+        #c7b057
+      )
+      border-box;
   animation: spin 28s linear infinite;
 }
 
@@ -381,13 +536,20 @@ canvas#game {
 @supports not (background: conic-gradient(from 0deg, red, blue)) {
   .edge {
     border-color: #edc24e66;
-    background: var(--weave) padding-box,
-      linear-gradient(var(--panel-fill, #11161ee6), var(--panel-fill, #11161ee6)) padding-box;
+    background:
+      var(--weave) padding-box,
+      linear-gradient(
+          var(--panel-fill, #11161ee6),
+          var(--panel-fill, #11161ee6)
+        )
+        padding-box;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .edge { animation: none; }
+  .edge {
+    animation: none;
+  }
 }
 
 /* ─── top bar ─────────────────────────────────────────────────────────────────
@@ -395,13 +557,18 @@ canvas#game {
  * the screen under the chat where nobody looked at it.
  */
 
-#hud { display: none; }
-#hud.on { display: block; }
+#hud {
+  display: none;
+}
+#hud.on {
+  display: block;
+}
 
 #topbar {
   --panel-fill: #0d1117d9;
   position: fixed;
-  top: var(--gap); left: var(--gap);
+  top: var(--gap);
+  left: var(--gap);
   right: calc(var(--side) + var(--gap) * 2);
   height: var(--bar);
   z-index: 5;
@@ -409,12 +576,18 @@ canvas#game {
   backdrop-filter: blur(10px) saturate(1.3);
   -webkit-backdrop-filter: blur(10px) saturate(1.3);
   box-shadow: 0 6px 28px #0009;
-  display: flex; align-items: center; gap: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
   padding: 7px 14px;
   font-size: 13px;
 }
 
-#topbar .sep { width: 1px; height: 18px; background: #ffffff1f; }
+#topbar .sep {
+  width: 1px;
+  height: 18px;
+  background: #ffffff1f;
+}
 
 /* `#who` and `#rank` used to live up here, when the name was in the top bar. It moved to the
    side card and these two rules stayed behind — same id, same element, both still applying.
@@ -432,12 +605,19 @@ canvas#game {
  *
  * `inline-block` matters too: the bump animation scales these, and a scaled inline box
  * contributes its unscaled size to layout only if it is a block. */
-.stat { display: flex; align-items: baseline; gap: 7px; }
+.stat {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
 /* Was 10px in --dim, which is about 3:1 against the bar and sits below the readable threshold
    for type this small. Up a point, and lifted toward the ink: these are labels you read out of
    the corner of your eye mid-fight, not footnotes. */
 .stat .k {
-  color: #aab6c8; font-size: 11px; text-transform: uppercase; letter-spacing: .12em;
+  color: #aab6c8;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
 }
 /* The SAME SIZE as the grey label beside it, not bigger.
  *
@@ -449,37 +629,73 @@ canvas#game {
  *
  * 600 weight stays. Dropping that too would make the value recede behind its own label. */
 .stat .v {
-  font-family: var(--nums); font-variant-numeric: tabular-nums; font-size: 11px;
+  font-family: var(--nums);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
   font-weight: 600;
   /* The accent, not plain ink. These three are the numbers you glance at without stopping, and
      colour is what makes a glance work — the labels beside them stay grey so the value is the
      thing the eye lands on. */
   color: var(--gold);
-  display: inline-block; text-align: left;
+  display: inline-block;
+  text-align: left;
 }
-#vPing { min-width: 5.2ch; }
-#vOnline { min-width: 2.2ch; }
-#vMap { min-width: 9ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#vPing {
+  min-width: 5.2ch;
+}
+#vOnline {
+  min-width: 2.2ch;
+}
+#vMap {
+  min-width: 9ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* The round clock. The single most-glanced-at number on screen, so it is the biggest one. */
-#clock { display: flex; align-items: baseline; gap: 6px; }
+#clock {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
 #clock .v {
   /* The display face. It is the biggest number on screen and the one you take in at a glance
      rather than compare digit by digit, which is exactly what a display face is for.
      Clegan has no tabular figures, so `min-width` in ch does the job `font-variant-numeric`
      used to: the box is reserved at its widest and the bar cannot jump as the digits change.
      Centred inside that box, or a narrow "1:05" would drift left of where "10:05" sat. */
-  font-family: var(--display); font-weight: 400;
-  font-size: 28px; line-height: 1;
-  color: var(--gold); letter-spacing: .04em;
-  display: inline-block; min-width: 4.8ch; text-align: center;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 28px;
+  line-height: 1;
+  color: var(--gold);
+  letter-spacing: 0.04em;
+  display: inline-block;
+  min-width: 4.8ch;
+  text-align: center;
 }
-#clock .k { color: #aab6c8; font-size: 10px; text-transform: uppercase; letter-spacing: .14em; }
+#clock .k {
+  color: #aab6c8;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
 /* The last minute. Now that the accent is itself a red, `--bad` no longer reads as an alarm
    next to it — it is darker and less saturated than the resting colour, which is backwards for
    a warning. White-hot and blinking is the signal instead: brightness, not hue. */
-#clock.low .v { color: #fff; text-shadow: 0 0 12px #ff3b2f, 0 0 26px #ff3b2f66; animation: tick 1s steps(2) infinite; }
-@keyframes tick { 50% { opacity: .55; } }
+#clock.low .v {
+  color: #fff;
+  text-shadow:
+    0 0 12px #ff3b2f,
+    0 0 26px #ff3b2f66;
+  animation: tick 1s steps(2) infinite;
+}
+@keyframes tick {
+  50% {
+    opacity: 0.55;
+  }
+}
 
 /* Connectivity, as a dot. Red by default, because every state that is not "open" is one you
    want to notice, including ones added later that this stylesheet has never heard of. */
@@ -488,75 +704,162 @@ body.observing #gear,
 body.observing #xp,
 body.observing #cardStats,
 body.observing #avatar,
-body.observing #say { display: none; }
-body.observing #who { color: var(--dim); }
+body.observing #say {
+  display: none;
+}
+body.observing #who {
+  color: var(--dim);
+}
 
 #conn {
-  width: 9px; height: 9px; border-radius: 50%;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
   flex: 0 0 auto;
   /* Sat on the ping's baseline, which puts it under the text rather than beside it. */
-  align-self: center; margin-left: 1px;
+  align-self: center;
+  margin-left: 1px;
   background: var(--bad);
-  box-shadow: 0 0 0 2px #0006, 0 0 8px currentColor;
+  box-shadow:
+    0 0 0 2px #0006,
+    0 0 8px currentColor;
   color: var(--bad);
 }
-#conn[data-state=open] { background: var(--good); color: var(--good); }
+#conn[data-state="open"] {
+  background: var(--good);
+  color: var(--good);
+}
 /* Amber, not the accent. The dot is nine pixels wide and exists to be read without being
    looked at, which only works while its three states are three different hues. The accent
    used to be blue and could carry "in flight"; now that it is a red it collides with the
    failure state at that size. Red / amber / green survives the glance. */
-#conn[data-state=reconnecting], #conn[data-state=connecting] {
-  background: var(--warn); color: var(--warn);
-  animation: tick 1s steps(2) infinite;      /* in-flight, not settled */
+#conn[data-state="reconnecting"],
+#conn[data-state="connecting"] {
+  background: var(--warn);
+  color: var(--warn);
+  animation: tick 1s steps(2) infinite; /* in-flight, not settled */
 }
 
 /* loadout */
-#gear { display: flex; gap: 14px; align-items: center; position: relative; }
+#gear {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  position: relative;
+}
 /* Same again for the loadout. 16px numbers next to a 13px cap was the same mismatch, and these
    sit in the same row as the stats — three type sizes across one bar is two too many. */
 .pip {
-  display: flex; align-items: center; gap: 7px;
-  font-family: var(--nums); font-variant-numeric: tabular-nums; font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--nums);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
   font-weight: 600;
   color: var(--gold);
 }
 /* 1.5x. These are the only pictures in the bar and they were losing to the text beside them. */
-.pip svg { width: 20px; height: 20px; display: block; }
-.pip .n { display: inline-block; min-width: 1.2ch; text-align: right; }
-.pip .cap { color: #9fabbd; font-size: 13px; }   /* matches .pip itself — see above */
-.pip.max .n { color: var(--gold); }
+.pip svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+.pip .n {
+  display: inline-block;
+  min-width: 1.2ch;
+  text-align: right;
+}
+.pip .cap {
+  color: #9fabbd;
+  font-size: 13px;
+} /* matches .pip itself — see above */
+.pip.max .n {
+  color: var(--gold);
+}
 /* Carrying at least one. The glow is the part that reads without being looked at; the number is
    there for when you do look. */
-.pip.on { color: var(--gold); }
-.pip.on svg { filter: drop-shadow(0 0 6px #edc24e88); }
-.pip:not(.on) { opacity: .5; }
+.pip.on {
+  color: var(--gold);
+}
+.pip.on svg {
+  filter: drop-shadow(0 0 6px #edc24e88);
+}
+.pip:not(.on) {
+  opacity: 0.5;
+}
 
 /* The flash a value does when it changes. Colour plus a little scale: motion catches the eye in
  * peripheral vision in a way a colour change alone does not. */
 @keyframes bump {
-  0%   { transform: scale(1);    color: var(--gold); text-shadow: 0 0 10px #edc24e; }
-  35%  { transform: scale(1.45); color: #fff;        text-shadow: 0 0 16px #edc24e; }
-  100% { transform: scale(1);    color: inherit;     text-shadow: none; }
+  0% {
+    transform: scale(1);
+    color: var(--gold);
+    text-shadow: 0 0 10px #edc24e;
+  }
+  35% {
+    transform: scale(1.45);
+    color: #fff;
+    text-shadow: 0 0 16px #edc24e;
+  }
+  100% {
+    transform: scale(1);
+    color: inherit;
+    text-shadow: none;
+  }
 }
-.bump { display: inline-block; animation: bump .45s cubic-bezier(.2,1.4,.4,1); }
+.bump {
+  display: inline-block;
+  animation: bump 0.45s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
 
 /* A quarter of the jump. Used where a number changes every second and the full bump would be a
  * strobe rather than a signal. */
 @keyframes bumpCalm {
-  0%   { transform: scale(1);    color: var(--gold); }
-  35%  { transform: scale(1.11); color: #fff; }
-  100% { transform: scale(1);    color: inherit; }
+  0% {
+    transform: scale(1);
+    color: var(--gold);
+  }
+  35% {
+    transform: scale(1.11);
+    color: #fff;
+  }
+  100% {
+    transform: scale(1);
+    color: inherit;
+  }
 }
-.bump-calm { display: inline-block; animation: bumpCalm .45s ease-out; }
+.bump-calm {
+  display: inline-block;
+  animation: bumpCalm 0.45s ease-out;
+}
 
 @keyframes bumpBad {
-  0%   { transform: scale(1);    color: var(--bad); }
-  35%  { transform: scale(1.45); color: #fff; text-shadow: 0 0 16px var(--bad); }
-  100% { transform: scale(1);    color: inherit; }
+  0% {
+    transform: scale(1);
+    color: var(--bad);
+  }
+  35% {
+    transform: scale(1.45);
+    color: #fff;
+    text-shadow: 0 0 16px var(--bad);
+  }
+  100% {
+    transform: scale(1);
+    color: inherit;
+  }
 }
-.bump-bad { display: inline-block; animation: bumpBad .45s cubic-bezier(.2,1.4,.4,1); }
+.bump-bad {
+  display: inline-block;
+  animation: bumpBad 0.45s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
 
-.right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+.right {
+  margin-left: auto;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
 
 /* The audio dock: both volume controls and what is playing, bottom left, one pill.
  *
@@ -569,9 +872,13 @@ body.observing #who { color: var(--dim); }
  * is along the top, the side panel is right, and the mascot is top right. It is also where every
  * music player on earth puts this, which is worth more than any argument about it. */
 #dock {
-  position: fixed; z-index: 11;
-  left: var(--gap); bottom: var(--gap);
-  display: flex; align-items: center; gap: 2px;
+  position: fixed;
+  z-index: 11;
+  left: var(--gap);
+  bottom: var(--gap);
+  display: flex;
+  align-items: center;
+  gap: 2px;
   padding: 3px 4px;
   border-radius: 11px;
   background: #0d1117b8;
@@ -589,23 +896,41 @@ body.observing #who { color: var(--dim); }
  * to "is it muted or is it just quiet right now".
  */
 #nowPlaying {
-  display: flex; align-items: center; gap: 7px;
-  min-width: 0;                         /* or the ellipsis below never triggers */
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0; /* or the ellipsis below never triggers */
   padding: 0 8px 0 5px;
-  font-family: var(--nums); font-size: 10.5px;
-  letter-spacing: .1em; text-transform: uppercase;
+  font-family: var(--nums);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--dim);
-  transition: color .2s, opacity .2s;
+  transition:
+    color 0.2s,
+    opacity 0.2s;
 }
 #nowPlaying .t {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* Playing: the name takes the accent and the bars move. */
-#dock.playing #nowPlaying { color: var(--gold); }
+#dock.playing #nowPlaying {
+  color: var(--gold);
+}
 
-.eq { display: flex; align-items: flex-end; gap: 2px; height: 11px; flex: 0 0 auto; }
+.eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 11px;
+  flex: 0 0 auto;
+}
 .eq b {
-  display: block; width: 2px; height: 3px;
+  display: block;
+  width: 2px;
+  height: 3px;
   border-radius: 1px;
   background: currentColor;
   transform-origin: bottom;
@@ -617,10 +942,14 @@ body.observing #who { color: var(--dim); }
  * difference between a loop pretending to be a level and an actual level is the entire reason
  * this exists, and you can tell instantly without being able to say why: real bars land on the
  * beat. The transition is what fills the gap between frames at low refresh rates. */
-.eq b { transition: height .06s linear; }
+.eq b {
+  transition: height 0.06s linear;
+}
 
 /* Stopped: the bars hold at their shortest and the whole readout steps back. */
-#dock:not(.playing) #nowPlaying { opacity: .55; }
+#dock:not(.playing) #nowPlaying {
+  opacity: 0.55;
+}
 
 /* The dock breathes with the kick. `--bass` is 0..1, written once a frame by syncMeter().
  *
@@ -630,34 +959,64 @@ body.observing #who { color: var(--dim); }
 #dock {
   box-shadow:
     0 4px 18px #0007,
-    0 0 calc(8px + var(--bass, 0) * 20px) rgba(237, 194, 78, calc(var(--bass, 0) * 0.3));
+    0 0 calc(8px + var(--bass, 0) * 20px)
+      rgba(237, 194, 78, calc(var(--bass, 0) * 0.3));
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .eq b { transition: none; }
-  #dock { box-shadow: 0 4px 18px #0007; }
+  .eq b {
+    transition: none;
+  }
+  #dock {
+    box-shadow: 0 4px 18px #0007;
+  }
 }
 
 /* Narrow windows lose the side panel and the board takes the lot, so the words go and the two
    controls stay. The icons are the part you need; the title is the part that is nice to have. */
 @media (max-width: 760px) {
-  #nowPlaying .t { display: none; }
-  #nowPlaying { padding-right: 4px; }
+  #nowPlaying .t {
+    display: none;
+  }
+  #nowPlaying {
+    padding-right: 4px;
+  }
 }
 
 button {
-  font: inherit; font-size: 12px; color: var(--gold); background: transparent;
-  border: 1px solid #edc24e77; border-radius: 5px; padding: 5px 12px; cursor: pointer;
-  letter-spacing: .1em; text-transform: uppercase;
-  transition: background .12s, color .12s;
+  font: inherit;
+  font-size: 12px;
+  color: var(--gold);
+  background: transparent;
+  border: 1px solid #edc24e77;
+  border-radius: 5px;
+  padding: 5px 12px;
+  cursor: pointer;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition:
+    background 0.12s,
+    color 0.12s;
 }
-button:hover { background: var(--gold); color: #11161e; }
-button:disabled { opacity: .4; cursor: default; }
-button:disabled:hover { background: transparent; color: var(--gold); }
+button:hover {
+  background: var(--gold);
+  color: #11161e;
+}
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+button:disabled:hover {
+  background: transparent;
+  color: var(--gold);
+}
 
 /* Only the fader uses a range input, and it draws every part of itself below. This is the
    fallback for any engine that ignores the ::-webkit / ::-moz pseudo-elements. */
-input[type=range] { width: 64px; accent-color: var(--gold); }
+input[type="range"] {
+  width: 64px;
+  accent-color: var(--gold);
+}
 
 /* Volume: one control, not three widgets.
  *
@@ -669,57 +1028,108 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * focus-within as well as hover, so it is reachable by keyboard: tabbing to the slider opens the
  * control, and it cannot close while the thing you are dragging is inside it. */
 .vol {
-  position: relative;                   /* the fader above it is absolutely placed */
-  display: flex; align-items: center;
+  position: relative; /* the fader above it is absolutely placed */
+  display: flex;
+  align-items: center;
   border-radius: 9px;
   border: 1px solid transparent;
-  transition: background .14s, border-color .14s;
+  transition:
+    background 0.14s,
+    border-color 0.14s;
 }
-.vol:hover, .vol:focus-within { background: #ffffff10; border-color: #ffffff22; }
+.vol:hover,
+.vol:focus-within {
+  background: #ffffff10;
+  border-color: #ffffff22;
+}
 
 .volBtn {
-  display: grid; place-items: center;
-  width: 34px; height: 34px; padding: 0;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
   position: relative;
-  background: none; border: none; border-radius: 8px;
+  background: none;
+  border: none;
+  border-radius: 8px;
   color: var(--dim);
-  transition: color .12s;
+  transition: color 0.12s;
 }
-.volBtn svg { width: 18px; height: 18px; display: block; }
+.volBtn svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
 
 /* Skip back and skip forward. Narrower than play/pause and without a level bar, because they
    are not a level — the asymmetry is what makes the middle one read as the one you press most. */
-.volBtn.skip { width: 24px; height: 30px; color: #6f7b8c; }
-.volBtn.skip svg { width: 14px; height: 14px; }
-.volBtn.skip:hover, .volBtn.skip:focus-visible { color: var(--ink); background: #ffffff10; }
+.volBtn.skip {
+  width: 24px;
+  height: 30px;
+  color: #6f7b8c;
+}
+.volBtn.skip svg {
+  width: 14px;
+  height: 14px;
+}
+.volBtn.skip:hover,
+.volBtn.skip:focus-visible {
+  color: var(--ink);
+  background: #ffffff10;
+}
 
 /* The level bar belongs to the two FADER buttons and to nothing else. On a transport button it
    would be a progress bar that never moves, which is worse than no bar at all. */
-.volBtn.skip::after, #musicBtn::after { content: none; }
-#musicBtn { width: 30px; }
-#musicBtn.on { color: var(--gold); }
+.volBtn.skip::after,
+#musicBtn::after {
+  content: none;
+}
+#musicBtn {
+  width: 30px;
+}
+#musicBtn.on {
+  color: var(--gold);
+}
 
 /* A hairline between the transport and the two faders. Three buttons then two buttons reads as
    five buttons without it, and the pill is small enough that five of anything is a row. */
 #dock .sep {
-  width: 1px; height: 16px; flex: 0 0 auto;
+  width: 1px;
+  height: 16px;
+  flex: 0 0 auto;
   margin: 0 4px;
   background: #ffffff1f;
 }
-.vol:hover .volBtn, .volBtn:focus-visible { color: var(--ink); }
-.vol.on .volBtn { color: var(--gold); }
+.vol:hover .volBtn,
+.volBtn:focus-visible {
+  color: var(--ink);
+}
+.vol.on .volBtn {
+  color: var(--gold);
+}
 
 /* The level, as a rule under the glyph. --lvl is set from JS, 0 to 1. Collapsed, this is the
    only thing telling you where the volume is, so it stays visible at all times. */
 .volBtn::after {
-  content: '';
-  position: absolute; left: 7px; right: 7px; bottom: 5px; height: 2px;
+  content: "";
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  bottom: 5px;
+  height: 2px;
   border-radius: 2px;
-  background: linear-gradient(90deg,
-    currentColor 0, currentColor calc(var(--lvl, .5) * 100%),
-    #ffffff1f calc(var(--lvl, .5) * 100%), #ffffff1f 100%);
+  background: linear-gradient(
+    90deg,
+    currentColor 0,
+    currentColor calc(var(--lvl, 0.5) * 100%),
+    #ffffff1f calc(var(--lvl, 0.5) * 100%),
+    #ffffff1f 100%
+  );
 }
-.vol.muted .volBtn::after { background: #ffffff1f; }
+.vol.muted .volBtn::after {
+  background: #ffffff1f;
+}
 
 /* ─── the fader ───────────────────────────────────────────────────────────────
  * Slides UP out of its button, not sideways.
@@ -732,21 +1142,34 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * Height, not display: an element that is display:none cannot animate.
  */
 .slot {
-  position: absolute; left: 50%; bottom: 100%;
-  width: 30px; margin-left: -15px;
-  height: 0; opacity: 0; overflow: hidden;
-  display: flex; align-items: center; justify-content: center;
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  width: 30px;
+  margin-left: -15px;
+  height: 0;
+  opacity: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 8px 8px 0 0;
   background: #0d1117f2;
-  border: 1px solid #ffffff14; border-bottom: 0;
+  border: 1px solid #ffffff14;
+  border-bottom: 0;
   pointer-events: none;
-  transition: height .16s ease, opacity .16s ease;
+  transition:
+    height 0.16s ease,
+    opacity 0.16s ease;
 }
 /* `bottom: 100%` with no gap, on purpose: a few pixels of space between the button and the
    fader is a dead zone the pointer crosses on the way up, and crossing it closes the thing you
    were reaching for. Flush, the two read as one strip. */
-.vol:hover .slot, .vol:focus-within .slot {
-  height: 78px; opacity: 1; pointer-events: auto;
+.vol:hover .slot,
+.vol:focus-within .slot {
+  height: 78px;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* Laid out horizontally and turned, which is the one approach that behaves the same in every
@@ -757,66 +1180,115 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * and a native thumb is a ~40px lozenge that, stood on its end in a 30px column, looks like a
  * bug rather than like a fader. Appearance is stripped and the track and thumb are rebuilt at
  * the size this actually wants. */
-.slot input[type=range] {
-  -webkit-appearance: none; appearance: none;
-  width: 62px; height: 12px; margin: 0; padding: 0;
+.slot input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 62px;
+  height: 12px;
+  margin: 0;
+  padding: 0;
   background: transparent;
   transform: rotate(-90deg);
   cursor: pointer;
 }
-.slot input[type=range]:focus { outline: none; }
-.slot input[type=range]:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; }
+.slot input[type="range"]:focus {
+  outline: none;
+}
+.slot input[type="range"]:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 4px;
+}
 
 /* The track carries the level as a hard-stop gradient, so the filled part below the thumb is
    the accent and the rest is a groove. `--lvl` is set on the .vol by syncAudio(). */
-.slot input[type=range]::-webkit-slider-runnable-track {
-  height: 4px; border-radius: 2px;
-  background: linear-gradient(90deg,
-    var(--gold) 0 calc(var(--lvl, .5) * 100%),
-    #ffffff26 calc(var(--lvl, .5) * 100%) 100%);
+.slot input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--gold) 0 calc(var(--lvl, 0.5) * 100%),
+    #ffffff26 calc(var(--lvl, 0.5) * 100%) 100%
+  );
 }
-.slot input[type=range]::-webkit-slider-thumb {
-  -webkit-appearance: none; appearance: none;
-  width: 11px; height: 11px; margin-top: -3.5px;
+.slot input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  margin-top: -3.5px;
   border-radius: 50%;
   background: var(--gold);
   border: 2px solid #0d1117;
   box-shadow: 0 0 0 1px #0006;
 }
-.slot input[type=range]::-moz-range-track {
-  height: 4px; border-radius: 2px; background: #ffffff26;
+.slot input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: #ffffff26;
 }
-.slot input[type=range]::-moz-range-progress {
-  height: 4px; border-radius: 2px; background: var(--gold);
+.slot input[type="range"]::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--gold);
 }
-.slot input[type=range]::-moz-range-thumb {
-  width: 11px; height: 11px;
+.slot input[type="range"]::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
   background: var(--gold);
   border: 2px solid #0d1117;
 }
 /* Muted: the fader is still usable, it just stops claiming to be carrying anything. */
-.vol.muted .slot input[type=range]::-webkit-slider-runnable-track { background: #ffffff26; }
-.vol.muted .slot input[type=range]::-webkit-slider-thumb { background: #7b8698; }
-.vol.muted .slot input[type=range]::-moz-range-progress { background: #7b8698; }
-.vol.muted .slot input[type=range]::-moz-range-thumb { background: #7b8698; }
+.vol.muted .slot input[type="range"]::-webkit-slider-runnable-track {
+  background: #ffffff26;
+}
+.vol.muted .slot input[type="range"]::-webkit-slider-thumb {
+  background: #7b8698;
+}
+.vol.muted .slot input[type="range"]::-moz-range-progress {
+  background: #7b8698;
+}
+.vol.muted .slot input[type="range"]::-moz-range-thumb {
+  background: #7b8698;
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .slot { transition: none; }
+  .slot {
+    transition: none;
+  }
 }
 
 /* Icon-only in the top bar — the GitHub mark needs no label, and the bar is crowded. Sized to a
  * comfortable click target rather than to the glyph. */
 .iconBtn {
-  display: grid; place-items: center;
-  width: 34px; height: 34px; border-radius: 8px;
-  color: var(--dim); text-decoration: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: var(--dim);
+  text-decoration: none;
   border: 1px solid transparent;
-  transition: color .12s, border-color .12s, background .12s;
+  transition:
+    color 0.12s,
+    border-color 0.12s,
+    background 0.12s;
 }
-.iconBtn:hover { color: var(--ink); border-color: #ffffff2e; background: #ffffff12; }
-.iconBtn.bug:hover { color: var(--bad); border-color: #e8655a55; background: #e8655a18; }
-.iconBtn svg { width: 22px; height: 22px; display: block; }
+.iconBtn:hover {
+  color: var(--ink);
+  border-color: #ffffff2e;
+  background: #ffffff12;
+}
+.iconBtn.bug:hover {
+  color: var(--bad);
+  border-color: #e8655a55;
+  background: #e8655a18;
+}
+.iconBtn svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
 
 /* ─── side panel ──────────────────────────────────────────────────────────────
  * Who you are, who is winning, and the chat — in the space the board does not need. Everything
@@ -826,17 +1298,29 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 
 #side {
   --panel-fill: #0d1117d4;
-  position: fixed; z-index: 5;
-  top: var(--gap); right: var(--gap); bottom: var(--gap);
+  position: fixed;
+  z-index: 5;
+  top: var(--gap);
+  right: var(--gap);
+  bottom: var(--gap);
   width: var(--side);
-  border-radius: 10px; padding: 12px;
-  display: flex; flex-direction: column; gap: 12px;
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   backdrop-filter: blur(10px) saturate(1.2);
   -webkit-backdrop-filter: blur(10px) saturate(1.2);
   box-shadow: 0 6px 28px #0009;
 }
 
-#card { border-bottom: 1px solid #ffffff14; padding-bottom: 11px; padding-right: 76px; }
+#card {
+  border-bottom: 1px solid #ffffff14;
+  padding-bottom: 11px;
+  /* 86px, up from 76. At 76 the face overhung the level line and the XP bar, and a bar you
+     cannot see the end of is a bar you cannot read. Decoration does not sit on information. */
+  padding-right: 86px;
+}
 
 /* The mascot's face, in the very top right corner, over everything.
  *
@@ -845,18 +1329,73 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * would turn a character into a sticker. The z-index puts it above the bar and the panel it
  * overlaps; the menu is higher still, so it does not float over the landing page.
  */
+/* ─── dead ────────────────────────────────────────────────────────────────────
+ * Two signals, both at the top right, both saying the same thing in different ways.
+ *
+ * The name takes the colour of the banner that just crossed the board, which is what ties the
+ * two together — you read YOU DIED in the middle and then your own name is still that colour
+ * when you look away from it. And the mascot loses his colour entirely: a grey face is read as
+ * "out" instantly and in peripheral vision, with no words and no icon.
+ *
+ * Both transition rather than cutting, because coming back to life should feel like colour
+ * returning rather than like a state flag flipping.
+ */
+body.dead #who {
+  /* An id beats a class, and `.castSm` paints its metal through a pseudo-element on top — so
+     recolouring the base alone would be invisible. The overlay goes with it. */
+  color: #ff5a5a;
+  text-shadow:
+    0 0 18px #c4140e,
+    0 2px 0 #000;
+}
+body.dead #who::after { opacity: 0; }
+body.dead #who,
+body.dead #avatar { transition: opacity .5s, filter .5s, color .5s; }
+body.dead #avatar { filter: grayscale(1) brightness(.72) drop-shadow(0 6px 14px #000c); }
+body.dead #rank { color: #8a5a5a; }
+
+/* The mascot, and the only thing in the HUD that moves with the music.
+ *
+ * `--bob` and `--kick` are written once a frame by main.js off the listener. The CSS animation
+ * is still the baseline — a slow six-second float that runs whether or not anything is playing
+ * — and the custom properties ride ON TOP of it through a second transform on the wrapper, so
+ * silence leaves him doing exactly what he always did.
+ *
+ * He is the right home for this in a way the coast was not: he is in the corner, he is already
+ * moving, and nothing about the game is read through him. A visualiser can live anywhere your
+ * eye does not have to go. */
 #avatar {
-  position: fixed; top: 10px; right: 20px;
-  width: 106px; height: 106px;
+  /* Up 6px and 10% smaller, for the same reason as the card's padding above. */
+  position: fixed;
+  top: 4px;
+  right: 20px;
+  width: 95px;
+  height: 95px;
   object-fit: contain;
   /* Above the bar it overlaps, below the menu. pointer-events:none is what keeps it from eating
      the leave button and the volume sliders underneath it. */
   z-index: 9;
   pointer-events: none;
-  filter: drop-shadow(0 6px 14px #000c) drop-shadow(0 0 18px #edc24e44);
+  /* The glow swells on the kick. Cheap, and it is what makes him read as lit by the music
+     rather than merely jiggled by it. */
+  filter: drop-shadow(0 6px 14px #000c)
+    drop-shadow(
+      0 0 calc(14px + var(--kick, 0) * 26px)
+        rgba(237, 194, 78, calc(0.26 + var(--kick, 0) * 0.4))
+    );
   animation: bob 6s ease-in-out infinite;
+  /* The music's half: a lift on the bass and a squash on the beat, on top of the float. */
+  translate: 0 calc(var(--bob, 0) * -14px);
+  scale: calc(1 + var(--kick, 0) * 0.07) calc(1 - var(--kick, 0) * 0.05);
+  transition:
+    translate 0.05s linear,
+    scale 0.05s linear;
 }
-@media (max-width: 1080px) { #avatar { display: none; } }
+@media (max-width: 1080px) {
+  #avatar {
+    display: none;
+  }
+}
 
 /* The mascot's speech bubble.
  *
@@ -864,7 +1403,9 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * corner that moves, and a bubble that hides behind the death screen would only ever be seen
  * when nothing was happening. */
 #say {
-  position: fixed; top: 24px; right: 96px;
+  position: fixed;
+  top: 24px;
+  right: 96px;
   max-width: 320px;
   z-index: 60;
   pointer-events: none;
@@ -873,37 +1414,69 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   background: #11161ef2;
   border: 1.5px solid #edc24e66;
   box-shadow: 0 10px 28px #000b;
-  color: var(--ink); font-size: 14px; line-height: 1.35;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.35;
   text-wrap: balance;
   /* Hidden, not display:none: a transform animation needs a box to animate. Scaled from the
      right-hand edge so it unfolds out of his mouth rather than growing from its own middle. */
-  opacity: 0; transform: scale(.7) translateX(14px);
+  opacity: 0;
+  transform: scale(0.7) translateX(14px);
   transform-origin: 100% 50%;
   visibility: hidden;
 }
 /* The tail, as a rotated square tucked under the right edge, so it inherits the same fill and
    border without a second element or an SVG. */
 #say::after {
-  content: '';
-  position: absolute; right: -7px; top: 50%;
-  width: 12px; height: 12px;
+  content: "";
+  position: absolute;
+  right: -7px;
+  top: 50%;
+  width: 12px;
+  height: 12px;
   background: #11161ef2;
-  border-right: 1.5px solid #edc24e66; border-top: 1.5px solid #edc24e66;
+  border-right: 1.5px solid #edc24e66;
+  border-top: 1.5px solid #edc24e66;
   transform: translateY(-50%) rotate(45deg);
 }
-#say.show { visibility: visible; animation: sayIn .9s cubic-bezier(.2, 1.5, .4, 1) forwards; }
+#say.show {
+  visibility: visible;
+  animation: sayIn 0.9s cubic-bezier(0.2, 1.5, 0.4, 1) forwards;
+}
 
 /* Quick in with a little overshoot, then hold. The hold is what makes it readable; the fade out
    is driven from JS after 2.5s so the timing lives in one place. */
 @keyframes sayIn {
-  0%   { opacity: 0; transform: scale(.7) translateX(14px); }
-  55%  { opacity: 1; transform: scale(1.04) translateX(0); }
-  100% { opacity: 1; transform: scale(1) translateX(0); }
+  0% {
+    opacity: 0;
+    transform: scale(0.7) translateX(14px);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.04) translateX(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateX(0);
+  }
 }
-#say:not(.show) { transition: opacity .25s ease, transform .25s ease; }
-@media (max-width: 1080px) { #say { display: none; } }
+#say:not(.show) {
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
+@media (max-width: 1080px) {
+  #say {
+    display: none;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
-  #say.show { animation: none; opacity: 1; transform: none; visibility: visible; }
+  #say.show {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    visibility: visible;
+  }
 }
 /* The text face, not the display one. This is a name read at a glance beside the mascot, and
    A display face turns anything with a lowercase 'rn' or a '1' in it into a puzzle at 17px. */
@@ -912,13 +1485,22 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
    No `text-shadow` here — an id beats a class, so declaring it would silently cancel the drop
    shadow `.castSm` provides, which is exactly what it did until this comment replaced it. */
 #who {
-  font-family: var(--display); font-weight: 400; font-size: 23px;
-  letter-spacing: .04em; display: block;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 23px;
+  letter-spacing: 0.04em;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 #rank {
-  display: inline; color: var(--dim); font-size: 10px;
-  text-transform: uppercase; letter-spacing: .14em; margin-top: 0;
+  display: inline;
+  color: var(--dim);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  margin-top: 0;
 }
 /* Where a passive upgrade announces itself: directly under the loadout pips, in the bar above
  * the board.
@@ -933,55 +1515,104 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * change the bar's height or push anything in it sideways. */
 #ups {
   position: absolute;
-  left: 0; top: 100%;
+  left: 0;
+  top: 100%;
   height: 0;
   overflow: visible;
   pointer-events: none;
   z-index: 7;
 }
 .up {
-  position: absolute; left: 0; top: 10px;
-  display: flex; align-items: center; gap: 7px;
+  position: absolute;
+  left: 0;
+  top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
   padding: 5px 11px 5px 8px;
   border-radius: 999px;
   background: #11161ef2;
   border: 1px solid currentColor;
-  box-shadow: 0 6px 20px #000a, 0 0 18px -4px currentColor;
-  font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  box-shadow:
+    0 6px 20px #000a,
+    0 0 18px -4px currentColor;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   white-space: nowrap;
-  animation: upFloat 2.6s cubic-bezier(.2, .9, .3, 1) forwards;
+  animation: upFloat 2.6s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
 }
-.up svg { width: 15px; height: 15px; display: block; }
-.up .lvl { color: var(--dim); font-weight: 600; letter-spacing: .04em; }
+.up svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+}
+.up .lvl {
+  color: var(--dim);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
 
 /* Up and out. Most of the travel is early, so the eye is caught by the movement and then has a
    still badge to actually read. */
 @keyframes upFloat {
-  0%   { opacity: 0; transform: translateY(14px) scale(.8); }
-  12%  { opacity: 1; transform: translateY(0)    scale(1.06); }
-  22%  {              transform: translateY(-2px) scale(1); }
-  70%  { opacity: 1; transform: translateY(-10px) scale(1); }
-  100% { opacity: 0; transform: translateY(-30px) scale(.96); }
+  0% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.8);
+  }
+  12% {
+    opacity: 1;
+    transform: translateY(0) scale(1.06);
+  }
+  22% {
+    transform: translateY(-2px) scale(1);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(-10px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-30px) scale(0.96);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .up { animation: upFloat 2.6s steps(1) forwards; }
+  .up {
+    animation: upFloat 2.6s steps(1) forwards;
+  }
 }
 
 #cardStats {
-  display: flex; gap: 16px; margin-top: 9px;
-  font-family: var(--nums); font-variant-numeric: tabular-nums; font-size: 13px;
+  display: flex;
+  gap: 16px;
+  margin-top: 9px;
+  font-family: var(--nums);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
 }
 #cardStats .k {
-  color: var(--dim); font-size: 9px; text-transform: uppercase;
-  letter-spacing: .14em; font-family: var(--text); margin-right: 4px;
+  color: var(--dim);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-family: var(--text);
+  margin-right: 4px;
 }
 
 /* Gold. The only stat with a picture instead of a word, because it is the only one that is a
    THING rather than a count of events — and because a coin is faster to recognise than the
    four letters it would take to spell it. */
-.coinStat { display: inline-flex; align-items: center; gap: 5px; color: var(--gold); }
+.coinStat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--gold);
+}
 .coinStat .coin {
-  width: 13px; height: 13px; display: block;
+  width: 13px;
+  height: 13px;
+  display: block;
   color: var(--gold);
   filter: drop-shadow(0 1px 0 #0008) drop-shadow(0 0 5px #edc24e4d);
 }
@@ -996,35 +1627,67 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
    need to stay clear of. The XP bar does not: it sits well below the face, and stopping it short
    left a gap that read as a broken layout rather than as breathing room. Pull it back out to the
    full panel width. */
-#xp { margin-top: 11px; margin-right: -76px; }
+#xp {
+  margin-top: 11px;
+  margin-right: -76px;
+}
 /* `lvl 4 · Rookie` on the left, `3 093 / 26 957` on the right. The tier used to live two rows
    up next to the name; it belongs here, because it is the name of the level beside it. */
 .xpHead {
-  display: flex; align-items: baseline; gap: 6px;
-  margin-bottom: 5px; font-size: 10px;
-  text-transform: uppercase; letter-spacing: .14em;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 5px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
 }
-#xpLevel { color: var(--gold); font-weight: 700; }
+#xpLevel {
+  color: var(--gold);
+  font-weight: 700;
+}
 /* The dot is a pseudo-element rather than text, so the gap closes cleanly on the one frame
    before a tier has arrived from the server — a stranded "·" is worse than no separator. */
-#rank:not(:empty)::before { content: '·'; color: var(--dim); margin-right: 6px; }
+#rank:not(:empty)::before {
+  content: "·";
+  color: var(--dim);
+  margin-right: 6px;
+}
 /* Pushes the numbers to the right edge whatever the tier's length. `justify-content` cannot do
    it any more now that there are three children rather than two. */
-#xpNums { margin-left: auto; }
-#xpNums { color: var(--dim); font-family: var(--nums); font-variant-numeric: tabular-nums; }
-#xpTrack {
-  height: 7px; border-radius: 4px; background: #00000066;
-  overflow: hidden; box-shadow: inset 0 1px 2px #0008;
+#xpNums {
+  margin-left: auto;
 }
-#xpTrack { position: relative; }
+#xpNums {
+  color: var(--dim);
+  font-family: var(--nums);
+  font-variant-numeric: tabular-nums;
+}
+/* A little air above the bar, so `lvl 1 · ROOKIE` and the track under it both clear the
+   mascot's chin instead of tucking beneath it. */
+#xp { margin-top: 8px; }
+#xpTrack {
+  height: 7px;
+  border-radius: 4px;
+  background: #00000066;
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px #0008;
+}
+#xpTrack {
+  position: relative;
+}
 #xpFill {
-  height: 100%; width: 0; border-radius: 4px;
+  height: 100%;
+  width: 0;
+  border-radius: 4px;
   background: linear-gradient(90deg, #2f8f5b, #5ad18a 55%, #9bf0b8);
   box-shadow: 0 0 10px #5ad18a66;
-  transition: width .5s cubic-bezier(.2,.8,.3,1);
+  transition: width 0.5s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 /* At the top of the ladder there is nothing left to fill toward. */
-#xp.maxed #xpFill { background: linear-gradient(90deg, #b490da, #7badd3, #78b39b); }
+#xp.maxed #xpFill {
+  background: linear-gradient(90deg, #b490da, #7badd3, #78b39b);
+}
 
 /* ── levelling up ──
  *
@@ -1033,74 +1696,143 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * near-zero looks like losing progress, which is the opposite of what just happened.
  */
 #xp.levelup #xpFill {
-  animation: xpFlare .9s ease-out;
-  box-shadow: 0 0 18px #5ad18a, 0 0 36px #5ad18aaa;
+  animation: xpFlare 0.9s ease-out;
+  box-shadow:
+    0 0 18px #5ad18a,
+    0 0 36px #5ad18aaa;
 }
 #xp.levelup #xpTrack::after {
-  content: '';
-  position: absolute; inset: -4px;
+  content: "";
+  position: absolute;
+  inset: -4px;
   border-radius: 7px;
   box-shadow: 0 0 0 2px #9bf0b8;
-  animation: xpRing .9s ease-out forwards;
+  animation: xpRing 0.9s ease-out forwards;
   pointer-events: none;
 }
 #xp.levelup #xpLevel {
-  animation: xpPop .9s cubic-bezier(.2,1.5,.4,1);
+  animation: xpPop 0.9s cubic-bezier(0.2, 1.5, 0.4, 1);
   color: #9bf0b8;
 }
-#xp.resetting #xpFill { transition: none; }
+#xp.resetting #xpFill {
+  transition: none;
+}
 
 @keyframes xpFlare {
-  0%   { filter: brightness(1); }
-  18%  { filter: brightness(2.2) saturate(1.4); }
-  100% { filter: brightness(1); }
+  0% {
+    filter: brightness(1);
+  }
+  18% {
+    filter: brightness(2.2) saturate(1.4);
+  }
+  100% {
+    filter: brightness(1);
+  }
 }
 @keyframes xpRing {
-  0%   { opacity: .9; transform: scale(1); }
-  100% { opacity: 0;  transform: scale(1.5); }
+  0% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
 }
 @keyframes xpPop {
-  0%   { transform: scale(1); }
-  30%  { transform: scale(1.5); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.5);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  #xp.levelup #xpFill, #xp.levelup #xpLevel, #xp.levelup #xpTrack::after { animation: none; }
+  #xp.levelup #xpFill,
+  #xp.levelup #xpLevel,
+  #xp.levelup #xpTrack::after {
+    animation: none;
+  }
 }
 
 /* Panel headings. 11px and cast, up from 9.5px flat grey — the cast ramp needs the extra
    pixels, and these are labels you read once per session rather than data. */
 .panelHead {
-  margin: 0 0 7px; font-size: 11px; font-weight: normal;
+  margin: 0 0 7px;
+  font-size: 11px;
+  font-weight: normal;
   font-family: var(--display);
-  text-transform: uppercase; letter-spacing: .18em;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
 }
 
 /* The live board. Rows are a fixed height with the place in a fixed-width slot, so a medal and a
  * plain "7" line up and the names start on one edge. Column heads say what the two numbers are —
  * "3/5" next to a name was a riddle for anyone who had not asked. */
-.liveHead, #liveRows li {
-  display: grid; grid-template-columns: 24px 1fr 46px 46px; align-items: center; column-gap: 6px;
+.liveHead,
+#liveRows li {
+  display: grid;
+  grid-template-columns: 24px 1fr 46px 46px;
+  align-items: center;
+  column-gap: 6px;
   padding: 0 8px 0 4px;
 }
 .liveHead {
-  color: var(--dim); font-size: 9px; letter-spacing: .16em; text-transform: uppercase;
-  padding-bottom: 4px; margin-bottom: 3px; border-bottom: 1px solid #edc24e2b;
+  color: var(--dim);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding-bottom: 4px;
+  margin-bottom: 3px;
+  border-bottom: 1px solid #edc24e2b;
 }
-.liveHead span:nth-child(n+3) { text-align: right; }
-#liveRows { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.liveHead span:nth-child(n + 3) {
+  text-align: right;
+}
+#liveRows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+}
 #liveRows li {
-  height: 25px; border-radius: 5px; margin-bottom: 1px;
+  height: 25px;
+  border-radius: 5px;
+  margin-bottom: 1px;
   font-variant-numeric: tabular-nums;
 }
-#liveRows li:nth-child(even):not(.p1):not(.p2):not(.p3) { background: #ffffff06; }
-#liveRows .pos {
-  color: var(--dim); font-family: var(--nums); font-size: 11px; text-align: center;
+#liveRows li:nth-child(even):not(.p1):not(.p2):not(.p3) {
+  background: #ffffff06;
 }
-#liveRows .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#liveRows .kd { color: var(--dim); font-family: var(--nums); font-size: 11px; text-align: right; }
-#liveRows .sc { font-family: var(--nums); color: var(--ink); text-align: right; font-weight: 700; }
-#liveRows li.p1 .sc { color: var(--gold-hi); }
+#liveRows .pos {
+  color: var(--dim);
+  font-family: var(--nums);
+  font-size: 11px;
+  text-align: center;
+}
+#liveRows .nm {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#liveRows .kd {
+  color: var(--dim);
+  font-family: var(--nums);
+  font-size: 11px;
+  text-align: right;
+}
+#liveRows .sc {
+  font-family: var(--nums);
+  color: var(--ink);
+  text-align: right;
+  font-weight: 700;
+}
+#liveRows li.p1 .sc {
+  color: var(--gold-hi);
+}
 
 /* A little robot in front of anything that is not a person.
  *
@@ -1109,62 +1841,115 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * row that is not a player's own colour the loudest thing in it. As a mask it takes
  * currentColor, so it dims with the row and sits exactly on the text baseline. */
 #liveRows li.bot .nm::before {
-  content: '';
+  content: "";
   display: inline-block;
-  width: 11px; height: 11px;
+  width: 11px;
+  height: 11px;
   margin-right: 5px;
   vertical-align: -1px;
   background: currentColor;
-  opacity: .75;
-  -webkit-mask-image: var(--robot); mask-image: var(--robot);
-  -webkit-mask-size: contain; mask-size: contain;
-  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  opacity: 0.75;
+  -webkit-mask-image: var(--robot);
+  mask-image: var(--robot);
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
 }
 /* You. The same gold edge as your row on the round-over table, so "that is me" looks the same
  * everywhere it is asked. Inset so it never shifts the row. */
-#liveRows li.me { font-weight: 700; box-shadow: inset 3px 0 0 var(--gold); }
-#liveRows li.me:not(.p1):not(.p2):not(.p3) { background: #edc24e12; }
+#liveRows li.me {
+  font-weight: 700;
+  box-shadow: inset 3px 0 0 var(--gold);
+}
+#liveRows li.me:not(.p1):not(.p2):not(.p3) {
+  background: #edc24e12;
+}
 
 /* The host. Small enough to be a mark rather than an ornament: it says who can restart the
  * round, and nothing more. Drawn as a mask so one SVG symbol can be tinted gold here. */
 #liveRows li.host .nm::after {
-  content: '';
-  display: inline-block; width: 11px; height: 11px; margin-left: 5px;
+  content: "";
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-left: 5px;
   vertical-align: -1px;
   background: var(--gold);
   -webkit-mask: var(--crown) center / contain no-repeat;
   mask: var(--crown) center / contain no-repeat;
-  opacity: .9;
+  opacity: 0.9;
 }
-#liveRows li.out .nm { opacity: .45; }
+#liveRows li.out .nm {
+  opacity: 0.45;
+}
 
-#chat { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+#chat {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
 #chatList {
-  list-style: none; margin: 0 0 7px; padding: 0 2px;
-  flex: 1; min-height: 0; overflow-y: auto; font-size: 12.5px;
+  list-style: none;
+  margin: 0 0 7px;
+  padding: 0 2px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  font-size: 12.5px;
   scrollbar-width: thin;
 }
-#chatList li { padding: 1px 0; }
-#chatList li b { font-weight: 600; }
+#chatList li {
+  padding: 1px 0;
+}
+#chatList li b {
+  font-weight: 600;
+}
 
 /* Anything that is about you, picked out of a log that never stops scrolling. */
-#chatList li.feed { color: var(--dim); }
-#chatList li.mine { background: #edc24e12; box-shadow: inset 2px 0 0 var(--gold); padding-left: 6px; }
-#chatList li.mention { background: #edc24e0d; }
+#chatList li.feed {
+  color: var(--dim);
+}
+#chatList li.mine {
+  background: #edc24e12;
+  box-shadow: inset 2px 0 0 var(--gold);
+  padding-left: 6px;
+}
+#chatList li.mention {
+  background: #edc24e0d;
+}
 #chatList li.feed.kill {
-  color: var(--gold); font-weight: 600;
-  box-shadow: inset 2px 0 0 var(--gold); padding-left: 6px;
+  color: var(--gold);
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--gold);
+  padding-left: 6px;
 }
 #chatList li.feed.death {
-  color: var(--bad); font-weight: 600;
-  box-shadow: inset 2px 0 0 var(--bad); padding-left: 6px;
+  color: var(--bad);
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--bad);
+  padding-left: 6px;
 }
 #chatInput {
-  width: 100%; font: inherit; font-size: 12.5px; color: var(--ink);
-  background: #060a0fcc; border: 1px solid #ffffff1a; border-radius: 6px;
-  padding: 6px 9px; opacity: .55; transition: opacity .15s, border-color .15s;
+  width: 100%;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: #060a0fcc;
+  border: 1px solid #ffffff1a;
+  border-radius: 6px;
+  padding: 6px 9px;
+  opacity: 0.55;
+  transition:
+    opacity 0.15s,
+    border-color 0.15s;
 }
-#chatInput:focus { outline: none; opacity: 1; border-color: var(--gold); }
+#chatInput:focus {
+  outline: none;
+  opacity: 1;
+  border-color: var(--gold);
+}
 
 /* ─── kill streaks ────────────────────────────────────────────────────────────
  * Centre screen, over everything, for about a second and a half. Deliberately loud: a streak is
@@ -1175,28 +1960,40 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * centred on the viewport sits noticeably off to one side of the thing you are actually looking
  * at, and the one moment it has to be read is the one moment you have no attention to spare. */
 #centre {
-  position: fixed; z-index: 9; pointer-events: none;
+  position: fixed;
+  z-index: 9;
+  pointer-events: none;
   top: calc(var(--bar) + var(--gap) * 2);
   left: var(--gap);
   width: calc(100vw - var(--side) - var(--gap) * 3);
   height: calc(100vh - var(--bar) - var(--gap) * 3);
-  display: grid; place-items: center;
+  display: grid;
+  place-items: center;
   /* A third of the way up from centre, not centred.
    *
    * Dead centre is where your own player is, which is the one spot on the board a banner must
    * not cover — an announcement that hides the thing it is announcing about is worse than none.
    * A third up puts it clear of the fight and still well inside the eye's resting area. */
   align-content: center;
-  padding-bottom: 22%;
+  /* 33%, half again on the 22 it was. Dead centre is where your own player is, and an
+     announcement that covers the thing it is announcing about is worse than none. */
+  padding-bottom: 33%;
 }
-@media (max-width: 1080px) { #centre { width: calc(100vw - var(--gap) * 2); } }
+@media (max-width: 1080px) {
+  #centre {
+    width: calc(100vw - var(--gap) * 2);
+  }
+}
 
-#streak, #deadBanner {
+#streak,
+#deadBanner {
   grid-area: 1 / 1;
   text-align: center;
   /* See @keyframes streakIn: letter-spacing is added after the LAST glyph too, so a centred
      line needs a matching text-indent or it sits half the spacing left of centre. */
-  font-family: var(--display); letter-spacing: .08em; text-indent: .08em;
+  font-family: var(--display);
+  letter-spacing: 0.08em;
+  text-indent: 0.08em;
   text-shadow: var(--rim);
   opacity: 0;
 }
@@ -1204,59 +2001,99 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * a band that whips across behind the type, the type itself landing with a punch, a rule that
  * expands out from under it, and the name. The old version was the type alone, which at 52px
  * on a board full of explosions was just more orange. */
-#streak { position: relative; }
-#streak.show { animation: streakIn 2.6s cubic-bezier(.16, 1, .3, 1) forwards; }
+#streak {
+  position: relative;
+}
+#streak.show {
+  animation: streakIn 2.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
 
 /* The band. Skewed, wider than the screen, wiping out from the centre — it is what separates
    the announcement from the board behind it, and the reason the type reads over fire. */
 #streak::before {
-  content: '';
-  position: absolute; left: 50%; top: 50%;
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
   /* px, not em: `#streak` has no font-size of its own, so `1.25em` resolved against the
      inherited 16px and drew a 20px ribbon behind 118px type — a pinstripe, not a band. */
-  width: 150vw; height: 78px;
+  width: 150vw;
+  height: 78px;
   margin-left: -75vw;
   transform: translateY(-62%) skewX(-13deg) scaleX(0);
-  background: linear-gradient(90deg,
-    #edc24e00 0%, #edc24e26 18%, #edc24e4d 50%, #edc24e26 82%, #edc24e00 100%);
+  background: linear-gradient(
+    90deg,
+    #edc24e00 0%,
+    #edc24e26 18%,
+    #edc24e4d 50%,
+    #edc24e26 82%,
+    #edc24e00 100%
+  );
   z-index: -1;
-  animation: streakBand 2.6s cubic-bezier(.16, 1, .3, 1) forwards;
+  animation: streakBand 2.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 /* The rule under it, expanding outward. Two moving parts reading as one event. */
 #streak::after {
-  content: '';
-  position: absolute; left: 50%; bottom: -6px;
-  width: 0; height: 2px; margin-left: 0;
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 0;
+  height: 2px;
+  margin-left: 0;
   background: linear-gradient(90deg, #edc24e00, var(--gold), #edc24e00);
-  animation: streakRule 2.6s cubic-bezier(.16, 1, .3, 1) forwards;
+  animation: streakRule 2.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-#streak .big, #deadBanner .big {
-  display: block; font-size: 56px; color: var(--gold);
-  text-shadow: 0 0 28px #edc24e, 0 5px 0 #0009;
+#streak .big,
+#deadBanner .big {
+  display: block;
+  font-size: 56px;
+  color: var(--gold);
+  text-shadow:
+    0 0 28px #edc24e,
+    var(--banner-shadow);
 }
 /* The first two rungs are cast gold. The top two are not, and that is the escalation: once the
    metal has been established, going PAST it has to mean something, and white-hot reads as the
    thing that was gold and is now too bright to be gold. */
-#streak.s2 .big, #streak.s3 .big {
+#streak.s2 .big,
+#streak.s3 .big {
   background: var(--cast);
-  background-size: 260% 100%, 100% 100%;
+  background-size:
+    260% 100%,
+    100% 100%;
   background-repeat: no-repeat;
-  -webkit-background-clip: text; background-clip: text;
-  -webkit-text-fill-color: transparent; color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
   text-shadow: none;
-  filter: var(--cast-edge) drop-shadow(0 3px 2px #000a) drop-shadow(0 0 26px #edc24e66);
+  filter: var(--cast-edge) drop-shadow(0 3px 2px #000a)
+    drop-shadow(0 0 26px #edc24e66);
   /* Twice the speed of the menu title. This is on screen for two and a half seconds, so the
      sweep has to cross in about one or it never arrives. */
   animation: castShine 1.1s linear infinite;
 }
-#streak .who, #deadBanner .who {
-  display: block; font-size: 14px; color: var(--ink); margin-top: 7px; opacity: .85;
-  font-family: var(--text); letter-spacing: .14em; text-transform: uppercase;
+#streak .who,
+#deadBanner .who {
+  display: block;
+  font-size: 14px;
+  color: var(--ink);
+  margin-top: 7px;
+  opacity: 0.85;
+  font-family: var(--text);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 /* The name gets the accent and some weight: it is the half of the message that says whether
    this is a thing to celebrate or a thing to worry about. */
-#streak .who { font-size: 16px; font-weight: 700; color: var(--gold); opacity: 1; }
+#streak .who {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--gold);
+  opacity: 1;
+}
 
 /* Each rung is bigger and hotter than the last, so the escalation is visible as well as audible.
    Every step is a real jump — 66, 82, 100, 118 — because two sizes eight pixels apart are the
@@ -1268,37 +2105,89 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
    outer two stop it from vanishing or exploding. */
 /* 15% off every rung. They were sized for a banner in the middle of an empty screen; up at a
    third they sit over the board, and anything covering the board has to earn its width. */
-#streak.s2 .big { font-size: clamp(34px, 4.4vw, 56px); }
-#streak.s3 .big { font-size: clamp(39px, 5.4vw, 70px); }
+#streak.s2 .big {
+  font-size: clamp(34px, 4.4vw, 56px);
+}
+#streak.s3 .big {
+  font-size: clamp(39px, 5.4vw, 70px);
+}
 #streak.s4 .big {
-  font-size: clamp(44px, 6.6vw, 85px); color: #fff;
-  text-shadow: 0 0 44px #edc24e, 0 0 90px #e8655a, 0 7px 0 #0009;
+  font-size: clamp(44px, 6.6vw, 85px);
+  color: #fff;
+  text-shadow:
+    0 0 44px #edc24e,
+    0 0 90px #e8655a,
+    var(--banner-shadow);
 }
 #streak.ace .big {
-  font-size: clamp(49px, 7.8vw, 100px); color: #fff;
-  text-shadow: 0 0 48px #ffc98a, 0 0 100px #edc24e, 0 0 170px #b36bff, 0 8px 0 #0009;
+  font-size: clamp(49px, 7.8vw, 100px);
+  color: #fff;
+  text-shadow:
+    0 0 48px #ffc98a,
+    0 0 100px #edc24e,
+    0 0 170px #b36bff,
+    var(--banner-shadow);
 }
 /* The top two rungs get a hotter band and a wider rule as well, or the escalation lives entirely
    in the font size and stops being felt somewhere around the third one. */
-#streak.s3::before { height: 94px; }
-#streak.s4::before, #streak.ace::before { height: 114px; filter: brightness(1.4); }
+#streak.s3::before {
+  height: 94px;
+}
+#streak.s4::before,
 #streak.ace::before {
-  background: linear-gradient(90deg,
-    #edc24e00 0%, #b36bff33 15%, #edc24e66 50%, #b36bff33 85%, #edc24e00 100%);
+  height: 114px;
+  filter: brightness(1.4);
+}
+#streak.ace::before {
+  background: linear-gradient(
+    90deg,
+    #edc24e00 0%,
+    #b36bff33 15%,
+    #edc24e66 50%,
+    #b36bff33 85%,
+    #edc24e00 100%
+  );
 }
 
-
-
-#deadBanner .big { color: var(--bad); text-shadow: 0 0 30px #e8655a, 0 5px 0 #0009; }
+/* Blood and molten gold.
+ *
+ * `--bad` alone was a flat salmon — the colour of an error message, not of dying. This is a
+ * deep arterial red with gold heat bleeding out of it, which is the same trick the streak
+ * banner uses one tier up and the reason the two now read as the same family.
+ *
+ * The shadow stack is SHARED with #streak (see --banner-shadow) so the two can never drift
+ * apart again: they appear in the same place, seconds apart, and two different weights of drop
+ * shadow on the same spot reads as one of them being broken. */
+#deadBanner .big {
+  color: #ff2f2f;
+  text-shadow:
+    0 0 26px #ff6b2f,
+    0 0 60px #c4140e,
+    var(--banner-shadow);
+}
 /* 4.4s, up from 1.4. The old one was gone before you had finished reading who killed you, which
    made the only piece of information in it useless. The dialog takes over the instant this
    clears, so the screen is never empty and the two never overlap. */
-#deadBanner.show { animation: deadIn 4.4s ease-out forwards; }
+#deadBanner.show {
+  animation: deadIn 4.4s ease-out forwards;
+}
 @keyframes deadIn {
-  0%   { opacity: 0; transform: scale(1.5); }
-  5%   { opacity: 1; transform: scale(1); }
-  90%  { opacity: 1; transform: scale(.98); }
-  100% { opacity: 0; transform: scale(.96); }
+  0% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+  5% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  90% {
+    opacity: 1;
+    transform: scale(0.98);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
 }
 
 /* The `translateX(-50%)` every one of these keyframes used to carry was left over from when
@@ -1312,41 +2201,133 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * appears and disappears during the animation — the banner slides sideways as it lands, which
  * looks like a bug because it is one. An equal `text-indent` pushes the line back. */
 @keyframes streakIn {
-  0%   { opacity: 0; transform: scale(.55) rotate(-4deg); filter: blur(7px);
-         letter-spacing: .42em; text-indent: .42em; }
-  9%   { opacity: 1; transform: scale(1.22) rotate(1.5deg); filter: blur(0);
-         letter-spacing: .04em; text-indent: .04em; }
-  16%  { opacity: 1; transform: scale(.96) rotate(-.5deg); }
-  23%  { opacity: 1; transform: scale(1.03) rotate(0); }
-  30%  { opacity: 1; transform: scale(1);
-         letter-spacing: .08em; text-indent: .08em; }
-  82%  { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(1.06) translateY(-26px); }
+  0% {
+    opacity: 0;
+    transform: scale(0.55) rotate(-4deg);
+    filter: blur(7px);
+    letter-spacing: 0.42em;
+    text-indent: 0.42em;
+  }
+  9% {
+    opacity: 1;
+    transform: scale(1.22) rotate(1.5deg);
+    filter: blur(0);
+    letter-spacing: 0.04em;
+    text-indent: 0.04em;
+  }
+  16% {
+    opacity: 1;
+    transform: scale(0.96) rotate(-0.5deg);
+  }
+  23% {
+    opacity: 1;
+    transform: scale(1.03) rotate(0);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1) translateY(0) rotate(0);
+    letter-spacing: 0.08em;
+    text-indent: 0.08em;
+  }
+  /* It does not simply sit there for two seconds.
+   *
+   * A slow drift upward with half a degree of roll either side, alternating — not enough to
+   * read as an animation, enough that the banner is ALIVE while you are looking at it. A
+   * notice that lands hard and then freezes reads as a screenshot pasted over the game. */
+  45% {
+    opacity: 1;
+    transform: scale(1.012) translateY(-5px) rotate(0.45deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1) translateY(-9px) rotate(-0.4deg);
+  }
+  74% {
+    opacity: 1;
+    transform: scale(1.01) translateY(-13px) rotate(0.3deg);
+  }
+  82% {
+    opacity: 1;
+    transform: scale(1) translateY(-16px) rotate(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.06) translateY(-34px);
+  }
 }
 
 /* The band arrives a frame BEFORE the type and leaves before it too, so the announcement reads
    as something hitting the screen rather than as several things fading in together. */
 @keyframes streakBand {
-  0%   { transform: translateY(-62%) skewX(-13deg) scaleX(0); opacity: 0; }
-  7%   { transform: translateY(-62%) skewX(-13deg) scaleX(1.1); opacity: 1; }
-  14%  { transform: translateY(-62%) skewX(-13deg) scaleX(1); opacity: 1; }
-  70%  { opacity: .8; }
-  100% { transform: translateY(-62%) skewX(-13deg) scaleX(1); opacity: 0; }
+  0% {
+    transform: translateY(-62%) skewX(-13deg) scaleX(0);
+    opacity: 0;
+  }
+  7% {
+    transform: translateY(-62%) skewX(-13deg) scaleX(1.1);
+    opacity: 1;
+  }
+  14% {
+    transform: translateY(-62%) skewX(-13deg) scaleX(1);
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-62%) skewX(-13deg) scaleX(1);
+    opacity: 0;
+  }
 }
 
 @keyframes streakRule {
-  0%   { width: 0; margin-left: 0; opacity: 0; }
-  12%  { width: 0; margin-left: 0; opacity: 1; }
-  34%  { width: 420px; margin-left: -210px; opacity: 1; }
-  80%  { width: 420px; margin-left: -210px; opacity: .7; }
-  100% { width: 520px; margin-left: -260px; opacity: 0; }
+  0% {
+    width: 0;
+    margin-left: 0;
+    opacity: 0;
+  }
+  12% {
+    width: 0;
+    margin-left: 0;
+    opacity: 1;
+  }
+  34% {
+    width: 420px;
+    margin-left: -210px;
+    opacity: 1;
+  }
+  80% {
+    width: 420px;
+    margin-left: -210px;
+    opacity: 0.7;
+  }
+  100% {
+    width: 520px;
+    margin-left: -260px;
+    opacity: 0;
+  }
 }
 
 /* Reduced motion: it still announces, it just stops moving. The information is the point. */
 @media (prefers-reduced-motion: reduce) {
-  #streak.show { animation: streakHold 2.6s steps(1) forwards; }
-  #streak::before, #streak::after { animation: none; opacity: .6; transform: translateY(-62%) skewX(-13deg); }
-  @keyframes streakHold { 0%, 92% { opacity: 1; } 100% { opacity: 0; } }
+  #streak.show {
+    animation: streakHold 2.6s steps(1) forwards;
+  }
+  #streak::before,
+  #streak::after {
+    animation: none;
+    opacity: 0.6;
+    transform: translateY(-62%) skewX(-13deg);
+  }
+  @keyframes streakHold {
+    0%,
+    92% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
 }
 
 /* ─── toast ───────────────────────────────────────────────────────────────────
@@ -1354,10 +2335,21 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  */
 
 #toast {
-  position: fixed; top: 54px; left: 50%; transform: translateX(-50%); z-index: 20;
-  background: #1a2029ee; border: 1px solid #edc24e66; border-radius: 6px;
-  padding: 7px 16px; color: var(--gold); opacity: 0; transition: opacity .25s;
-  pointer-events: none; font-size: 12px; letter-spacing: .08em;
+  position: fixed;
+  top: 54px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  background: #1a2029ee;
+  border: 1px solid #edc24e66;
+  border-radius: 6px;
+  padding: 7px 16px;
+  color: var(--gold);
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
+  font-size: 12px;
+  letter-spacing: 0.08em;
 }
 
 /* ─── death + round over + scores ─────────────────────────────────────────────
@@ -1370,20 +2362,31 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
    and it dimmed the chat and the standings, which are exactly what you read while dead. The
    insets match canvas#game exactly. */
 #dead {
-  position: fixed; display: none; place-items: center; z-index: 8;
+  position: fixed;
+  display: none;
+  place-items: center;
+  z-index: 8;
   top: calc(var(--bar) + var(--gap) * 2);
   left: var(--gap);
   width: calc(100vw - var(--side) - var(--gap) * 3);
   height: calc(100vh - var(--bar) - var(--gap) * 3);
-  background: #0d111788; pointer-events: none;
+  background: #0d111788;
+  pointer-events: none;
   border-radius: 8px;
 }
-#dead .card { pointer-events: auto; }
+#dead .card {
+  pointer-events: auto;
+}
 
 .card {
   --panel-fill: #141b24f2;
-  border-radius: 16px; padding: 34px 48px 26px; width: 600px; position: relative;
-  box-shadow: 0 0 80px #6b21a840, 0 22px 60px #000b;
+  border-radius: 16px;
+  padding: 34px 48px 26px;
+  width: 600px;
+  position: relative;
+  box-shadow:
+    0 0 80px #6b21a840,
+    0 22px 60px #000b;
 }
 .card.small {
   /* Narrower, and padded to the buttons rather than to the old heading that used to sit above
@@ -1402,29 +2405,51 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
    playing. A round-over card is a scoreboard you actually read, and the display face on it was
    decoration sitting on top of information. */
 #deadTitle {
-  font-family: var(--text); font-weight: 700;
-  color: var(--gold); font-size: 26px;
-  letter-spacing: .1em; text-transform: uppercase;
+  font-family: var(--text);
+  font-weight: 700;
+  color: var(--gold);
+  font-size: 26px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   margin: 4px 0 16px;
   text-shadow: 0 2px 0 #0008;
   display: none;
 }
-.card.round #deadTitle { display: block; }
+.card.round #deadTitle {
+  display: block;
+}
 
 /* The two quieter choices under it: outlined, not filled, so the respawn button stays the one
    thing the eye lands on. */
 .ghost {
-  width: 100%; margin-top: 10px; padding: 9px;
-  font-family: var(--nums); font-size: 12.5px; font-weight: 700;
-  letter-spacing: .1em; text-transform: uppercase;
+  width: 100%;
+  margin-top: 10px;
+  padding: 9px;
+  font-family: var(--nums);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--dim);
   background: transparent;
-  border: 1px solid #ffffff1f; border-radius: 9px;
-  transition: color .12s, border-color .12s, background .12s;
+  border: 1px solid #ffffff1f;
+  border-radius: 9px;
+  transition:
+    color 0.12s,
+    border-color 0.12s,
+    background 0.12s;
 }
-.ghost:hover { color: var(--ink); border-color: #ffffff38; background: #ffffff0f; }
-.card.round .ghost { display: none; }
-.card.round #autoRow { display: none; }
+.ghost:hover {
+  color: var(--ink);
+  border-color: #ffffff38;
+  background: #ffffff0f;
+}
+.card.round .ghost {
+  display: none;
+}
+.card.round #autoRow {
+  display: none;
+}
 
 /* Auto respawn.
  *
@@ -1432,101 +2457,193 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * the respawn button has to stay the one thing the eye lands on. The whole row is the hit
  * target — a 13px checkbox on its own is a dexterity test. */
 #autoRow {
-  display: flex; align-items: center; gap: 8px;
-  margin-top: 10px; padding: 7px 9px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 7px 9px;
   border-radius: 8px;
-  font-family: var(--nums); font-size: 11.5px;
-  letter-spacing: .1em; text-transform: uppercase;
+  font-family: var(--nums);
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--dim);
-  cursor: pointer; user-select: none;
-  transition: color .12s, background .12s;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    color 0.12s,
+    background 0.12s;
 }
-#autoRow:hover { color: var(--ink); background: #ffffff0a; }
-#autoRow input { accent-color: var(--gold); width: 14px; height: 14px; margin: 0; cursor: pointer; }
+#autoRow:hover {
+  color: var(--ink);
+  background: #ffffff0a;
+}
+#autoRow input {
+  accent-color: var(--gold);
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+}
 /* On, it says so: the label takes the accent, so you can tell at a glance without reading the
    box — which matters because you are about to stop looking at this card entirely. */
-#autoRow:has(input:checked) { color: var(--gold); }
+#autoRow:has(input:checked) {
+  color: var(--gold);
+}
 
 /* Leaving is the one choice on this card you cannot undo, so it is the one that is coloured.
    Still a ghost button — it is an alternative, not the thing you came here to press — but a red
    one, which is the convention for "this ends it". */
-#deadLeave { color: #c86a62; border-color: #e8655a3d; }
-#deadLeave:hover { color: #ff8a7e; border-color: #e8655a8c; background: #e8655a14; }
+#deadLeave {
+  color: #c86a62;
+  border-color: #e8655a3d;
+}
+#deadLeave:hover {
+  color: #ff8a7e;
+  border-color: #e8655a8c;
+  background: #e8655a14;
+}
 /* The countdown gets its own face. The display font is for titles you read once, and this is a
  * number that changes every second a few inches from your eyes. */
 /* The one thing you came here to press, so it gets the same treatment as PLAY: filled, gold,
    with the countdown in it. The two ghosts under it are alternatives, not peers. */
 #respawn {
-  width: 100%; margin: 0; padding: 12px 14px;
-  font-family: var(--display); font-size: 23px; font-weight: 400;
-  letter-spacing: .08em; text-transform: uppercase;
+  width: 100%;
+  margin: 0;
+  padding: 12px 14px;
+  font-family: var(--display);
+  font-size: 23px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--on-gold);
-  background: linear-gradient(180deg, var(--gold-lit), var(--gold) 55%, var(--gold-deep));
-  border: none; border-radius: 10px;
-  box-shadow: 0 4px 0 var(--gold-shadow), 0 10px 26px #edc24e33;
+  background: linear-gradient(
+    180deg,
+    var(--gold-lit),
+    var(--gold) 55%,
+    var(--gold-deep)
+  );
+  border: none;
+  border-radius: 10px;
+  box-shadow:
+    0 4px 0 var(--gold-shadow),
+    0 10px 26px #edc24e33;
   text-shadow: 0 1px 0 #fff6;
-  transition: filter .12s, box-shadow .12s, opacity .12s;
+  transition:
+    filter 0.12s,
+    box-shadow 0.12s,
+    opacity 0.12s;
 }
 #respawn:hover:not(:disabled) {
   filter: brightness(1.08);
-  box-shadow: 0 4px 0 var(--gold-shadow), 0 12px 34px #edc24e55;
+  box-shadow:
+    0 4px 0 var(--gold-shadow),
+    0 12px 34px #edc24e55;
 }
 /* Counting down: dimmed and flat, so it reads as "not yet" rather than as "broken". */
 #respawn:disabled {
-  opacity: .5;
+  opacity: 0.5;
   background: linear-gradient(180deg, #4a3826, #37291b);
-  box-shadow: none; color: #e8d6c3;
+  box-shadow: none;
+  color: #e8d6c3;
 }
 /* Counting down, not broken: dimmed but still legible, and the number keeps moving. */
 
-
 /* Round-over standings. A table, because a block of preformatted text only lines its columns up
    by luck, and your own row was indistinguishable from the other fifteen. */
-#roundTable { display: none; margin-top: 14px; text-align: left; }
-.card.round { width: 460px; }
-.card.round #roundTable { display: block; }
-.card.round #respawn { display: none; }
-.card.round #deadTitle { color: var(--gold); }
+#roundTable {
+  display: none;
+  margin-top: 14px;
+  text-align: left;
+}
+.card.round {
+  width: 460px;
+}
+.card.round #roundTable {
+  display: block;
+}
+.card.round #respawn {
+  display: none;
+}
+.card.round #deadTitle {
+  color: var(--gold);
+}
 
 /* You won it. The only place in the interface that gets the cast treatment on demand — and the
    only time this card ever says something worth looking at twice. */
 .card.round.won #deadTitle {
   font-family: var(--display);
   font-size: clamp(26px, 3.2vw, 38px);
-  letter-spacing: .06em;
+  letter-spacing: 0.06em;
   background: var(--cast);
-  background-size: 260% 100%, 100% 100%;
+  background-size:
+    260% 100%,
+    100% 100%;
   background-repeat: no-repeat;
-  -webkit-background-clip: text; background-clip: text;
-  -webkit-text-fill-color: transparent; color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
   text-shadow: none;
-  filter: var(--cast-edge) drop-shadow(0 2px 1px #0009) drop-shadow(0 0 22px #edc24e5c);
+  filter: var(--cast-edge) drop-shadow(0 2px 1px #0009)
+    drop-shadow(0 0 22px #edc24e5c);
   animation: castShine 2.4s linear infinite;
 }
-#roundTable table { width: 100%; border-collapse: collapse; font-size: 13px; }
-#roundTable th {
-  color: var(--dim); font-weight: normal; text-align: left; font-size: 9.5px;
-  text-transform: uppercase; letter-spacing: .16em;
-  padding-bottom: 6px; border-bottom: 1px solid #edc24e33;
+#roundTable table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
 }
-#roundTable td { padding: 4px 10px 4px 0; white-space: nowrap; }
-#roundTable td.dimcell { color: var(--dim); }
-#roundTable td.num { font-family: var(--nums); font-variant-numeric: tabular-nums; }
+#roundTable th {
+  color: var(--dim);
+  font-weight: normal;
+  text-align: left;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #edc24e33;
+}
+#roundTable td {
+  padding: 4px 10px 4px 0;
+  white-space: nowrap;
+}
+#roundTable td.dimcell {
+  color: var(--dim);
+}
+#roundTable td.num {
+  font-family: var(--nums);
+  font-variant-numeric: tabular-nums;
+}
 /* Tall enough for sixteen rows on an ordinary window, so the scrollbar — which narrows the body
  * and pulls its columns out of line with the header — only appears when it has to, and is thin
  * and gold when it does. */
 #roundTable tbody {
-  display: block; max-height: 60vh; overflow-y: auto;
-  scrollbar-width: thin; scrollbar-color: #edc24e55 transparent;
+  display: block;
+  max-height: 60vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #edc24e55 transparent;
 }
-#roundTable thead, #roundTable tbody tr { display: table; width: 100%; table-layout: fixed; }
+#roundTable thead,
+#roundTable tbody tr {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}
 /* Your row. Gold rule down the left and a lift off the background — on a sixteen-row table the
    only question anyone is asking is "where am I". */
 #roundTable tr.me {
-  background: #edc24e14; font-weight: 700;
+  background: #edc24e14;
+  font-weight: 700;
   box-shadow: inset 3px 0 0 var(--gold);
 }
-#roundNext { margin: 12px 0 0; text-align: center; color: var(--dim); font-size: 11px; }
+#roundNext {
+  margin: 12px 0 0;
+  text-align: center;
+  color: var(--dim);
+  font-size: 11px;
+}
 
 /* Centred on the BOARD, not the window — the same correction the kill-streak banner got.
  *
@@ -1538,7 +2655,8 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * The inset values are the same expressions `canvas#game` uses, so the two can never drift. */
 #scores {
   --panel-fill: #141b24f7;
-  position: fixed; z-index: 9;
+  position: fixed;
+  z-index: 9;
   top: calc(var(--bar) + var(--gap) * 2);
   left: var(--gap);
   width: calc(100vw - var(--side) - var(--gap) * 3);
@@ -1546,12 +2664,19 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   /* The panel itself is centred INSIDE that box rather than filling it: a scoreboard the size
      of the board is a page, and this is a glance. `place-items` does the centring, and the grid
      is only here to do it. */
-  display: none; place-items: center;
+  display: none;
+  place-items: center;
   pointer-events: none;
-  background: none; border: 0; padding: 0;
+  background: none;
+  border: 0;
+  padding: 0;
 }
-#scores.on { display: grid; }
-#scores > * { pointer-events: auto; }
+#scores.on {
+  display: grid;
+}
+#scores > * {
+  pointer-events: auto;
+}
 
 /* The card. Everything that used to be on #scores lives here now, so the outer element can be
    a positioning frame and nothing else. */
@@ -1559,57 +2684,139 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   --panel-fill: #141b24f7;
   /* 590px, matching the width the table was designed against once it grew a medals column and
      a coins column. Narrower and the headings wrap, which turns a glance into a read. */
-  border-radius: 12px; padding: 20px 24px; min-width: 590px; max-width: 100%;
-  max-height: 100%; overflow-y: auto;
+  border-radius: 12px;
+  padding: 20px 24px;
+  min-width: 590px;
+  max-width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
 }
 
-@media (max-width: 1080px) { #scores { width: calc(100vw - var(--gap) * 2); } }
-#scores table { width: 100%; border-collapse: collapse; font-size: 13px; }
-#scores th {
-  color: var(--dim); font-weight: normal; text-align: left; padding-bottom: 7px;
-  border-bottom: 1px solid #edc24e33; font-size: 10px;
-  text-transform: uppercase; letter-spacing: .14em;
+@media (max-width: 1080px) {
+  #scores {
+    width: calc(100vw - var(--gap) * 2);
+  }
 }
-#scores td { padding: 4px 12px 4px 0; white-space: nowrap; }
-#scores td:last-child, #scores th:last-child,
-#roundTable td:last-child, #roundTable th:last-child { padding-right: 10px; }
-#scores td.dimcell { color: var(--dim); }
-#scores td.num { font-family: var(--nums); font-variant-numeric: tabular-nums; }
-#scores .sub { margin: 14px 0 0; text-align: center; }
-#allTime { display: none; margin-top: 18px; padding-top: 14px; border-top: 1px solid #edc24e33; }
+#scores table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+#scores th {
+  color: var(--dim);
+  font-weight: normal;
+  text-align: left;
+  padding-bottom: 7px;
+  border-bottom: 1px solid #edc24e33;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+#scores td {
+  padding: 4px 12px 4px 0;
+  white-space: nowrap;
+}
+#scores td:last-child,
+#scores th:last-child,
+#roundTable td:last-child,
+#roundTable th:last-child {
+  padding-right: 10px;
+}
+#scores td.dimcell {
+  color: var(--dim);
+}
+#scores td.num {
+  font-family: var(--nums);
+  font-variant-numeric: tabular-nums;
+}
+#scores .sub {
+  margin: 14px 0 0;
+  text-align: center;
+}
+#allTime {
+  display: none;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #edc24e33;
+}
 #scores h2.boardHead {
-  margin: 0 0 8px; font-size: 11px; font-weight: normal; color: var(--gold);
-  letter-spacing: .2em; text-transform: uppercase; font-family: var(--display);
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: normal;
+  color: var(--gold);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-family: var(--display);
   text-shadow: var(--rim);
 }
 
 /* Every table board: taller rows, zebra stripes, the place column centred and wide enough for a
  * medal, podium tints on the top three, and your row edged in gold. The stripes are barely there
  * — on a dark panel a sixteen-row table without them is a wall, with strong ones it is a barcode. */
-#scores td, #roundTable td { padding-top: 6px; padding-bottom: 6px; }
+#scores td,
+#roundTable td {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
 #scores tbody tr:nth-child(even):not(.p1):not(.p2):not(.p3),
-#roundTable tbody tr:nth-child(even):not(.p1):not(.p2):not(.p3) { background: #ffffff06; }
-#scores td.place, #roundTable td.place {
-  width: 34px; padding-left: 4px; padding-right: 6px; text-align: center;
-  color: var(--dim); font-family: var(--nums);
+#roundTable tbody tr:nth-child(even):not(.p1):not(.p2):not(.p3) {
+  background: #ffffff06;
 }
-#scores th:first-child, #roundTable th:first-child { width: 34px; text-align: center; padding-left: 4px; }
-#scores tr.me { box-shadow: inset 3px 0 0 var(--gold); font-weight: 700; }
-#scores tr.me:not(.p1):not(.p2):not(.p3) { background: #edc24e12; }
-#scores tr.p1 td.score, #roundTable tr.p1 td.score { color: var(--gold-hi); }
-#scores td.score, #roundTable td.score { font-weight: 700; }
-#scores td.num, #roundTable td.num { text-align: right; }
-#scores th.num, #roundTable th.num { text-align: right; }
+#scores td.place,
+#roundTable td.place {
+  width: 34px;
+  padding-left: 4px;
+  padding-right: 6px;
+  text-align: center;
+  color: var(--dim);
+  font-family: var(--nums);
+}
+#scores th:first-child,
+#roundTable th:first-child {
+  width: 34px;
+  text-align: center;
+  padding-left: 4px;
+}
+#scores tr.me {
+  box-shadow: inset 3px 0 0 var(--gold);
+  font-weight: 700;
+}
+#scores tr.me:not(.p1):not(.p2):not(.p3) {
+  background: #edc24e12;
+}
+#scores tr.p1 td.score,
+#roundTable tr.p1 td.score {
+  color: var(--gold-hi);
+}
+#scores td.score,
+#roundTable td.score {
+  font-weight: 700;
+}
+#scores td.num,
+#roundTable td.num {
+  text-align: right;
+}
+#scores th.num,
+#roundTable th.num {
+  text-align: right;
+}
 #allTime h2 {
-  margin: 0 0 8px; font-size: 13px; font-weight: normal;
-  letter-spacing: .2em; text-transform: uppercase; font-family: var(--display);
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: normal;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-family: var(--display);
 }
-
 
 /* ─── menu ────────────────────────────────────────────────────────────────────── */
 
 #menu {
-  position: fixed; inset: 0; display: grid; place-items: center; z-index: 10;
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 10;
   /* Deep maroon at the top, not violet: the landing page reads in the mascot's gold and bandana
      red rather than purple. Dark enough to stay a backdrop. */
   background: radial-gradient(120% 90% at 50% 0%, #2a1018 0%, #0d1117 60%);
@@ -1621,8 +2828,10 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * content like the card is, and what it wants is the whole window. Auto z-index with
  * `#menuWrap > .card` at 1 means DOM order decides, and this is first. */
 #menuViz {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   display: block;
   pointer-events: none;
 }
@@ -1631,11 +2840,15 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  *
  * No disc and no ring: the art has its own alpha and a circular backing plate behind it just
  * reads as a sticker. Overlapping the card is what puts him in the scene rather than beside it. */
-#menuWrap { position: relative; }
+#menuWrap {
+  position: relative;
+}
 /* The card paints over the props. Both are positioned with auto z-index, which means DOM order
    decides — and the props come later in the markup, so without this they would sit on top of
    the form. */
-#menuWrap > .card { z-index: 1; }
+#menuWrap > .card {
+  z-index: 1;
+}
 
 /* The kegs, standing on the top edge of the card.
  *
@@ -1653,8 +2866,11 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   user-select: none;
 }
 .prop img {
-  display: block; width: 100%; height: auto;
-  position: relative; z-index: 1;
+  display: block;
+  width: 100%;
+  height: auto;
+  position: relative;
+  z-index: 1;
   filter: drop-shadow(0 18px 30px #000c);
 }
 /* Down at the foot of the card, overlapping its bottom-left corner.
@@ -1665,7 +2881,8 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * the controls, and one too far below looks like it fell off. */
 #propBarrels {
   width: 285px;
-  left: -258px; bottom: -40px;         /* clear of the card, off to its left */
+  left: -258px;
+  bottom: -40px; /* clear of the card, off to its left */
   transform: rotate(-6deg);
   animation: propA 9s ease-in-out infinite;
 }
@@ -1681,15 +2898,27 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * 24 s, matching the mascot and the panel borders. Three things sweeping at three different
  * speeds reads as a glitch rather than as one light moving across the page. */
 #propBarrels::before {
-  content: '';
-  position: absolute; inset: 0;
-  background: conic-gradient(from var(--spin) at 100% 100%,
-    #edc24e, #ff9a5c, #ff7a9a, #b78bff, #5cc6ff, #5ce0b0, #edc24e);
-  -webkit-mask-image: url('/assets/img/bomb-barrels.png');
-  mask-image: url('/assets/img/bomb-barrels.png');
-  -webkit-mask-size: contain; mask-size: contain;
-  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-  -webkit-mask-position: center; mask-position: center;
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: conic-gradient(
+    from var(--spin) at 100% 100%,
+    #edc24e,
+    #ff9a5c,
+    #ff7a9a,
+    #b78bff,
+    #5cc6ff,
+    #5ce0b0,
+    #edc24e
+  );
+  -webkit-mask-image: url("/assets/img/bomb-barrels.png");
+  mask-image: url("/assets/img/bomb-barrels.png");
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
   transform: scale(1.045);
   filter: blur(1.5px) saturate(1.3);
   animation: spin 24s linear infinite;
@@ -1697,26 +2926,45 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 }
 
 @keyframes propA {
-  0%, 100% { transform: translateY(0) rotate(-6deg); }
-  50%      { transform: translateY(-9px) rotate(-3deg); }
+  0%,
+  100% {
+    transform: translateY(0) rotate(-6deg);
+  }
+  50% {
+    transform: translateY(-9px) rotate(-3deg);
+  }
 }
-@media (prefers-reduced-motion: reduce) { .prop { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .prop {
+    animation: none;
+  }
+}
 /* Below this the card has the width to itself; a prop here would be over the form, not beside
    it. Same breakpoint the mascot uses. */
-@media (max-width: 1100px) { .prop { display: none; } }
+@media (max-width: 1100px) {
+  .prop {
+    display: none;
+  }
+}
 #mascot {
   position: absolute;
   /* Pinned a third of the way down the card, so he sits beside the name field rather than over
    * the title, however tall the card gets. */
-  top: 26%; right: -150px;
-  width: 255px; height: 255px;
+  top: 26%;
+  right: -150px;
+  width: 255px;
+  height: 255px;
   z-index: 2;
   pointer-events: none;
   animation: bob 5.5s ease-in-out infinite;
 }
 #mascot img {
-  display: block; width: 100%; height: 100%; object-fit: contain;
-  position: relative; z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  position: relative;
+  z-index: 1;
   /* A soft shadow under him instead of a frame around him. */
   filter: drop-shadow(0 18px 24px #000a) drop-shadow(0 0 40px #6b21a855);
 }
@@ -1728,15 +2976,27 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
  * outline: only the pixels the artwork actually covers get painted, so the colour appears as a
  * rim exactly where his edge is. A border-radius could never do this — he is not a circle. */
 #mascot::before {
-  content: '';
-  position: absolute; inset: 0;
-  background: conic-gradient(from var(--spin) at 100% 100%,
-    #edc24e, #ff9a5c, #ff7a9a, #b78bff, #5cc6ff, #5ce0b0, #edc24e);
-  -webkit-mask-image: url('/assets/img/mascot.png');
-  mask-image: url('/assets/img/mascot.png');
-  -webkit-mask-size: contain; mask-size: contain;
-  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-  -webkit-mask-position: center; mask-position: center;
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: conic-gradient(
+    from var(--spin) at 100% 100%,
+    #edc24e,
+    #ff9a5c,
+    #ff7a9a,
+    #b78bff,
+    #5cc6ff,
+    #5ce0b0,
+    #edc24e
+  );
+  -webkit-mask-image: url("/assets/img/mascot.png");
+  mask-image: url("/assets/img/mascot.png");
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
   transform: scale(1.045);
   filter: blur(1.5px) saturate(1.3);
   animation: spin 24s linear infinite;
@@ -1757,46 +3017,84 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   border-radius: 14px;
   background: #fbf7ec;
   color: #16202b;
-  font-size: 14.5px; line-height: 1.35; font-weight: 600;
+  font-size: 14.5px;
+  line-height: 1.35;
+  font-weight: 600;
   text-wrap: balance;
-  box-shadow: 0 14px 34px #000a, 0 0 0 1.5px #ffffff33;
-  opacity: 0; transform: scale(.72) translate(-12px, 10px);
+  box-shadow:
+    0 14px 34px #000a,
+    0 0 0 1.5px #ffffff33;
+  opacity: 0;
+  transform: scale(0.72) translate(-12px, 10px);
   transform-origin: 0 100%;
   pointer-events: none;
   z-index: 3;
-  transition: opacity .18s ease, transform .18s cubic-bezier(.2, 1.5, .4, 1);
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s cubic-bezier(0.2, 1.5, 0.4, 1);
 }
 /* The tail, as a rotated square tucked under the bottom-left corner so it points back at him. */
 #menuSay::after {
-  content: '';
-  position: absolute; left: 20px; bottom: -6px;
-  width: 14px; height: 14px;
+  content: "";
+  position: absolute;
+  left: 20px;
+  bottom: -6px;
+  width: 14px;
+  height: 14px;
   background: #fbf7ec;
   transform: rotate(45deg);
 }
-#menuSay.show { opacity: 1; transform: scale(1) translate(0, 0); }
+#menuSay.show {
+  opacity: 1;
+  transform: scale(1) translate(0, 0);
+}
 
 /* Below this the bubble would run off the right-hand edge, so it goes over the card instead. */
 @media (max-width: 1400px) {
-  #menuSay { left: auto; right: calc(100% - 44px); transform-origin: 100% 100%; }
-  #menuSay::after { left: auto; right: 20px; }
+  #menuSay {
+    left: auto;
+    right: calc(100% - 44px);
+    transform-origin: 100% 100%;
+  }
+  #menuSay::after {
+    left: auto;
+    right: 20px;
+  }
 }
 
 /* Half the travel it had. A sixteen-pixel bob on a face in the corner of the screen is movement
    in your peripheral vision during a firefight, which is exactly where you do not want any. */
 @keyframes bob {
-  0%, 100% { transform: translateY(0) rotate(-0.5deg); }
-  50%      { transform: translateY(-8px) rotate(0.5deg); }
+  0%,
+  100% {
+    transform: translateY(0) rotate(-0.5deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(0.5deg);
+  }
 }
-@media (prefers-reduced-motion: reduce) { #mascot { animation: none; } }
-@media (max-width: 860px) { #mascot { display: none; } }
+@media (prefers-reduced-motion: reduce) {
+  #mascot {
+    animation: none;
+  }
+}
+@media (max-width: 860px) {
+  #mascot {
+    display: none;
+  }
+}
 
 h1 {
   font-family: var(--display);
-  color: var(--gold); line-height: 1; letter-spacing: .05em;
+  color: var(--gold);
+  line-height: 1;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   margin: 0 0 10px;
-  text-shadow: var(--rim), 0 4px 0 #0009, 0 0 34px #edc24e55;
+  text-shadow:
+    var(--rim),
+    0 4px 0 #0009,
+    0 0 34px #edc24e55;
 }
 
 /* The title on the landing page: one line, never wrapped, and always flowing.
@@ -1811,7 +3109,8 @@ h1 {
   font-size: clamp(26px, 3.4vw, 44px);
   /* fit-content, then centred by its own margins. `text-align` alone would do nothing here: the
      box is only as wide as the word, so there is no slack inside it to centre against. */
-  width: fit-content; max-width: 100%;
+  width: fit-content;
+  max-width: 100%;
   margin-inline: auto;
   white-space: nowrap;
   /* Cast gold, via .cast in the markup. It used to be a travelling conic rainbow — six hues
@@ -1824,20 +3123,25 @@ h1 {
    * It has to be a FILTER, not a text-shadow: the fill is transparent so a shadow would show
    * straight through the inside of every glyph. Each drop-shadow applies to the result of the
    * last, so the thin edge has to come first or the glow is what gets outlined. */
-  filter:
-    var(--cast-edge)
-    drop-shadow(0 3px 0 #0009)
-    drop-shadow(0 6px 10px #000a)
-    drop-shadow(0 0 30px #edc24e52);
+  filter: var(--cast-edge) drop-shadow(0 3px 0 #0009)
+    drop-shadow(0 6px 10px #000a) drop-shadow(0 0 30px #edc24e52);
 }
 
 /* The 10px top margin is for the landing slogan, which wants air under the title rather than
    to sit tight against it. Harmless on the other `.sub`s — "tab to close" and "no scores" are
    both last lines in their cards with nothing above them to be pushed away from. */
-.sub { color: var(--dim); margin: 10px 0 24px; font-size: 14.5px; letter-spacing: .04em; }
+.sub {
+  color: var(--dim);
+  margin: 10px 0 24px;
+  font-size: 14.5px;
+  letter-spacing: 0.04em;
+}
 /* The two lines that introduce the game are centred; everything below them is a form and stays
    left-aligned, so the eye still has one edge to run down. */
-#title, #menu > #menuWrap .sub { text-align: center; }
+#title,
+#menu > #menuWrap .sub {
+  text-align: center;
+}
 
 /* The version, under the right-hand end of the title.
  *
@@ -1850,63 +3154,124 @@ h1 {
  * devtools, and that question is asked about once a month. */
 #titleWrap {
   position: relative;
-  width: fit-content; max-width: 100%;
+  width: fit-content;
+  max-width: 100%;
   /* 10px up — it was 15, then back down 5. A negative TOP margin rather than a transform, so
      the slogan and the form below come up with it: a transform would move the title off its own
      space and leave the gap it used to fill sitting there empty. */
   margin: -10px auto 0;
 }
 #version {
-  position: absolute; right: 0; top: 100%;
+  position: absolute;
+  right: 0;
+  top: 100%;
   margin-top: -3px;
-  font-family: var(--nums); font-size: 8px;
-  letter-spacing: .14em;
-  color: var(--dim); opacity: .72;
+  font-family: var(--nums);
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  color: var(--dim);
+  opacity: 0.72;
   pointer-events: none;
   white-space: nowrap;
 }
 
 label {
-  display: block; color: var(--dim); font-size: 11px; letter-spacing: .2em;
-  text-transform: uppercase; margin-bottom: 9px;
+  display: block;
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-bottom: 9px;
 }
-input[type=text] {
-  width: 100%; font: inherit; font-size: 17px; color: var(--ink);
-  background: #080c12; border: 1px solid #ffffff1f; border-radius: 9px;
-  padding: 14px 16px; letter-spacing: .04em;
-  transition: border-color .15s, box-shadow .15s;
+input[type="text"] {
+  width: 100%;
+  font: inherit;
+  font-size: 17px;
+  color: var(--ink);
+  background: #080c12;
+  border: 1px solid #ffffff1f;
+  border-radius: 9px;
+  padding: 14px 16px;
+  letter-spacing: 0.04em;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
-input[type=text]::placeholder { color: #5c6a7d; }
-input[type=text]:focus {
-  outline: none; border-color: var(--gold);
+input[type="text"]::placeholder {
+  color: #5c6a7d;
+}
+input[type="text"]:focus {
+  outline: none;
+  border-color: var(--gold);
   box-shadow: 0 0 0 3px #edc24e1f;
 }
 
 /* PLAY is the only thing on this page anyone needs to find, so it is the only filled control. */
 #play {
-  width: 100%; margin-top: 16px; padding: 15px; font-size: 32px; letter-spacing: .2em;
-  font-family: var(--display); line-height: 1;
+  width: 100%;
+  margin-top: 16px;
+  padding: 15px;
+  font-size: 32px;
+  letter-spacing: 0.2em;
+  font-family: var(--display);
+  line-height: 1;
   color: var(--on-gold);
   /* Dark text on gold, so the rim is a light one: it thickens the strokes and keeps the word
      from dissolving into the brightest part of the gradient. */
-  text-shadow: 0 1px 0 #fff6, 0 0 2px #0006, 0 2px 5px #0004;
-  background: linear-gradient(180deg, var(--gold-lit), var(--gold) 55%, var(--gold-deep));
-  border: none; border-radius: 10px;
-  box-shadow: 0 4px 0 var(--gold-shadow), 0 10px 26px #edc24e33;
-  transition: transform .08s, box-shadow .12s, filter .12s;
+  text-shadow:
+    0 1px 0 #fff6,
+    0 0 2px #0006,
+    0 2px 5px #0004;
+  background: linear-gradient(
+    180deg,
+    var(--gold-lit),
+    var(--gold) 55%,
+    var(--gold-deep)
+  );
+  border: none;
+  border-radius: 10px;
+  box-shadow:
+    0 4px 0 var(--gold-shadow),
+    0 10px 26px #edc24e33;
+  transition:
+    transform 0.08s,
+    box-shadow 0.12s,
+    filter 0.12s;
 }
-#play:hover { filter: brightness(1.08); box-shadow: 0 4px 0 var(--gold-shadow), 0 12px 34px #edc24e55; }
-#play:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--gold-shadow), 0 5px 16px #edc24e33; }
-#play:disabled { filter: grayscale(.7) brightness(.8); box-shadow: none; transform: none; }
+#play:hover {
+  filter: brightness(1.08);
+  box-shadow:
+    0 4px 0 var(--gold-shadow),
+    0 12px 34px #edc24e55;
+}
+#play:active {
+  transform: translateY(3px);
+  box-shadow:
+    0 1px 0 var(--gold-shadow),
+    0 5px 16px #edc24e33;
+}
+#play:disabled {
+  filter: grayscale(0.7) brightness(0.8);
+  box-shadow: none;
+  transform: none;
+}
 
-label { margin-bottom: 9px; }
+label {
+  margin-bottom: 9px;
+}
 
 /* Shown when the server turned this browser away because its identity is already in a game. It
    has to say what to do next, not just that something went wrong. */
 #signedOut {
-  display: none; margin: 12px 0 0; padding: 10px 12px;
-  background: #e8655a14; border: 1px solid #e8655a44; border-radius: 8px;
-  color: var(--bad); font-size: 12.5px; text-align: center;
+  display: none;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  background: #e8655a14;
+  border: 1px solid #e8655a44;
+  border-radius: 8px;
+  color: var(--bad);
+  font-size: 12.5px;
+  text-align: center;
 }
 
 /* Hovering runs the same conic gradient through the glyphs themselves: the text is painted by the
@@ -1914,15 +3279,25 @@ label { margin-bottom: 9px; }
  *
  * The PLAY button needs `background-clip: text` on a background that is also its fill, so on hover
  * it gives up its solid fill and becomes outlined gradient type instead. */
-.hoverFlow:hover, .hoverFlow:focus-visible {
-  background: conic-gradient(from var(--spin),
-    #c7b057, #ce8c6e, #c4837e, #b490da, #7badd3, #78b39b, #c7b057);
-  -webkit-background-clip: text; background-clip: text;
-  -webkit-text-fill-color: transparent; color: transparent;
+.hoverFlow:hover,
+.hoverFlow:focus-visible {
+  background: conic-gradient(
+    from var(--spin),
+    #c7b057,
+    #ce8c6e,
+    #c4837e,
+    #b490da,
+    #7badd3,
+    #78b39b,
+    #c7b057
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
   text-shadow: none;
   animation: spin 16s linear infinite;
 }
-
 
 /* Controls.
  *
@@ -1930,40 +3305,98 @@ label { margin-bottom: 9px; }
  * anybody parsing the sentence, and it lets the left column stay the same width no matter how
  * many keys a row names. The right column is a plain description at body size, because this is
  * the one block on the page somebody actually reads rather than scans. */
-.keys { margin: 24px 0 0; padding: 20px 0 0; border-top: 1px solid #ffffff14; }
+.keys {
+  margin: 24px 0 0;
+  padding: 20px 0 0;
+  border-top: 1px solid #ffffff14;
+}
 .keys h2 {
-  margin: 0 0 14px; font-size: 11px; font-weight: 700; color: var(--gold);
-  text-transform: uppercase; letter-spacing: .26em; font-family: var(--text);
+  margin: 0 0 14px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: 0.26em;
+  font-family: var(--text);
 }
 .keys dl {
-  margin: 0; display: grid; grid-template-columns: max-content 1fr;
-  gap: 9px 20px; align-items: center;
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 9px 20px;
+  align-items: center;
 }
-.keys dt { display: flex; align-items: center; gap: 4px; }
-.keys dd { margin: 0; color: var(--dim); font-size: 14px; }
-.keys .or { color: #5c6a7d; font-size: 11px; margin: 0 2px; }
+.keys dt {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.keys dd {
+  margin: 0;
+  color: var(--dim);
+  font-size: 14px;
+}
+.keys .or {
+  color: #5c6a7d;
+  font-size: 11px;
+  margin: 0 2px;
+}
 .keys code {
-  font-family: var(--nums); font-size: 12.5px; color: var(--gold);
-  background: #edc24e14; padding: 1px 5px; border-radius: 4px;
+  font-family: var(--nums);
+  font-size: 12.5px;
+  color: var(--gold);
+  background: #edc24e14;
+  padding: 1px 5px;
+  border-radius: 4px;
 }
 
 kbd {
-  display: inline-grid; place-items: center;
-  min-width: 26px; height: 26px; padding: 0 7px;
-  font-family: var(--nums); font-size: 12px; font-weight: 700; color: var(--ink);
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 7px;
+  font-family: var(--nums);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
   background: linear-gradient(180deg, #2a323e, #1b212b);
-  border: 1px solid #ffffff1f; border-bottom-width: 2px; border-bottom-color: #0009;
+  border: 1px solid #ffffff1f;
+  border-bottom-width: 2px;
+  border-bottom-color: #0009;
   border-radius: 6px;
   box-shadow: 0 1px 0 #ffffff14 inset;
 }
-kbd.wide { min-width: 58px; }
+kbd.wide {
+  min-width: 58px;
+}
 
 .menuFoot {
-  margin: 20px 0 0; padding-top: 15px; border-top: 1px solid #ffffff12;
-  display: flex; justify-content: space-between; align-items: center;
-  font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .14em;
+  margin: 20px 0 0;
+  padding-top: 15px;
+  border-top: 1px solid #ffffff12;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
 }
-.menuFoot a { color: var(--dim); text-decoration: none; display: flex; align-items: center; gap: 5px; }
-.menuFoot a:hover { color: var(--ink); }
-.menuFoot a.bug:hover { color: var(--bad); }
-.menuFoot svg { width: 16px; height: 16px; }
+.menuFoot a {
+  color: var(--dim);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.menuFoot a:hover {
+  color: var(--ink);
+}
+.menuFoot a.bug:hover {
+  color: var(--bad);
+}
+.menuFoot svg {
+  width: 16px;
+  height: 16px;
+}

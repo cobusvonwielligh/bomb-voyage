@@ -185,6 +185,20 @@ function syncMeter(dtMs) {
   }
   // One number for everything that wants to breathe with the kick.
   $('dock').style.setProperty('--bass', s.bass.toFixed(3));
+
+  /* The mascot, which is where the sea's old reactivity went.
+   *
+   * `--bob` lifts him on the bass and `--kick` squashes and lights him on the transient. Both
+   * ride on top of the CSS float rather than replacing it, so he carries on bobbing in silence.
+   * Written as custom properties because `translate` and `scale` are composited — no layout, no
+   * paint, and a style write per frame on one element is nothing. */
+  const av = $('avatar');
+  av.style.setProperty('--bob', s.bass.toFixed(3));
+  // The kick is the RISE in the bass, not its level: a sustained bass note should hold him up,
+  // not keep punching him. Falls away fast, so it is a hit rather than a state.
+  kick = Math.max(kick * Math.pow(0.86, dtMs / 16.7), Math.max(0, s.bass - lastBass) * 3.2);
+  lastBass = s.bass;
+  av.style.setProperty('--kick', Math.min(1, kick).toFixed(3));
 }
 
 /**
@@ -498,10 +512,21 @@ const net = createNet({
     el.querySelector('.big').textContent = `${m.kind}!!`;
     el.querySelector('.who').textContent = m.i === world.you ? 'you' : m.name;
     el.className = tier;
-    // Restart the animation even if one is already running — a triple arriving on top of a
-    // double has to replace it, not be swallowed by it.
-    void el.offsetWidth;
-    el.classList.add('show');
+
+    /* Not while you are dead.
+     *
+     * The death card is centred on the same board this lands on, and a kill streak over the top
+     * of your own respawn countdown is noise at the one moment you are not playing. The sound
+     * still plays — somebody is on a run and that is worth hearing — but the banner waits for
+     * a round where you are in it.
+     */
+    const dead = document.body.classList.contains('dead');
+    if (!dead) {
+      // Restart the animation even if one is already running — a triple arriving on top of a
+      // double has to replace it, not be swallowed by it.
+      void el.offsetWidth;
+      el.classList.add('show');
+    }
 
     sfx.play('streak', undefined, undefined, { step });
     // Duck the music under the announcement, scaled by the rung. The top of the ladder takes a
@@ -588,6 +613,9 @@ let tickedAt = -1;
 // Wall clock, not ticks: a hiccup is presentation, and the sim must never be asked to be
 // irregular about anything.
 let nextHiccupAt = 0;
+// The mascot's reaction to the music: see syncMeter. `kick` decays, `lastBass` is what the
+// rise is measured against.
+let kick = 0, lastBass = 0;
 
 /**
  * Your own bomb, the instant you press the key.
@@ -1034,6 +1062,19 @@ function showDeadBanner(by) {
   el.classList.remove('show');
   void el.offsetWidth;
   el.classList.add('show');
+
+  /* A streak announcement cannot share the screen with this one.
+   *
+   * They occupy the same spot, they are the same size, and only one of them is about you. A
+   * RAMPAGE landing on top of YOU DIED is somebody else's good news written over your bad news
+   * — and because the streak banner runs on its own timer it would simply erase this one
+   * mid-sentence. Killed outright rather than queued: by the time it could be shown again the
+   * run it was announcing is three kills further on. */
+  $('streak').classList.remove('show');
+
+  // Everything that has to look dead, in one place — see `body.dead` in style.css. The name in
+  // the corner goes the colour of the banner and the mascot's face loses its colour.
+  document.body.classList.add('dead');
 }
 
 /**
@@ -1051,6 +1092,8 @@ const DEAD_DIALOG_DELAY_TICKS = Math.round(4.4 * TICK_HZ);
 function showDead(dead) {
   const held = dead && diedAtTick >= 0 && world.tick - diedAtTick < DEAD_DIALOG_DELAY_TICKS;
   $('dead').style.display = dead && !held ? 'grid' : 'none';
+  // Alive again: the corner goes back to gold and the mascot gets his colour back.
+  if (!dead) document.body.classList.remove('dead');
 }
 
 /** One place that appends to the log, so trimming and scrolling cannot drift apart. */

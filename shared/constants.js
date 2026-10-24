@@ -382,7 +382,12 @@ export const INVULN_TICKS_SHIELD = 60; // 2 s after a shield breaks
 // It started at zero, which meant anyone holding the bomb key — everyone, always — respawned on
 // the same tick they died and never saw it happen. Ten seconds is long enough that dying costs
 // something, which is what makes not dying worth playing for.
-export const RESPAWN_DELAY_TICKS = 10 * TICK_HZ; // 300
+/* Fifteen seconds, up from ten.
+ *
+ * Long enough that dying costs you something you feel — at ten the queue barely formed and a
+ * careless rush was nearly free. Fifteen is still short enough to watch the fight you just
+ * left, which is the other thing the wait is for. */
+export const RESPAWN_DELAY_TICKS = 15 * TICK_HZ; // 450
 
 // How many of the furthest-apart spawn points to choose between. Always taking the single
 // furthest makes every death send you to the same two corners; picking at random from the best

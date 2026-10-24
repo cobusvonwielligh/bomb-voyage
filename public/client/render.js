@@ -73,6 +73,8 @@ export function createRenderer(canvas, world) {
   const mood = { bass: 0, mid: 0, high: 0, level: 0, beat: 0 };
   let eqFor = null, eqCoast = [];            // shoreline tiles with their band, per map
   let eqLen = new Float32Array(24);          // bar lengths per band, in tiles, eased
+  // The coastal glow's own clock. Nothing to do with the music any more — see drawCoastEq.
+  let eqT = 0;
   let eqBlur = new Float32Array(24);         // the same, blurred across neighbours; what is drawn
   let flowT = 0;                             // the surface texture's clock; see drawSea
   // The vignette, cached against the view size it was built for.
@@ -100,6 +102,8 @@ export function createRenderer(canvas, world) {
    * frame rate — press the key mid-glide and the bomb lands on the tile the bracket is heading
    * to, not the one it is passing over. */
   let aimTx = 0, aimTy = 0, aimSeen = false;
+  // 0..1, the fade-in when the bracket returns after your last bomb detonates.
+  let aimIn = 0;
   let depth = null, depthFor = '';     // the depth gradient, rebuilt only when the view changes
 
   // Sun glints on the open water. Cheap, stateless, and most of what makes a surface read wet.
@@ -676,14 +680,16 @@ export function createRenderer(canvas, world) {
     /* The water round the hull, which the ship did not have and the rocks did — so the rocks
      * were sitting IN the sea and the ship was sitting ON it. Wider than tall and offset down,
      * because a hull displaces water along its length: a circular collar round a boat reads as a
-     * buoy. Still, like the rocks' collars: nothing on the open sea pulses with the music. */
+     * buoy. Breathes with the music exactly as much as the rocks' collars do, which is barely:
+     * see the note there. */
+    const lap = mood.beat * 0.55 + mood.bass * 0.3;
     ctx.save();
     ctx.strokeStyle = PALETTE.foam;
-    ctx.globalAlpha = 0.09;
-    ctx.lineWidth = 2.6;
-    ctx.beginPath(); ctx.ellipse(0, 7, 30, 11, 0, 0, 7); ctx.stroke();
-    ctx.globalAlpha = 0.045;
-    ctx.lineWidth = 8;
+    ctx.globalAlpha = 0.09 + 0.04 * lap;
+    ctx.lineWidth = 2.6 + lap * 1.1;
+    ctx.beginPath(); ctx.ellipse(0, 7, 30 * (1 + lap * 0.04), 11 * (1 + lap * 0.06), 0, 0, 7); ctx.stroke();
+    ctx.globalAlpha = 0.045 + 0.025 * lap;
+    ctx.lineWidth = 8 + lap * 3;
     ctx.beginPath(); ctx.ellipse(0, 8, 40, 15, 0, 0, 7); ctx.stroke();
     ctx.restore();
     ctx.scale(SHIP_SCALE, SHIP_SCALE);
@@ -822,15 +828,21 @@ export function createRenderer(canvas, world) {
       // from the eye as the ship does.
       ctx.globalAlpha = ROCK_ALPHA;
 
-      // The water piling up around it. Wide and faint — a bright collar is what made these look
-      // like islands rather than like something barely breaking the surface.
-      ctx.globalAlpha = 0.12 + 0.04 * Math.sin(seaT * 1.1 + k.phase);
+      /* The water piling up around it, and one of the three places the music still shows.
+       *
+       * SLIGHT, deliberately. A rock is the only fixed thing in a moving current, so it is
+       * where a swell actually reads — but it is also out on the open water where nothing is
+       * being played, which is exactly why it can afford to move at all. The whole range is
+       * about four hundredths of alpha and a pixel of line width: visible if you watch it,
+       * invisible if you are not. */
+      const lap = mood.beat * 0.55 + mood.bass * 0.3;
+      ctx.globalAlpha = 0.12 + 0.04 * Math.sin(seaT * 1.1 + k.phase) + 0.045 * lap;
       ctx.strokeStyle = PALETTE.foam;
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 3 + lap * 1.1;
       ctx.beginPath();
-      ctx.ellipse(x, y, k.r * 1.25, k.r * 1.05, 0, 0, 7);
+      ctx.ellipse(x, y, k.r * (1.25 + lap * 0.04), k.r * (1.05 + lap * 0.04), 0, 0, 7);
       ctx.stroke();
-      ctx.globalAlpha = 0.06;
+      ctx.globalAlpha = 0.06 + 0.03 * lap;
       ctx.lineWidth = 9;
       ctx.beginPath();
       ctx.ellipse(x, y, k.r * 1.6, k.r * 1.35, 0, 0, 7);
@@ -894,6 +906,8 @@ export function createRenderer(canvas, world) {
   const EQ_SUB = 4;                                     // blocks per tile, outward
   // Half of what it was again — 0.15 and a 0.3 cap — at the user's request after a real round.
   const EQ_ALPHA = 0.038, EQ_CAP_ALPHA = 0.07;
+  // One band per shade, so a colour never spans two bands.
+  const EQ_BANDS = 24;
   const EQ_SHADES = 24;
   const EQ_COLOURS = Array.from({ length: EQ_SHADES }, (_, k) =>
     `hsl(${(205 - k * 2.3) | 0} 55% ${(54 + k * 0.7) | 0}%)`);  // deep blue bass to aqua treble
@@ -1051,18 +1065,33 @@ export function createRenderer(canvas, world) {
     return eqCoast;
   }
 
+  /* The coast glows, and it has STOPPED LISTENING.
+   *
+   * The picture is the one that worked — the island as a spectrum by angle, quarter-tile blocks
+   * stepping out of the shallows, deep blue at the bass end running to aqua at the treble end.
+   * What has gone is what was driving it.
+   *
+   * It was the loudest reactive thing on the board and it was in the wrong place: the coast
+   * wraps the entire playfield, so a visualiser living there is one you cannot look away from
+   * while you are trying to play. The music moves three quieter things instead, all at the edge
+   * of attention — the mascot's bob, the rings round the boat and the rocks, and the vignette.
+   *
+   * So this is a standing wave now. Three sines per band on periods that do not divide into
+   * each other, so the pattern never visibly repeats, plus a slow travelling term that walks the
+   * whole shape round the island. Deterministic, allocation-free, three sin() per band on
+   * twenty-four bands — and it breathes at the same gentle rate whether anything is playing or
+   * not, which is what a coastline should do.
+   */
   function drawCoastEq(dtMs) {
-    const eq = sound.eq;
-    if (!eq || !eq.length) return;
-    const n = eq.length;
+    const n = EQ_BANDS;
     if (eqLen.length !== n) { eqLen = new Float32Array(n); eqBlur = new Float32Array(n); }
-    // Slow. Over half a second to rise and well over a second to settle, on top of the
-    // listener's own easing: the coast should breathe, not twitch.
-    const up = 1 - Math.exp(-dtMs / 650), down = 1 - Math.exp(-dtMs / 1400);
+    eqT += dtMs / 1000;
     for (let b = 0; b < n; b++) {
-      // The smoothed bands live lower than the raw ones did, so the map starts lower too.
-      const target = Math.max(0, Math.min(1, (eq[b] - 0.26) / 0.5)) * EQ_MAX;
-      eqLen[b] += (target - eqLen[b]) * (target > eqLen[b] ? up : down);
+      const p = b / n;
+      const w = Math.sin(eqT * 0.21 + p * 6.1)
+        + Math.sin(eqT * 0.13 - p * 9.7) * 0.7
+        + Math.sin(eqT * 0.072 + p * 3.3) * 0.5;
+      eqLen[b] = Math.max(0, w / 2.2 + 0.52) * EQ_MAX;
     }
     // One gentle blur across neighbouring bands, so no band stands up on its own like a post.
     let prev = eqLen[0];
@@ -1720,7 +1749,7 @@ export function createRenderer(canvas, world) {
      *
      * Deliberately tiny. The range is 0.30 to about 0.40 of a corner that is already dark, which
      * is at the edge of noticeable in a still frame and the right amount while moving — the
-     * failure mode of a reactive vignette is a screen that pumps, and a pumping screen in a game
+     * ailure mode of a reactive vignette is a screen that pumps, and a pumping screen in a game
      * you are trying to read is unplayable.
      *
      * Cached per view: a radial gradient is cheap but not free, and this one only changes when
@@ -1736,7 +1765,7 @@ export function createRenderer(canvas, world) {
       vg.addColorStop(1, 'rgba(2,4,8,0.62)');
       vignette = vg;
     }
-    ctx.globalAlpha = 0.3 + squeeze * 0.45;
+    ctx.globalAlpha = 0.8 + squeeze * 0.45;
     ctx.fillStyle = vignette;
     ctx.fillRect(-4, -4, vw + 8, vh + 8);
     ctx.globalAlpha = 1;
@@ -1974,7 +2003,19 @@ export function createRenderer(canvas, world) {
     const { tx, ty } = bombTile(world, me);
     // Nothing to show if you are out of bombs: a sight on a shot you cannot take is a lie.
     const live = world.bombs.reduce((n, b) => n + ((b.o ?? b.owner) === world.you ? 1 : 0), 0);
-    if (live >= me.bombs) { aimSeen = false; return; }
+    if (live >= me.bombs) { aimSeen = false; aimIn = 0; return; }
+
+    /* Fade in when it comes back.
+     *
+     * The bracket vanishes the instant you place your last bomb and reappears the instant that
+     * bomb goes off — which is a hard pop in the corner of your eye at the exact moment the
+     * screen is already full of fire. Easing it in over about a sixth of a second turns an
+     * event into an arrival.
+     *
+     * In only. Going OUT stays instant, and that asymmetry is deliberate: the bracket
+     * disappearing is information — you have no bombs — and information must never lag. */
+    aimIn += (1 - aimIn) * (1 - Math.pow(1 - 0.22, (dtMs || 16) / 16.7));
+    if (aimIn < 0.02) return;
 
     /* Chase the target tile instead of appearing on it.
      *
@@ -2007,8 +2048,9 @@ export function createRenderer(canvas, world) {
     // How far it still has to go, 0 at rest. Used to lean into the move below.
     const travel = Math.min(1, Math.hypot(tx - aimTx, ty - aimTy));
     // Brighter while it is moving, so the glide reads as intent rather than as lag, and the
-    // resting pulse is what you see the other 99% of the time.
-    const pulse = Math.min(1, 0.55 + 0.25 * Math.sin(world.tick / 7) + travel * 0.45);
+    // resting pulse is what you see the other 99% of the time. Multiplied by the fade, so the
+    // whole bracket arrives together rather than one layer at a time.
+    const pulse = Math.min(1, 0.55 + 0.25 * Math.sin(world.tick / 7) + travel * 0.45) * aimIn;
     // The arms pull IN as it travels and spring back out when it lands — the same trick a
     // camera reticle uses, and it is what makes a 50 ms move feel deliberate.
     const arm = TILE_PX * (0.3 - 0.1 * travel), inset = 3 + travel * 2;
@@ -2017,7 +2059,8 @@ export function createRenderer(canvas, world) {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     // A dark pass underneath, so the bracket survives being drawn over pale sand or bright fire.
-    for (const [colour, width, alpha] of [['#0b0f16', 4, 0.5], [k.light, 2, pulse]]) {
+    // The dark backing pass fades in with the rest, or the outline arrives before the bracket.
+    for (const [colour, width, alpha] of [['#0b0f16', 4, 0.5 * aimIn], [k.light, 2, pulse]]) {
       ctx.strokeStyle = colour;
       ctx.lineWidth = width;
       ctx.globalAlpha = alpha;
