@@ -7,6 +7,18 @@
 import { PING_EVERY_MS, RTT_SAMPLES, CLOCK_SAFETY_MS, TICK_MS } from '/shared/constants.js';
 import { createTransport } from './transport.js';
 
+/** A random id for this browser, made once and kept. See MAX_SESSIONS_PER_DEVICE on the server. */
+function deviceId() {
+  try {
+    let id = localStorage.getItem('bv.device');
+    if (!id) {
+      id = (crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
+      localStorage.setItem('bv.device', id);
+    }
+    return id;
+  } catch { return null; }            // private mode with storage blocked: no limit applies
+}
+
 export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onScores, onStreak,
   onRoundTime, onRejected }) {
   let ws = null;
@@ -211,6 +223,9 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
       hello = {
         t: 'hello', name, observe,
         playerId: localStorage.getItem('bv.playerId') || null,
+        // This browser, for the server's sessions-per-browser limit. Separate from the player
+        // identity, so signing out does not reset it.
+        device: deviceId(),
       };
       open();
     },

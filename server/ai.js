@@ -41,8 +41,15 @@ const ESCAPE_NODES = 48;
 const TRAIL_LEN = 8;            // tile changes remembered, for loop detection
 const CYCLE_TILES = 3;          // that many distinct tiles across the trail means a cycle
 const BORED_TICKS = 45;         // how long a noticed cycle suppresses the hunt bias
-const BOMB_COOLDOWN = 45;
-const HUNT_CHANCE = 0.7;
+/* How good the bots are, 0..1. Everything that makes them sharp is scaled by it: how often they
+ * head for a player, how soon they bomb again, and how reliably they move the instant a blast
+ * is coming. 0.9 is ten percent dumber than they were, on request. */
+export const BOT_SKILL = 0.9;
+const BOMB_COOLDOWN = Math.round(45 / BOT_SKILL);
+const HUNT_CHANCE = 0.7 * BOT_SKILL;
+// A lapse: on noticing the floor is about to burn, sometimes they freeze for a moment first.
+const LAPSE_CHANCE = (1 - BOT_SKILL);
+const LAPSE_TICKS = 4;
 
 const DESTRUCTIBLE = new Set([BLOCK.SOFT, BLOCK.REINFORCED, BLOCK.MONOLITH, BLOCK.ICE]);
 const SHRUB = new Set([BLOCK.SHRUB_WALK, BLOCK.SHRUB_SOLID]);
@@ -440,6 +447,13 @@ export function think(state, p, brain, danger) {
   // 1. This tile is going to burn — any blast, however distant its fuse. Standing in one is the
   //    only way a bot ever takes damage, so leaving is always the first priority.
   if (here !== Infinity) {
+    // The moment it notices, it may hesitate (see LAPSE_CHANCE). Rolled once per danger, not
+    // per tick, so a lapse is a short freeze rather than a coin toss every frame.
+    if (!brain.inDanger) {
+      brain.inDanger = true;
+      brain.lapse = Math.random() < LAPSE_CHANCE ? LAPSE_TICKS : 0;
+    }
+    if (brain.lapse > 0) { brain.lapse--; return 0; }
     const { dir } = flood(state, p, danger, null);
     if (dir >= 0) {
       brain.dir = dir;
@@ -447,7 +461,7 @@ export function think(state, p, brain, danger) {
       return steer(state, p, dir);
     }
     // Nowhere to go. Fall through and keep moving rather than standing still and accepting it.
-  }
+  } else brain.inDanger = false;
 
   // 2. Bombing, with a verified way out of the blast we are about to make. Verified means a
   //    genuinely clear tile, reachable with a blast's worth of slack in hand — a best-effort

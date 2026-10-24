@@ -2097,11 +2097,53 @@ body.dead #rank { color: #8a5a5a; }
 }
 /* The name gets the accent and some weight: it is the half of the message that says whether
    this is a thing to celebrate or a thing to worry about. */
+/* Who did it, two and a half times the size it was, and impossible to miss: a molten gradient —
+ * gold, flame, rose, white-hot — pouring through the letters, under a glow that pulses with it.
+ * The name is the half of the announcement that says whether to celebrate or to run. */
 #streak .who {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  margin-top: 10px;
   color: var(--gold);
   opacity: 1;
+  text-shadow: none;
+  background: linear-gradient(90deg, #ffd24a, #ff8a2a, #ff3f5e, #ffe9a8, #ffd24a, #ff8a2a);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 10px #ff7a2acc) drop-shadow(0 3px 0 #000) drop-shadow(0 6px 14px #000c);
+  animation: whoFlow 1.1s linear infinite, whoGlow 0.55s ease-in-out infinite alternate;
+}
+/* The robot keeps its own colour inside the gradient text, or it would be invisible. */
+#streak .who .botIcon {
+  background: #ffe9a8;
+  width: 0.85em;
+  height: 0.85em;
+}
+@keyframes whoFlow {
+  to { background-position: 150% 0; }
+}
+@keyframes whoGlow {
+  from { filter: drop-shadow(0 0 6px #ff7a2a99) drop-shadow(0 3px 0 #000) drop-shadow(0 6px 14px #000c); }
+  to { filter: drop-shadow(0 0 18px #ffb347ff) drop-shadow(0 3px 0 #000) drop-shadow(0 6px 14px #000c); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #streak .who { animation: none; }
+}
+
+/* The robot, inline, wherever a bot's name is written — the same head the live scoreboard
+ * draws (`--robot`), in the colour of the text around it. */
+.botIcon {
+  display: inline-block;
+  width: 0.95em;
+  height: 0.95em;
+  margin-right: 0.25em;
+  vertical-align: -0.12em;
+  background: currentColor;
+  -webkit-mask: var(--robot) center / contain no-repeat;
+  mask: var(--robot) center / contain no-repeat;
 }
 
 /* Each rung is bigger and hotter than the last, so the escalation is visible as well as audible.

@@ -12,6 +12,7 @@ import { config, usingTls, ROOT } from './config.js';
 import { canonicalTarget } from './canonical.js';
 import { createLeaderboard } from './leaderboard.js';
 import { startWebTransport } from './webtransport.js';
+import { createGuard } from './guard.js';
 
 // The lag shim exists to make development honest, and would silently ruin a real session.
 if (config.lag && usingTls) {
@@ -119,8 +120,14 @@ function handleDeploy(req, res) {
 // ─── request handling ─────────────────────────────────────────────────────────
 
 const started = Date.now();
+const guard = createGuard();
 
 function handle(req, res) {
+  // Flood protection first, before any work is spent on the request. See server/guard.js.
+  if (!guard.allowRequest(req.socket.remoteAddress)) {
+    res.writeHead(429, { 'Retry-After': '2', 'Content-Type': 'text/plain' });
+    return res.end('slow down\n');
+  }
   res.setHeader('Content-Security-Policy', CSP);
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
@@ -280,7 +287,7 @@ const server = usingTls
   : http.createServer(handle);
 
 const leaderboard = createLeaderboard({ dataDir: config.dataDir });
-const hub = attachHub(server, { ...config, leaderboard });
+const hub = attachHub(server, { ...config, leaderboard, guard });
 
 /**
  * WebTransport on UDP/443, beside the WebSocket on TCP/443.

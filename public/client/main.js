@@ -497,11 +497,15 @@ const net = createNet({
   // is not in the snapshot.
   onScores: m => {
     ranks.clear();
+    botNames.clear();
     for (const r of m.ranks || []) {
+      if (r.bot && r.name) botNames.add(r.name.toLowerCase());
       ranks.set(r.i, r);
       // Authoritative names, once a second. See emitScores in server/room.js.
       const p = world.players[r.i];
       if (p && r.name && p.name !== r.name) p.name = r.name;
+      // The renderer puts a robot before a bot's name on the field, same as the scoreboard.
+      if (p) p.isBot = !!r.bot;
     }
     allTime = m.top || [];
     hostSeat = m.host ?? -1;
@@ -525,7 +529,7 @@ const net = createNet({
     const tier = m.ace ? 'ace' : step >= 0.85 ? 's4' : step >= 0.65 ? 's4' : step >= 0.35 ? 's3' : 's2';
 
     el.querySelector('.big').textContent = `${m.kind}!!`;
-    el.querySelector('.who').textContent = m.i === world.you ? 'you' : m.name;
+    withBotIcons(el.querySelector('.who'), m.i === world.you ? 'you' : m.name);
     el.className = tier;
 
     /* Not while you are dead.
@@ -562,9 +566,9 @@ const net = createNet({
   onChat: m => {
     const li = document.createElement('li');
     const who = document.createElement('b');
-    who.textContent = m.i === -1 ? '' : `${m.name}: `;
+    withBotIcons(who, m.i === -1 ? '' : `${m.name}: `);
     if (m.i >= 0) who.style.color = playerColor(m.i);
-    li.append(who, document.createTextNode(m.msg));   // textContent only: never innerHTML
+    li.append(who, withBotIcons(document.createElement('span'), m.msg));   // textContent only: never innerHTML
     /* Short lines also appear over the speaker's head.
      *
      * This is what makes emotes and chat one feature rather than two: an emote is just a very
@@ -627,6 +631,33 @@ const net = createNet({
 });
 
 const nameOf = i => (i === world.you ? 'you' : world.players[i]?.name ?? '?');
+
+/* Bots carry the robot everywhere their name appears — the feed, chat, the banners, the boards —
+ * not only on the live scoreboard. Names of the bots seated right now, lowercased, refreshed by
+ * the scores broadcast, which is the only place the server says who is a bot. */
+const botNames = new Set();
+const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Write `text` into `el`, with a robot in front of every seated bot's name in it. */
+function withBotIcons(el, text) {
+  const s = String(text);
+  el.textContent = '';
+  if (!botNames.size) { el.textContent = s; return el; }
+  const re = new RegExp(`(^|[^\\p{L}\\p{N}])(${[...botNames].map(escapeRe).join('|')})(?![\\p{L}\\p{N}])`, 'giu');
+  let at = 0;
+  for (const m of s.matchAll(re)) {
+    const start = m.index + m[1].length;
+    if (start > at) el.append(s.slice(at, start));
+    const icon = document.createElement('span');
+    icon.className = 'botIcon';
+    icon.setAttribute('role', 'img');
+    icon.setAttribute('aria-label', 'bot');
+    el.append(icon, m[2]);
+    at = start + m[2].length;
+  }
+  if (at < s.length) el.append(s.slice(at));
+  return el;
+}
 const chatHasFocus = () => document.activeElement === $('chatInput');
 // Note: no isTyping override. It defaults to typingSomewhere(), which asks whether focus is in
 // ANY text field — passing chatHasFocus here is what made WASD unusable in the name box.
@@ -1147,7 +1178,7 @@ function renderRoundTable(m) {
 /** YOU DIED, across the middle of the board. Separate from the card, which is the controls. */
 function showDeadBanner(by) {
   const el = $('deadBanner');
-  el.querySelector('.who').textContent = by;
+  withBotIcons(el.querySelector('.who'), by);
   el.classList.remove('show');
   void el.offsetWidth;
   el.classList.add('show');
@@ -1205,7 +1236,7 @@ function pushLine(li) {
 function killFeed(text, { youDied = false, youKilled = false } = {}) {
   const li = document.createElement('li');
   li.className = 'feed' + (youKilled ? ' kill' : youDied ? ' death' : '');
-  li.textContent = text;
+  withBotIcons(li, text);
   pushLine(li);
 }
 
@@ -1261,7 +1292,7 @@ let hostSeat = -1;
 
 function cell(tr, text, colour, dim) {
   const td = document.createElement('td');
-  td.textContent = text;
+  withBotIcons(td, text);
   if (colour) td.style.color = colour;
   if (dim) td.className = 'dimcell';
   tr.append(td);
@@ -1477,7 +1508,9 @@ function play(observe = false) {
    */
   music.exclude('theme');
   music.start(BEDS[(Math.random() * BEDS.length) | 0]).then(syncAudio);
-  world.onBoom = bomb => {
+  world.onBoom = (bomb, cells) => {
+    // Smoke off every tile the blast reached, before anything below can return early.
+    renderer?.addSmoke(cells || [], (bomb.r ?? bomb.radius ?? 1) >= POWDER_RADIUS);
     /* How big did that sound?
      *
      * Radius is the only size information a blast carries, and it is enough. A keg is radius 7

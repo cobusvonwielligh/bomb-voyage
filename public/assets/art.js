@@ -807,13 +807,35 @@ export function drawBombLive(c, body, { leftS, fullS, colorIndex = 0, t = 0 }) {
   c.beginPath(); c.arc(cx, cy, BOMB_RING_R, 0, Math.PI * 2);
   c.lineWidth = 3.4; c.strokeStyle = 'rgba(0,0,0,0.38)'; c.stroke();
   if (f > 0) {
-    // Owner's colour while there is time, through orange to red as it runs out.
-    const hot = Math.max(0, Math.min(1, 1 - leftS / 1.2));
-    c.strokeStyle = hot <= 0 ? k.base : `hsl(${(38 - 30 * hot) | 0} 100% ${(58 + 6 * hot) | 0}%)`;
-    if (hot > 0.5) { c.shadowColor = c.strokeStyle; c.shadowBlur = 6 * hot; }
-    c.beginPath(); c.arc(cx, cy, BOMB_RING_R, -Math.PI / 2, -Math.PI / 2 + f * Math.PI * 2);
-    c.lineWidth = 2.4; c.stroke();
-    c.shadowBlur = 0;
+    /* Owner's colour while there is time, then a long blend into red that ends GLOWING.
+     *
+     * The blend starts with 1.8 s left — three quarters of a normal fuse — so the ring is
+     * plainly on its way to red well before the end, rather than flicking orange in the last
+     * second. By the end it is pure red, thicker, and wrapped in a red halo that throbs with the
+     * warning pulse: a bomb about to go is the one thing on the floor that should burn. */
+    const ramp = Math.max(0, Math.min(1, 1 - leftS / 1.8));
+    const hot = ramp * ramp * (3 - 2 * ramp);
+    const arc = () => { c.beginPath(); c.arc(cx, cy, BOMB_RING_R, -Math.PI / 2, -Math.PI / 2 + f * Math.PI * 2); };
+    if (hot < 1) {
+      c.globalAlpha = 1 - hot;
+      arc(); c.lineWidth = 2.4; c.strokeStyle = k.base; c.stroke();
+    }
+    if (hot > 0) {
+      const red = `hsl(${(28 - 28 * hot) | 0} 100% ${(56 - 4 * hot) | 0}%)`;
+      if (hot > 0.35) {
+        // The halo: wide, soft, additive, pulsing faster as the warning does.
+        c.globalCompositeOperation = 'lighter';
+        c.globalAlpha = hot * (0.28 + 0.22 * Math.max(0, wob));
+        arc(); c.lineWidth = 6.5; c.strokeStyle = 'rgb(255,40,20)'; c.stroke();
+        c.globalCompositeOperation = 'source-over';
+      }
+      c.globalAlpha = hot;
+      c.shadowColor = 'rgb(255,30,10)';
+      c.shadowBlur = 3 + 9 * hot * (0.75 + 0.25 * wob);
+      arc(); c.lineWidth = 2.4 + 1.2 * hot; c.strokeStyle = red; c.stroke();
+      c.shadowBlur = 0;
+    }
+    c.globalAlpha = 1;
     // A bead on the leading end, so the eye can follow the ring moving rather than reading it.
     const a = -Math.PI / 2 + f * Math.PI * 2;
     c.beginPath(); c.arc(cx + Math.cos(a) * BOMB_RING_R, cy + Math.sin(a) * BOMB_RING_R, 1.9, 0, 7);
@@ -901,32 +923,38 @@ export function drawBomb(c, { phase = 0, colorIndex = 0 }) {
  */
 export function drawFire(c, { kind = 'core', rot = 0, age = 0, t = 0, seed = 0 }) {
   const S = TILE_PX;
-  const rnd = n => hash(seed * 31 + n, Math.floor(t * 24) + n * 7);   // reshuffled 24 times a second
+  // Fixed per tile and per tongue — nothing here is re-rolled while the blast burns. Every bit
+  // of motion below is a slow sine on `t`, so the fire flows rather than flickers.
+  const fixed = n => hash(seed * 31 + n, n * 7);
+  const ease = x => x * x * (3 - 2 * x);
   c.save(); c.translate(S / 2, S / 2); c.rotate(rot * Math.PI / 2);
 
-  const punch = age < 0.12 ? 1 + 0.22 * Math.sin((age / 0.12) * Math.PI) : 1;
-  const smoke = Math.max(0, (age - 0.66) / 0.34);
-  const breathe = 1 + 0.05 * Math.sin(t * 31 + seed * 2.1) + 0.03 * Math.sin(t * 53 + seed);
-  const w = S * (1 - age * 0.18) * punch * breathe;
-  c.globalAlpha = Math.max(0, 1 - age * 0.45 - smoke * 0.35);
+  // The punch is a smooth swell and settle over the first fifth, not a snap.
+  const punch = age < 0.2 ? 1 + 0.18 * Math.sin(ease(age / 0.2) * Math.PI) : 1;
+  const smoke = ease(Math.max(0, (age - 0.62) / 0.38));
+  const breathe = 1 + 0.035 * Math.sin(t * 7 + seed * 2.1) + 0.015 * Math.sin(t * 11.3 + seed);
+  const w = S * (1 - ease(age) * 0.18) * punch * breathe;
+  c.globalAlpha = Math.max(0, 1 - ease(age) * 0.45 - smoke * 0.35);
 
   const band = (inset, col) => rr(c, -w / 2 + inset, -w / 2 + inset, w - inset * 2, w - inset * 2, 4, col);
-  const hot = smoke > 0 ? '#c4532e' : PALETTE.fireEdge;
+  const hot = smoke > 0.15 ? '#c4532e' : PALETTE.fireEdge;
   if (kind === 'tip') { c.beginPath(); c.arc(0, 0, w / 2 - 1, 0, 7); c.fillStyle = hot; c.fill(); }
   else band(0, hot);
 
-  // Tongues: a few blobs riding the outer edge, re-rolled every frame, so the edge is alive.
+  // Tongues: four blobs, each on its own side, gliding back and forth along the edge and
+  // swelling in and out on slow sines.
   c.fillStyle = PALETTE.fireMid;
   for (let i = 0; i < 4; i++) {
-    const side = (i + Math.floor(rnd(i) * 4)) % 4;
-    const along = (rnd(i + 9) - 0.5) * w * 0.8;
-    const out = w / 2 - 1 + rnd(i + 17) * 3 * (1 - age);
+    const side = i;
+    const along = Math.sin(t * (2.2 + fixed(i) * 1.4) + fixed(i + 9) * 6.28) * w * 0.32;
+    const out = w / 2 - 1 + (1.5 + 1.5 * Math.sin(t * 3.1 + fixed(i + 17) * 6.28)) * (1 - age);
     const [x, y] = side === 0 ? [out, along] : side === 1 ? [along, -out] : side === 2 ? [-out, along] : [along, out];
-    c.beginPath(); c.arc(x, y, 2 + rnd(i + 23) * 3 * (1 - smoke), 0, 7); c.fill();
+    const r = (2.5 + 1.5 * Math.sin(t * 4.3 + fixed(i + 23) * 6.28)) * (1 - smoke);
+    if (r > 0.3) { c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); }
   }
 
-  const coreIn = 9 + 2 * Math.sin(t * 40 + seed * 3) + age * 3;
-  band(4, smoke > 0.5 ? '#e0732f' : PALETTE.fireMid);
+  const coreIn = 9 + 1.2 * Math.sin(t * 6 + seed * 3) + ease(age) * 3;
+  band(4, smoke > 0.6 ? '#e0732f' : PALETTE.fireMid);
   if (coreIn * 2 < w - 2) band(coreIn, PALETTE.fireCore);
 
   // Sparks off the core while it is young: short streaks flying outward and fading.
@@ -935,9 +963,10 @@ export function drawFire(c, { kind = 'core', rot = 0, age = 0, t = 0, seed = 0 }
     c.lineWidth = 1.4;
     c.lineCap = 'round';
     for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2 + seed + rnd(i + 40) * 0.6;
-      const r0 = S * 0.25 + age * S * 1.3 * (0.6 + rnd(i + 50) * 0.5);
-      c.globalAlpha = Math.max(0, 1 - age / 0.55) * 0.9;
+      // Each spark keeps its own direction and speed for its whole flight.
+      const a = (i / 6) * Math.PI * 2 + seed + fixed(i + 40) * 0.6;
+      const r0 = S * 0.25 + Math.sqrt(age) * S * 0.9 * (0.6 + fixed(i + 50) * 0.5);
+      c.globalAlpha = Math.max(0, 1 - ease(age / 0.55)) * 0.9;
       c.beginPath();
       c.moveTo(Math.cos(a) * r0, Math.sin(a) * r0);
       c.lineTo(Math.cos(a) * (r0 + 4), Math.sin(a) * (r0 + 4));
@@ -945,17 +974,8 @@ export function drawFire(c, { kind = 'core', rot = 0, age = 0, t = 0, seed = 0 }
     }
   }
 
-  // Smoke: grey puffs rising off the dying fire, in screen space so they always go UP.
-  if (smoke > 0) {
-    c.rotate(-rot * Math.PI / 2);
-    c.fillStyle = '#3a3f48';
-    for (let i = 0; i < 3; i++) {
-      const sx = (hash(seed + i, 3) - 0.5) * S * 0.6;
-      const sy = -smoke * S * (0.35 + hash(seed, i) * 0.3);
-      c.globalAlpha = 0.45 * Math.sin(smoke * Math.PI);
-      c.beginPath(); c.arc(sx, sy, 4 + smoke * 6, 0, 7); c.fill();
-    }
-  }
+  // The smoke itself is not drawn here: it outlives the fire, so it is a particle the renderer
+  // owns (see addSmoke in render.js). This tile only darkens and cools as it dies.
   c.restore();
 }
 

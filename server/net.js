@@ -8,6 +8,10 @@ import {
   BAN_MAX_HOURS, GAMESPEED_MIN, GAMESPEED_MAX, ROUNDTIME_MIN_MIN, ROUNDTIME_MAX_MIN,
 } from '../shared/constants.js';
 import { createRoom } from './room.js';
+import { createGuard, addressOf } from './guard.js';
+
+// Open sessions — playing or watching — one browser may hold at once. See claimDevice.
+export const MAX_SESSIONS_PER_DEVICE = 2;
 
 /** Strip control characters, trim, cap length. Names are rendered with textContent, never HTML. */
 export const sanitizeName = raw =>
@@ -198,7 +202,41 @@ export function createCommands({ room, config, reply, announce, kick, bans }) {
 }
 
 export function attachHub(server, config) {
-  const wss = new WebSocketServer({ server, path: '/ws', maxPayload: MAX_MESSAGE_BYTES });
+  const guard = config.guard ?? createGuard();
+  const wss = new WebSocketServer({
+    server, path: '/ws', maxPayload: MAX_MESSAGE_BYTES,
+    // Refused before the upgrade completes, so a flood never gets as far as a socket object.
+    verifyClient: (info, done) => {
+      const ip = addressOf(info.req);
+      if (guard.allowConnect(ip)) { info.req.bvIp = ip; return done(true); }
+      done(false, 429, 'too many connections');
+    },
+  });
+
+  /* Sessions per browser: at most MAX_SESSIONS_PER_DEVICE, playing and watching together.
+   *
+   * Per BROWSER, because that is the only "computer" a web page can identify: a MAC address
+   * never leaves the local network and no browser will reveal one, and an IP address is the
+   * whole office at once. The browser keeps a random device id in localStorage — separate from
+   * the player identity, so /logout does not reset it — and sends it with every hello. A second
+   * browser or a private window is a different device; this stops the easy case, tabs. */
+  const devices = new Map();     // device id -> Set of ws
+  const deviceOf = raw => (typeof raw === 'string' && /^[\w-]{8,64}$/.test(raw) ? raw : null);
+  function claimDevice(ws, device) {
+    if (!device) return true;
+    let set = devices.get(device);
+    if (!set) devices.set(device, set = new Set());
+    if (!set.has(ws) && set.size >= MAX_SESSIONS_PER_DEVICE) return false;
+    set.add(ws);
+    ws.bvDevice = device;
+    return true;
+  }
+  function releaseDevice(ws) {
+    const set = ws.bvDevice && devices.get(ws.bvDevice);
+    if (!set) return;
+    set.delete(ws);
+    if (!set.size) devices.delete(ws.bvDevice);
+  }
   const bySeat = new Map();      // seat -> ws
   /* Spectators. No seat, no inputs, no place in the simulation at all.
    *
@@ -285,15 +323,32 @@ export function attachHub(server, config) {
    * knows or cares which transport it is talking to, which is the only way a dual transport
    * stays honest: one protocol, one implementation, two pipes.
    */
-  function handleSocket(ws) {
+  function handleSocket(ws, req) {
+    // Set by verifyClient for WebSocket; WebTransport sessions arrive without one and are only
+    // budgeted per socket.
+    ws.bvIp = req?.bvIp ?? null;
     let seat = -1;
     let lastChat = 0;
     let lastCommand = 0;
 
     ws.isAlive = true;
     ws.on('pong', () => { ws.isAlive = true; });
+    // A playing client sends about 32 messages a second. Far past that is a flood, not a player.
+    const budget = guard.messageBudget();
 
     ws.on('message', raw => {
+      // Over budget: dropped, not fatal — a tab coming back from the background can burst. Only a
+      // socket that KEEPS flooding, a thousand dropped in ten seconds, is closed.
+      if (!budget()) {
+        const t = Date.now();
+        if (t - (ws.bvDropFrom || 0) > 10_000) { ws.bvDropFrom = t; ws.bvDropped = 0; }
+        if (++ws.bvDropped > 1000 && !ws.bvFlooded) {
+          ws.bvFlooded = true;
+          console.warn(`flood  seat ${seat} closed for sending too fast`);
+          ws.close(1008, 'too many messages');
+        }
+        return;
+      }
       let msg;
       try { msg = JSON.parse(raw); } catch { return; }
       if (!msg || typeof msg.t !== 'string') return;
@@ -301,6 +356,13 @@ export function attachHub(server, config) {
       switch (msg.t) {
         case 'hello': {
           if (seat >= 0 || watchers.has(ws)) return;
+
+          if (!claimDevice(ws, deviceOf(msg.device))) {
+            sendTo(ws, { t: 'reject',
+              why: `this browser already has ${MAX_SESSIONS_PER_DEVICE} sessions open — close one first` });
+            ws.close(4003, 'too many sessions in this browser');
+            return;
+          }
 
           /* Spectating. Always allowed, even on a full server — that is the entire feature.
            *
@@ -390,6 +452,9 @@ export function attachHub(server, config) {
     });
 
     ws.on('close', () => {
+      releaseDevice(ws);
+      if (ws.bvIp) guard.closed(ws.bvIp);
+      watchers.delete(ws);
       if (seat < 0) return;
       // Kicked sockets have already given the seat up, and it may have a new occupant by now.
       if (ws.bvKicked) return;

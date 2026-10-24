@@ -103,7 +103,7 @@ export function createWorld() {
     const until = w.tick + FIRE_TICKS;
     for (const c of cells) w.fires.push({ ...c, until, owner: bomb.o ?? bomb.owner });
     w.bombs = w.bombs.filter(b => b.id !== bomb.id);
-    w.onBoom?.(bomb);
+    w.onBoom?.(bomb, cells);
   };
 
   /** Called every frame: fuses that have run out, and fire that has burned out. */

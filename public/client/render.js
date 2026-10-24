@@ -252,7 +252,7 @@ export function createRenderer(canvas, world) {
   const invalidateAll = () => {
     chunks = new Map(); shore = null; splashes.length = 0; dropsFor = null;
     pools.clear(); ripples.length = 0; wisps.length = 0; shards.length = 0; pops.length = 0; poolFor = null;
-    glow.length = 0; eqFor = null; eqLen.fill(0);
+    glow.length = 0; eqFor = null; eqLen.fill(0); smokes.length = 0;
     rollCurrent();          // a new island sits in a different sea
   };
   const mapChanged = () => { recomputeZoom(); };
@@ -648,6 +648,22 @@ export function createRenderer(canvas, world) {
   // per particle. Six alphas across the 0.12-0.42 range the particles are seeded with is finer
   // than anyone can tell apart on a moving streak.
   const DROP_ALPHAS = 6;
+  const DROP_OPACITY = 0.6;
+
+  /** Is this world point on the moored ship's hull or on a sea boulder? */
+  function onSolidWater(x, y) {
+    for (const k of seaRocks) {
+      const dx = x - k.x, dy = y - k.y;
+      if (dx * dx + dy * dy < k.r * k.r * 1.3) return true;
+    }
+    const m = moored;
+    if (!m) return false;
+    // Into the ship's own frame, then an ellipse round the hull, bowsprit and rails included.
+    const c = Math.cos(-m.angle), s = Math.sin(-m.angle);
+    const lx = (x - m.x) * c - (y - m.y) * s, ly = (x - m.x) * s + (y - m.y) * c;
+    const ax = 80 * SHIP_SCALE, ay = 34 * SHIP_SCALE;
+    return (lx * lx) / (ax * ax) + (ly * ly) / (ay * ay) < 1;
+  }
   const dropPaths = Array.from({ length: DROP_ALPHAS * 2 }, () => []);
 
   function drawDrops(vw, vh, ox, oy, dt) {
@@ -684,17 +700,22 @@ export function createRenderer(canvas, world) {
       const tx = (d.x / TILE_PX) | 0, ty = (d.y / TILE_PX) | 0;
       if (tx >= 0 && ty >= 0 && tx < map.w && ty < map.h
           && cellType(map.cells[ty * map.w + tx]) !== BLOCK.WATER) continue;
-
+      // Nor across the ship's deck or a boulder: they are drawn first and the current runs
+      // round them, not over them. Both ends of the streak are checked, so none pokes in.
       const sp = Math.hypot(d.vx, d.vy) || 1;
+      const tailX = d.x - (d.vx / sp) * d.len, tailY = d.y - (d.vy / sp) * d.len;
+      if (onSolidWater(d.x, d.y) || onSolidWater(tailX, tailY)) continue;
+
       const bucket = Math.min(DROP_ALPHAS - 1, ((d.a - 0.12) / 0.3 * DROP_ALPHAS) | 0)
         + (sp > 18 ? DROP_ALPHAS : 0);
-      dropPaths[bucket].push(d.x, d.y, d.x - (d.vx / sp) * d.len, d.y - (d.vy / sp) * d.len);
+      dropPaths[bucket].push(d.x, d.y, tailX, tailY);
     }
     for (let b = 0; b < dropPaths.length; b++) {
       const seg = dropPaths[b];
       if (!seg.length) continue;
       const k = b % DROP_ALPHAS;
-      ctx.globalAlpha = 0.12 + (k + 0.5) * (0.3 / DROP_ALPHAS);
+      // Two fifths fainter than they were, on request: present, never the thing you look at.
+      ctx.globalAlpha = (0.12 + (k + 0.5) * (0.3 / DROP_ALPHAS)) * DROP_OPACITY;
       ctx.lineWidth = b >= DROP_ALPHAS ? 1.6 : 1;
       ctx.beginPath();
       for (let i = 0; i < seg.length; i += 4) {
@@ -1932,6 +1953,106 @@ export function createRenderer(canvas, world) {
     }
   }
 
+  // ─── smoke ──────────────────────────────────────────────────────────────────
+  //
+  // What a blast leaves behind. The fire is half a second and the rules; the smoke is two and a
+  // half and pure atmosphere, so it is a particle the renderer owns rather than part of a fire
+  // tile. It starts as the flames die — dense and dark low down, close to the tile — then lifts,
+  // swells, rolls slowly and thins to nothing, carried off with the same wind as the sea.
+  //
+  // Each puff is a pre-drawn soft disc, blitted scaled: no gradients built per frame, no filters,
+  // and a hard cap, so a chain across the map costs a fixed amount however big it gets.
+
+  const smokes = [];
+  const SMOKE_MAX = 260;
+  let smokeSprites = null;
+
+  function smokeSprite(core, edge) {
+    const el = document.createElement('canvas');
+    el.width = el.height = 64;
+    const g = el.getContext('2d');
+    // Two overlapping soft lobes rather than one disc: a single radial gradient reads as a ball.
+    for (const [x, y, r, a] of [[30, 34, 26, 1], [38, 28, 18, 0.8], [24, 26, 16, 0.7]]) {
+      const grad = g.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, core.replace('A', String(a)));
+      grad.addColorStop(0.55, edge.replace('A', String(a * 0.6)));
+      grad.addColorStop(1, edge.replace('A', '0'));
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 64, 64);
+    }
+    return el;
+  }
+
+  /** A blast just went off over these cells. A keg's smoke is bigger, darker and lasts longer. */
+  function addSmoke(cells, keg = false) {
+    smokeSprites ??= [
+      smokeSprite('rgba(40,42,48,A)', 'rgba(58,61,68,A)'),      // soot, the first second
+      smokeSprite('rgba(98,102,110,A)', 'rgba(120,124,132,A)'),  // grey, as it cools
+      smokeSprite('rgba(150,154,160,A)', 'rgba(170,174,180,A)'), // the pale wisps at the top
+    ];
+    for (const c of cells) {
+      const n = c.kind === 'core' ? (keg ? 7 : 4) : (keg ? 2 : 1);
+      for (let i = 0; i < n; i++) {
+        if (smokes.length >= SMOKE_MAX) smokes.shift();
+        smokes.push({
+          x: (c.tx + 0.5) * TILE_PX + (Math.random() - 0.5) * TILE_PX * 0.6,
+          y: (c.ty + 0.5) * TILE_PX + (Math.random() - 0.5) * TILE_PX * 0.6,
+          // Born as the fire dies: the arms first, the core a beat later.
+          delay: (c.kind === 'core' ? 0.3 : 0.18) + Math.random() * 0.22,
+          age: 0,
+          life: (keg ? 2.6 : 1.8) + Math.random() * 0.9,
+          r0: TILE_PX * (0.28 + Math.random() * 0.12) * (keg ? 1.3 : 1),
+          grow: TILE_PX * (0.55 + Math.random() * 0.35) * (keg ? 1.5 : 1),
+          rise: 10 + Math.random() * 10,                 // px/s, slowing as it goes
+          dx: (Math.random() - 0.5) * 14,
+          spin: (Math.random() - 0.5) * 0.9,
+          rot: Math.random() * Math.PI * 2,
+          peak: (c.kind === 'core' ? 0.5 : 0.36) * (keg ? 1.15 : 1),
+        });
+      }
+    }
+  }
+
+  function drawSmoke(ox, oy, dtMs) {
+    if (!smokes.length) return;
+    const dt = dtMs / 1000;
+    // The same wind the sea drifts in, gently.
+    const wx = Math.cos(current.angle) * current.speed * 0.6;
+    const wy = Math.sin(current.angle) * current.speed * 0.6;
+    const ease = x => x * x * (3 - 2 * x);
+    for (let i = smokes.length - 1; i >= 0; i--) {
+      const s = smokes[i];
+      if (s.delay > 0) { s.delay -= dt; continue; }
+      s.age += dt;
+      const k = s.age / s.life;
+      if (k >= 1) { smokes.splice(i, 1); continue; }
+      // Rises quickly at first and slows, the way warm air does as it cools.
+      const lift = 1 - k * 0.7;
+      s.y -= s.rise * lift * dt;
+      s.x += (s.dx * lift + wx) * dt;
+      s.y += wy * dt;
+      s.rot += s.spin * dt;
+      // In over the first fifth, hold, out over the last half — never a pop at either end.
+      const a = s.peak * ease(Math.min(1, k / 0.18)) * (1 - ease(Math.max(0, (k - 0.45) / 0.55)));
+      if (a < 0.01) continue;
+      const r = s.r0 + s.grow * Math.sqrt(k);
+      // Soot to grey to pale as it ages, by cross-fading the three sprites.
+      const tone = Math.min(1.999, k * 2.2);
+      const t0 = Math.floor(tone), mix = tone - t0;
+      ctx.save();
+      ctx.translate(ox + s.x, oy + s.y);
+      ctx.rotate(s.rot);
+      ctx.globalAlpha = a * (1 - mix);
+      ctx.drawImage(smokeSprites[t0], -r, -r, r * 2, r * 2);
+      if (mix > 0.02) {
+        ctx.globalAlpha = a * mix;
+        ctx.drawImage(smokeSprites[t0 + 1], -r, -r, r * 2, r * 2);
+      }
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+
   // ─── gulls ──────────────────────────────────────────────────────────────────
   //
   // The flight is the server's (see shared/sim/gulls.js): every frame asks gullAt where a bird
@@ -2375,6 +2496,9 @@ export function createRenderer(canvas, world) {
     drawAim(ox, oy, dtMs);
     for (const p of alive) drawTipsy(ctx, p, ox, oy);
     for (const p of alive) drawStamina(ctx, p, ox, oy);
+    // Smoke drifts over the players — it is in the air — but under the pickup labels and the
+    // gulls, which have to stay readable.
+    drawSmoke(ox, oy, dtMs);
     drawFloaters(ox, oy, dtMs);
     // Over everything on the island: they are in the air. Under the speech bubbles, which are
     // interface rather than world.
@@ -2647,13 +2771,14 @@ export function createRenderer(canvas, world) {
     c.save();
     c.globalCompositeOperation = 'lighter';
     for (let k = 0; k < n; k++) {
-      const r = TILE_PX * (0.62 + 0.16 * k);
+      // Tight round the sprite: the first ring just clears it, the second sits a few pixels out.
+      const r = TILE_PX * (0.5 + 0.11 * k);
       const turn = seaT * (k ? -0.9 : 0.6) + p.i;
       // The second ring is broken into arcs, so two rings read as two at a glance.
       const arcs = k ? 6 : 1;
       const gap = k ? 0.32 : 0;
       for (const [width, colour, alpha] of [
-        [7, '64,150,255', 0.16], [3.5, '90,175,255', 0.3], [1.5, '190,228,255', 0.85],
+        [5, '64,150,255', 0.16], [2.5, '90,175,255', 0.3], [1.2, '190,228,255', 0.85],
       ]) {
         c.lineWidth = width;
         c.strokeStyle = `rgba(${colour},${alpha * breathe})`;
@@ -2796,7 +2921,7 @@ export function createRenderer(canvas, world) {
     if (pop < 1.5) drawShields(c, p, px + TILE_PX / 2, py + TILE_PX / 2);
     drawStatusPips(c, p, px, py);
 
-    const label = nameLabel(p.name, isMe ? PALETTE.gold : playerShades(p.i).light);
+    const label = nameLabel(p.name, isMe ? PALETTE.gold : playerShades(p.i).light, !!p.isBot);
     c.drawImage(label.el, px + TILE_PX / 2 - label.w / 2, py - 3 - LABEL_BASE, label.w, LABEL_H);
   }
 
@@ -2809,9 +2934,16 @@ export function createRenderer(canvas, world) {
    * rather than blurring; cleared wholesale if it ever grows past what a room could need. */
   const LABEL_H = 16, LABEL_BASE = 12;
   const labels = new Map();
-  function nameLabel(text, colour) {
+  // The scoreboard's robot head (--robot in style.css), as canvas paths, on a 16-unit grid.
+  const ROBOT = typeof Path2D === 'function' ? new Path2D(
+    'M7.2 0h1.6v2.4H7.2zM2.6 4h10.8a1 1 0 011 1v7a1 1 0 01-1 1H2.6a1 1 0 01-1-1V5a1 1 0 011-1z'
+    + 'm2.3 2.6a1.5 1.5 0 100 3 1.5 1.5 0 000-3zm6.2 0a1.5 1.5 0 100 3 1.5 1.5 0 000-3z'
+    + 'M9.3 1.1a1.3 1.3 0 10-2.6 0 1.3 1.3 0 002.6 0zM0 6.6h1.3v3.8H0zM14.7 6.6H16v3.8h-1.3z') : null;
+  const ROBOT_PX = 9;
+
+  function nameLabel(text, colour, bot = false) {
     const k = view.zoom * view.dpr;
-    const key = `${text}|${colour}|${k}`;
+    const key = `${text}|${colour}|${k}|${bot ? 1 : 0}`;
     let l = labels.get(key);
     if (l) return l;
     if (labels.size > 96) labels.clear();
@@ -2819,7 +2951,9 @@ export function createRenderer(canvas, world) {
     const font = '10px ui-monospace, monospace';
     const probe = el.getContext('2d');
     probe.font = font;
-    const w = Math.ceil(probe.measureText(text).width) + 6;
+    const tw = Math.ceil(probe.measureText(text).width);
+    const icon = bot && ROBOT ? ROBOT_PX + 3 : 0;
+    const w = tw + 6 + icon;
     el.width = Math.ceil(w * k);
     el.height = Math.ceil(LABEL_H * k);
     const c = el.getContext('2d');
@@ -2827,11 +2961,24 @@ export function createRenderer(canvas, world) {
     c.font = font;
     c.textAlign = 'center';
     c.lineJoin = 'round';
+    const tx = icon + (w - icon) / 2;
+    if (icon) {
+      // The robot, outlined like the text so it reads on any floor.
+      c.save();
+      c.translate(3, LABEL_BASE - ROBOT_PX + 1);
+      c.scale(ROBOT_PX / 16, ROBOT_PX / 16);
+      c.lineWidth = 3 * 16 / ROBOT_PX;
+      c.strokeStyle = 'rgba(0,0,0,0.75)';
+      c.stroke(ROBOT);
+      c.fillStyle = colour;
+      c.fill(ROBOT, 'evenodd');
+      c.restore();
+    }
     c.lineWidth = 3;
     c.strokeStyle = 'rgba(0,0,0,0.75)';
-    c.strokeText(text, w / 2, LABEL_BASE);
+    c.strokeText(text, tx, LABEL_BASE);
     c.fillStyle = colour;
-    c.fillText(text, w / 2, LABEL_BASE);
+    c.fillText(text, tx, LABEL_BASE);
     l = { el, w };
     labels.set(key, l);
     return l;
@@ -3056,7 +3203,7 @@ export function createRenderer(canvas, world) {
 
   resize();
   const api = {
-    frame, resize, invalidateAll, invalidateTile, mapChanged, addMelt, gullHit,
+    frame, resize, invalidateAll, invalidateTile, mapChanged, addMelt, gullHit, addSmoke,
     /** Hooks for the gulls' sounds, in tiles: `onGullCry(tx, ty)` and `onGullDown(tx, ty)`. */
     onGullCry: null, onGullDown: null,
 
