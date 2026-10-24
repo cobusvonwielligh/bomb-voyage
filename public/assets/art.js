@@ -1621,7 +1621,7 @@ export function drawRock(c, tx, ty, edges) {
   // every rock tile would draw a grid through the middle of the coast; this draws one line
   // round the whole island, because the only tiles that carry it are the ones on the edge.
   // Same weight as the block hairline, in the darkest brown on the palette.
-  const EDGE = '#241c14', T = 2;
+  const EDGE = COAST_EDGE, T = 2;
 
   // Boulders, not a brick. Three overlapping rounded lumps of brown-grey stone, sized and placed
   // by hash — so every tile is a different pile, and the same tile is the same pile every time.
@@ -1657,6 +1657,92 @@ export function drawRock(c, tx, ty, edges) {
     if (edges & 4) px(c, 0, 0, T, S, EDGE);
     if (edges & 8) px(c, 0, S - T, S, T, EDGE);
   }
+}
+
+// ─── rounded coast ────────────────────────────────────────────────────────────
+
+/* The island's outer corners, rounded in quarter-tile steps.
+ *
+ * Square rock corners made every island read as a grid with a coastline drawn on it. Smoothing
+ * them properly would be the one curved thing in a world of pixels, so they are stepped instead:
+ * a quarter circle one tile across, at a quarter-tile resolution — two quarters off the first
+ * row, one off the second. Convex corners lose that much rock; concave ones gain it, as a fillet
+ * drawn into the corner of the water tile. render.js builds the sea's shallows from the same
+ * steps, so the water follows the rounded rock rather than the square one.
+ */
+export const COAST_EDGE = '#241c14';
+export const COAST_STEPS = [2, 1];          // quarters taken from each row, from the corner in
+export const COAST_Q = TILE_PX / 4;
+/** The four corners: which sea-edge bits make each one, and the mirroring that maps it to top-left. */
+export const COAST_CORNERS = [
+  { bits: 2 | 4, sx: 1, sy: 1 },            // top-left: up and left face the sea
+  { bits: 2 | 1, sx: -1, sy: 1 },           // top-right
+  { bits: 8 | 4, sx: 1, sy: -1 },           // bottom-left
+  { bits: 8 | 1, sx: -1, sy: -1 },          // bottom-right
+];
+
+/**
+ * The quarter-tile cells of one tile that a set of corners covers, as a 16-entry mask.
+ * Row-major from the top-left; `corners` is a list of COAST_CORNERS entries.
+ */
+export function cornerCells(corners) {
+  const cells = new Uint8Array(16);
+  for (const k of corners) {
+    COAST_STEPS.forEach((n, row) => {
+      for (let col = 0; col < n; col++) {
+        const x = k.sx > 0 ? col : 3 - col, y = k.sy > 0 ? row : 3 - row;
+        cells[y * 4 + x] = 1;
+      }
+    });
+  }
+  return cells;
+}
+
+/** A T-pixel line along each side of a cell in `inside` whose neighbour in the tile is not. */
+function outlineCells(c, inside, T) {
+  const q = COAST_Q;
+  c.fillStyle = COAST_EDGE;
+  for (let y = 0; y < 4; y++) {
+    for (let x = 0; x < 4; x++) {
+      if (!inside(x, y)) continue;
+      if (x < 3 && !inside(x + 1, y)) c.fillRect((x + 1) * q - T, y * q, T, q);
+      if (x > 0 && !inside(x - 1, y)) c.fillRect(x * q, y * q, T, q);
+      if (y < 3 && !inside(x, y + 1)) c.fillRect(x * q, (y + 1) * q - T, q, T);
+      if (y > 0 && !inside(x, y - 1)) c.fillRect(x * q, y * q, q, T);
+    }
+  }
+}
+
+/**
+ * Cut convex corners out of a rock tile already drawn here, and outline the steps they leave.
+ * Worked from the cell mask rather than corner by corner, so a tile rounded on two or three
+ * corners — a spit of rock — gets one clean outline and no step lines left floating in the sea.
+ */
+export function carveRockCorners(c, corners) {
+  const q = COAST_Q, cut = cornerCells(corners);
+  for (let i = 0; i < 16; i++) if (cut[i]) c.clearRect((i & 3) * q, (i >> 2) * q, q, q);
+  outlineCells(c, (x, y) => !cut[y * 4 + x], 2);
+}
+
+/**
+ * Fill concave corners of a water tile with rock, outlined on the water side.
+ *
+ * Each fillet reaches 2px into the land tiles beside it, to paint over the straight outline they
+ * drew along that side — it is inside the rock now. Drawn after every tile in the chunk, so that
+ * overlap lands on top of them rather than under.
+ */
+export function drawCoastFillets(c, corners) {
+  const q = COAST_Q, T = 2, S = TILE_PX, fill = cornerCells(corners);
+  c.fillStyle = PALETTE.rockDark;
+  for (const k of corners) {
+    const x0 = k.sx > 0 ? 0 : S - 2 * q, y0 = k.sy > 0 ? 0 : S - 2 * q;
+    c.fillRect(x0, k.sy > 0 ? -T : S, 2 * q, T);        // over the neighbour's old outline
+    c.fillRect(k.sx > 0 ? -T : S, y0, T, 2 * q);
+  }
+  // The boulders' own stone, so the fillet reads as one more lump of the pile beside it.
+  c.fillStyle = PALETTE.rock;
+  for (let i = 0; i < 16; i++) if (fill[i]) c.fillRect((i & 3) * q, (i >> 2) * q, q, q);
+  outlineCells(c, (x, y) => fill[y * 4 + x] === 1, T);
 }
 
 /**

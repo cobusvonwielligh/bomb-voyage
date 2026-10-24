@@ -14,6 +14,7 @@ import { cellType, cellHp } from '/shared/maps.js';
 import {
   drawTile, drawFire, drawPerk, drawRock, drawShip, playerShades, PALETTE, bake, bakeSea,
   PERK_GLOWS, drawBombLive, CASTS_SHADOW, drawGull, drawFeather,
+  COAST_CORNERS, COAST_Q, carveRockCorners, drawCoastFillets, cornerCells,
 } from '/assets/art.js';
 import { bombTile } from '/shared/sim/bombs.js';
 import { gullAt } from '/shared/sim/gulls.js';
@@ -401,6 +402,20 @@ export function createRenderer(canvas, world) {
           cc.restore();
         }
       }
+      // The rounded coast, after every tile: a fillet paints over its neighbours' old outline.
+      for (let j = 0; j < CHUNK_TILES; j++) {
+        for (let i = 0; i < CHUNK_TILES; i++) {
+          const tx = cx * CHUNK_TILES + i, ty = cy * CHUNK_TILES + j;
+          if (tx < 0 || ty < 0 || tx >= map.w || ty >= map.h) continue;
+          const { carve, fill } = coastCorners(tx, ty);
+          if (!carve.length && !fill.length) continue;
+          cc.save();
+          cc.translate(i * TILE_PX, j * TILE_PX);
+          if (carve.length) carveRockCorners(cc, carve);
+          if (fill.length) drawCoastFillets(cc, fill);
+          cc.restore();
+        }
+      }
       c.dirty = false;
       redrawsThisSecond++;
     }
@@ -414,6 +429,54 @@ export function createRenderer(canvas, world) {
       x < 0 || y < 0 || x >= map.w || y >= map.h || cellType(map.cells[y * map.w + x]) === BLOCK.WATER;
     return (sea(tx + 1, ty) ? 1 : 0) | (sea(tx, ty - 1) ? 2 : 0)
          | (sea(tx - 1, ty) ? 4 : 0) | (sea(tx, ty + 1) ? 8 : 0);
+  }
+
+  /**
+   * Which corners of this tile the rounded coast changes: `carve` for a rock tile's outside
+   * corners (both sides facing the sea), `fill` for a water tile's inside corners (rock on both
+   * sides and diagonally). See COAST_STEPS in art.js.
+   */
+  const NONE = Object.freeze({ carve: [], fill: [] });
+  function coastCorners(tx, ty) {
+    const map = world.map;
+    const type = (x, y) => (x < 0 || y < 0 || x >= map.w || y >= map.h
+      ? BLOCK.WATER : cellType(map.cells[y * map.w + x]));
+    const here = type(tx, ty);
+    if (here === BLOCK.IRON) {
+      const e = seaEdges(tx, ty);
+      const carve = e ? COAST_CORNERS.filter(k => (e & k.bits) === k.bits) : [];
+      return carve.length ? { carve, fill: [] } : NONE;
+    }
+    if (here !== BLOCK.WATER) return NONE;
+    const fill = COAST_CORNERS.filter(k => type(tx - k.sx, ty) === BLOCK.IRON
+      && type(tx, ty - k.sy) === BLOCK.IRON && type(tx - k.sx, ty - k.sy) === BLOCK.IRON);
+    return fill.length ? { carve: [], fill } : NONE;
+  }
+
+  /**
+   * The land, at a quarter of a tile: 1 for rock or island, 0 for sea, with the rounded corners
+   * applied. Cached per map; the shallows are measured from this so the water follows the
+   * stepped coast rather than the square tiles under it.
+   */
+  let coastMaskFor = null, coastMaskCells = null;
+  function coastMask() {
+    const map = world.map;
+    if (coastMaskFor === map) return coastMaskCells;
+    const W = map.w * 4, m = new Uint8Array(W * map.h * 4);
+    for (let ty = 0; ty < map.h; ty++) {
+      for (let tx = 0; tx < map.w; tx++) {
+        const land = cellType(map.cells[ty * map.w + tx]) !== BLOCK.WATER;
+        const { carve, fill } = coastCorners(tx, ty);
+        const cut = carve.length ? cornerCells(carve) : null;
+        const add = fill.length ? cornerCells(fill) : null;
+        for (let i = 0; i < 16; i++) {
+          const on = land ? !(cut && cut[i]) : !!(add && add[i]);
+          if (on) m[(ty * 4 + (i >> 2)) * W + tx * 4 + (i & 3)] = 1;
+        }
+      }
+    }
+    coastMaskFor = map; coastMaskCells = m;
+    return m;
   }
 
   /**
@@ -1338,9 +1401,14 @@ export function createRenderer(canvas, world) {
         const pos = Math.abs(Math.atan2(mx - cx, my - cy)) / Math.PI;   // 0 below, 1 above
         for (const s of run) {
           for (let h = 0; h < 2; h++) {
+            // The half of the edge at a rounded corner has had its rock stepped back by a quarter
+            // tile (see COAST_STEPS), so the bar starts there instead of out in the water.
+            const side = dx ? (h ? 8 : 2) : (h ? 1 : 4);
+            const wall = dx > 0 ? 1 : dx < 0 ? 4 : dy < 0 ? 2 : 8;
+            const back = (s.e & side) && (s.e & wall) ? COAST_Q : 0;
             eqCoast.push({
-              x: dx > 0 ? (s.tx + 1) * S : dx < 0 ? s.tx * S - step : s.tx * S + h * half,
-              y: dy > 0 ? (s.ty + 1) * S : dy < 0 ? s.ty * S - step : s.ty * S + h * half,
+              x: (dx > 0 ? (s.tx + 1) * S : dx < 0 ? s.tx * S - step : s.tx * S + h * half) - dx * back,
+              y: (dy > 0 ? (s.ty + 1) * S : dy < 0 ? s.ty * S - step : s.ty * S + h * half) - dy * back,
               sx: dx * step, sy: dy * step,
               w: dx ? step : half, h: dy ? step : half,
               pos, shade: Math.min(EQ_SHADES - 1, (pos * EQ_SHADES) | 0),
@@ -1476,39 +1544,52 @@ export function createRenderer(canvas, world) {
     el.height = (map.h + P * 2) * TILE_PX;
     const c = el.getContext('2d');
     c.translate(P * TILE_PX, P * TILE_PX);
-    /* By distance to the nearest land, counting diagonals — every water tile within one tile of
-     * the island in ANY direction is the near band, within two the far band, and each tile is
-     * painted exactly once.
+    /* By distance to the nearest land, measured on the quarter-tile coast mask (see coastMask) —
+     * so the bands follow the rounded rock in the same quarter-tile steps instead of squaring
+     * off round it. Within one tile of land is the near band, within two the far band, and each
+     * cell is painted exactly once.
      *
-     * It used to be painted outward from each sea-facing edge of each coast tile. That never
-     * reached the tile diagonally off a convex corner — no edge faces it — so every outside
-     * corner of every island had a dark square notched out of its shallows. It also painted a
-     * tile once per edge that faced it, so a tile in an inside corner got two coats and stood
-     * out brighter than its neighbours. */
-    const land = (x, y) => x >= 0 && y >= 0 && x < map.w && y < map.h
-      && cellType(map.cells[y * map.w + x]) !== BLOCK.WATER;
-    const near = [], far = [];
-    for (let ty = -P; ty < map.h + P; ty++) {
-      for (let tx = -P; tx < map.w + P; tx++) {
-        if (land(tx, ty)) continue;
-        let d = 3;
-        for (let dy = -2; dy <= 2 && d > 1; dy++) {
-          for (let dx = -2; dx <= 2; dx++) {
-            if (land(tx + dx, ty + dy)) d = Math.min(d, Math.max(Math.abs(dx), Math.abs(dy)));
-          }
-        }
-        if (d <= 1) near.push(tx, ty);
-        else if (d <= 2) far.push(tx, ty);
+     * Distance is straight-line, cell centre to cell centre, which is what rounds the bands
+     * round an outside corner. It used to be counted in whole tiles including diagonals; before
+     * that it was painted outward from each sea-facing edge, which left a dark square notched out
+     * of every outside corner and gave inside corners two coats. */
+    const Q = 4, mask = coastMask(), MW = map.w * Q, MH = map.h * Q;
+    const land = (x, y) => x >= 0 && y >= 0 && x < MW && y < MH && mask[y * MW + x] === 1;
+    const R = 2 * Q;
+    const offsets = [];
+    for (let dy = -R; dy <= R; dy++) {
+      for (let dx = -R; dx <= R; dx++) {
+        const d2 = dx * dx + dy * dy;
+        if (d2 <= R * R) offsets.push([dx, dy, d2]);
       }
     }
-    const band = (tiles, alpha, colour) => {
+    offsets.sort((a, b) => a[2] - b[2]);                 // nearest first: stop at the first land
+    const q = COAST_Q;
+    const near = [], far = [];                            // runs: x, y, length, in cells
+    for (let y = -P * Q; y < MH + P * Q; y++) {
+      let run = null;
+      for (let x = -P * Q; x <= MW + P * Q; x++) {
+        let band = 0;
+        if (x < MW + P * Q && !land(x, y)) {
+          for (const [dx, dy, d2] of offsets) {
+            if (!land(x + dx, y + dy)) continue;
+            band = d2 <= Q * Q ? 1 : 2;
+            break;
+          }
+        }
+        if (run && run.band === band) { run.n++; continue; }
+        if (run && run.band) (run.band === 1 ? near : far).push(run.x, y, run.n);
+        run = { band, x, n: 1 };
+      }
+    }
+    const paint = (runs, alpha, colour) => {
       c.globalAlpha = Math.min(1, alpha * SHALLOWS_HEADROOM);
       c.fillStyle = colour;
-      for (let i = 0; i < tiles.length; i += 2) c.fillRect(tiles[i] * TILE_PX, tiles[i + 1] * TILE_PX, TILE_PX, TILE_PX);
+      for (let i = 0; i < runs.length; i += 3) c.fillRect(runs[i] * q, runs[i + 1] * q, runs[i + 2] * q, q);
     };
     // The near band keeps the far band's tint under it, as it always had.
-    band([...near, ...far], 0.16, PALETTE.seaMid);      // the outer, deeper step
-    band(near, 0.42, PALETTE.seaLight);
+    paint([...near, ...far], 0.16, PALETTE.seaMid);     // the outer, deeper step
+    paint(near, 0.42, PALETTE.seaLight);
     shallowsCanvas = el; shallowsFor = map;
     return el;
   }

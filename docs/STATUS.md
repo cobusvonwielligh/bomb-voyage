@@ -104,6 +104,11 @@ bombs, fire, perks, the sea, the moored ship, the boulders, the gulls — is sti
 shapes in code**, and that rule has not moved. The ship (2.5× her original size now) and the
 sea boulders (the largest 3.5×, the rest about 2.5×) are sized in `render.js`.
 
+The coast is rounded in quarter-tile steps, not smoothed: every outside corner of the rock loses a
+stepped quarter circle and every inside corner gains one (`COAST_STEPS` in `art.js`). The
+shallows are measured from the same quarter-tile mask, so the water follows the stepped rock.
+The simulation does not know: a tile is still solid or not, and only its drawing changed.
+
 What changed is how often some of it is drawn. Static or slow things are painted once into an
 offscreen canvas and blitted: the ship, the shallows bands, players' name labels, and the coastal
 glow (repainted at ~12 Hz rather than every frame — it moves on periods of tens of seconds). The
