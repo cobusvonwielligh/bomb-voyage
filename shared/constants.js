@@ -538,7 +538,9 @@ export const VOLUME_MASTER = 0.5;
  * These multiply the ceiling, not the default: somebody with a stored slider value gets the
  * change too, which a default could never do. */
 export const VOLUME_TRIM_SFX = 1.2;     // +20%
-export const VOLUME_TRIM_MUSIC = 0.75;  // -25%
+// Halved again (was 0.75) at the user's request: the music sat on top of the game.
+export const VOLUME_TRIM_MUSIC = 0.375; // -62.5% in all
+
 
 export const SFX_MAX_DISTANCE_TILES = 12;
 
