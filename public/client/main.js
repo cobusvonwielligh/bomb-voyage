@@ -441,8 +441,8 @@ const net = createNet({
     // big bite and comes back over a second — the same trick a film uses when something lands.
     music.dip(0.35 + step * 0.4, 0.8 + step * 0.7);
     if (m.i === world.you) {
-      // Fire, not blue: the accent is the fire now and a streak is the hottest moment in it.
-      renderer?.addFlash(0.26 + step * 0.34, m.ace ? '255,201,138' : '255,155,61');
+      // The accent golds, so the flash is the same light the banner is cast in.
+      renderer?.addFlash(0.26 + step * 0.34, m.ace ? '246,231,169' : '237,194,78');
       renderer?.addShake(0.26 + step * 0.5);
     } else {
       // Somebody ELSE is on a run. A small shake, because the thing worth knowing is that it is

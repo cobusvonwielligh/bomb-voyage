@@ -147,6 +147,42 @@ play now; the rest are diseases with no source since the Gift was removed (RULES
 
 ---
 
+## 5a. Cast gold
+
+The accent is **three** tones, not one, and that is the whole point: metal is not a colour, it
+is a range. A dark underside, a body, a specular highlight — the eye reads the *relationship*
+between those three as "reflective" long before it reads the hue. One value can only ever be
+paint, which is why every previous flat accent looked like paint.
+
+| Token | |
+|---|---|
+| `--gold-hi` `#f6e7a9` | the shine, where light lands |
+| `--gold` `#edc24e` | the metal. 9.7:1 on panel. Everything flat uses this |
+| `--gold-low` `#a06a12` | the shadowed underside, and what a bevel is cut from |
+
+`--cast` pours them through text via `background-clip`. Three things have to be true together:
+
+1. **Two highlights, not one.** A big one a third down and a smaller one near the bottom edge —
+   bounced light off whatever the object sits on. Its absence is why most "gold text" CSS looks
+   like plastic.
+2. **The light moves, the metal does not.** A narrow specular band travels across on a loop.
+   Animating the highlight rather than the colour is the difference between cast and printed.
+   NARROW matters: at 32% of a 3.2× layer the band was wider than the word, so it brightened
+   everything slightly and the sweep was invisible. 8% of 2.6× lands as a real glint.
+3. **A thin hard edge** — `--cast-edge`, four zero-blur drop-shadows at the compass points. It
+   must be a filter, not a text-shadow: the fill is transparent, so a shadow shows straight
+   through the inside of every glyph.
+
+**Large type only, about 30px up.** Below that the vertical ramp has fewer pixels than it has
+stops and the word turns to mush — checked at 17px, unreadable. Small display type stays flat
+`var(--gold)` with `--rim`.
+
+Streak tiers 2 and 3 are cast; 4 and ace are white-hot. Once the metal is established, going
+*past* it has to mean something.
+
+`--warn` is **blue**, not the amber it was. An amber dot beside a gold HUD is not a third state,
+it is more gold.
+
 ## 5. UI style
 
 Dark panels, gold headings, white body text — close to Game of Bombs' own menu so it reads as

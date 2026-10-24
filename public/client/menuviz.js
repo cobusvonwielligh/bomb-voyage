@@ -45,10 +45,13 @@ const STACK_TOP = 0.16;
 const REACH = 0.11;
 const EMBERS = 28;
 
-/** Fire, matching --gold / PALETTE.fireMid. Hot at the edge, cooling as it travels inward. */
-const HOT = '255, 201, 138';
-const MID = '255, 155, 61';
-const DEEP = '217, 113, 31';
+/* The three golds from style.css — --gold-hi, --gold, --gold-low — hot at the edge and cooling
+ * as the bar travels inward, which is the same ramp the cast type uses. Hard-coded rather than
+ * read from CSS because this runs per frame on a canvas and a getComputedStyle call per bar is
+ * a layout read inside an animation loop. Keep the three in step with the tokens by hand. */
+const HOT = '246, 231, 169';
+const MID = '237, 194, 78';
+const DEEP = '160, 106, 18';
 
 export function createMenuViz({ canvas, music }) {
   const ctx = canvas.getContext('2d', { alpha: true });
