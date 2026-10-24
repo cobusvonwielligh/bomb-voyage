@@ -58,10 +58,16 @@ const EMBERS = 28;
  * the bloom at the bottom of the stack already implies is there.
  */
 const MOTES = 70;
-// How far the pointer's push reaches, and how hard. Generous radius, gentle force: a tight hard
-// push reads as a collision, a wide soft one reads as air being moved.
-const MOUSE_R = 150;
-const MOUSE_FORCE = 0.55;
+/* How far the pointer's push reaches, and how hard.
+ *
+ * Halved from 150/0.55. At that strength the pointer carved a visible hole in the field and
+ * motes shot off it — which is a cursor with a forcefield on it, not air being moved. At half,
+ * you notice the specks drifting aside as you pass and you do not notice yourself noticing,
+ * which is the whole effect.
+ *
+ * Still a wide radius against a gentle force: a tight hard push reads as a collision. */
+const MOUSE_R = 75;
+const MOUSE_FORCE = 0.275;
 
 /* The same six hues the animated panel borders run through, in the same order and turning at
  * the same rate — see `.edge` in style.css.
@@ -216,9 +222,17 @@ export function createMenuViz({ canvas, music }) {
       if (v < 0.09) continue;
 
       const len = v * reach;
-      // A third of a turn spread across the stack: enough that the top and bottom are plainly
-      // different hues, not so much that it becomes a novelty.
-      const hue = edgeHue(spin + (i / BANDS) * 0.34);
+      /* A FULL turn of the spectrum across the stack, bottom to top.
+       *
+       * It was a third of a turn, which meant the whole stack sat inside two or three
+       * neighbouring hues and read as one colour that happened to drift. The borders sweep the
+       * entire six-stop spectrum; the stack should be that spectrum stood on its end, so the
+       * bass end and the air end are at opposite points of it and every band in between is a
+       * step along the way.
+       *
+       * `spin` still turns the whole thing at the border's rate, so what moves is which hue is
+       * at the bottom — the stack is a window onto the same wheel the panels are running. */
+      const hue = edgeHue(spin + i / BANDS);
       const grad = ctx.createLinearGradient(x0, 0, x0 + dir * len, 0);
       /* Hot at the edge, cooling and vanishing inward. The alpha ramp is what keeps the inner
        * end from ever being a visible edge.

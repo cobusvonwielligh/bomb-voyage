@@ -153,7 +153,7 @@ unaffected.
 **Ice and water.** One soft wall in twenty is ice (`ICE_CHANCE`), at map generation and when walls
 grow back. A blast that reaches ice melts it and floods **the ice tile and the four tiles beside
 it** — five at most, and only where you could stand; a wall, rock or the sea next to it stays dry.
-The water lasts **4 s** and is drawn drying up over the last 1.5 s.
+The water lasts **8 s** and is drawn drying up over the last 3 s.
 
 In water you move at **half pace**, and it is slippery: let go of the keys and you keep sliding the
 way you are facing for **8 ticks** before you stop. Sliding costs no stamina. Leaving the water
