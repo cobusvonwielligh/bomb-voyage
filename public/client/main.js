@@ -170,6 +170,8 @@ menuBox.addEventListener('pointerleave', () => menuViz.pointerOut());
  * level. The difference between the two is the entire point: one of them is the music.
  */
 const eqBars = [...document.querySelectorAll('#nowPlaying .eq b')];
+// Looked up once: syncMeter runs every frame.
+const dockEl = $('dock'), avatarEl = $('avatar');
 function syncMeter(dtMs) {
   const live = music.playing && music.volume > 0 && music.analyser;
   if (live) menuViz.spectrum.read(music.analyser, dtMs);
@@ -181,10 +183,11 @@ function syncMeter(dtMs) {
   const v = [s.bass, s.mid, s.treble];
   for (let i = 0; i < eqBars.length; i++) {
     // 3px floor so a silent bar is still a bar. Zero-height is a missing element, not a quiet one.
-    eqBars[i].style.height = `${(3 + v[i] * 8).toFixed(1)}px`;
+    // A scale of a full-height bar, not a height: see `.eq b` in style.css.
+    eqBars[i].style.transform = `scaleY(${((3 + v[i] * 8) / 11).toFixed(3)})`;
   }
   // One number for everything that wants to breathe with the kick.
-  $('dock').style.setProperty('--bass', s.bass.toFixed(3));
+  dockEl.style.setProperty('--bass', s.bass.toFixed(3));
 
   /* The mascot, which is where the sea's old reactivity went.
    *
@@ -192,7 +195,7 @@ function syncMeter(dtMs) {
    * ride on top of the CSS float rather than replacing it, so he carries on bobbing in silence.
    * Written as custom properties because `translate` and `scale` are composited — no layout, no
    * paint, and a style write per frame on one element is nothing. */
-  const av = $('avatar');
+  const av = avatarEl;
   av.style.setProperty('--bob', s.bass.toFixed(3));
   // The kick is the RISE in the bass, not its level: a sustained bass note should hold him up,
   // not keep punching him. Falls away fast, so it is a hit rather than a state.
@@ -390,6 +393,17 @@ const net = createNet({
               ((p.rx ?? p.x) / UNITS_PER_TILE) * TILE_PX,
               ((p.ry ?? p.y) / UNITS_PER_TILE) * TILE_PX - TILE_PX * 0.5,
               label.text, label.colour);
+          }
+          break;
+        }
+
+        // A gull caught in a blast. The tumble, the feathers and the sound are the renderer's;
+        // the line in the feed is ours, and it names whoever's fire it was.
+        case 'gullhit': {
+          renderer?.gullHit(e);
+          if (e.by >= 0 && world.players[e.by]) {
+            killFeed(`${nameOf(e.by)} downed a gull${e.cx !== undefined ? ' · it dropped gold' : ''}`,
+              { youKilled: e.by === world.you });
           }
           break;
         }
@@ -751,10 +765,14 @@ function loop(now) {
 
   sfx.frame();                              // resets the per-frame sound budget
 
-  // Exactly one simulation step per TICK_MS of real time, never more than a handful at once.
+  // Exactly one simulation step per tick of real time, never more than a handful at once. The
+  // tick's length is the SERVER's, which /gamespeed changes — stepping on a fixed TICK_MS here
+  // while the server ran at 200% is what pinned players in place. See `tickMs` in net.js.
+  const step = net.tickMs;
+  world.tickMs = step;
   let steps = 0;
-  while (acc >= TICK_MS && steps++ < 5) {
-    acc -= TICK_MS;
+  while (acc >= step && steps++ < 5) {
+    acc -= step;
     const tick = net.advanceTick();
     // A spectator still advances the clock — the interpolator is driven from it — but has
     // nothing to predict and nothing to send. The server ignores input from a watcher anyway;
@@ -767,7 +785,7 @@ function loop(now) {
     net.send({ t: 'input', tick, m: mask, x: me?.x | 0, y: me?.y | 0 });
   }
   // Fell badly behind: drop it rather than catching up — and resync, for the same reason.
-  if (acc > TICK_MS * 5) { acc = 0; net.resync(); }
+  if (acc > step * 5) { acc = 0; net.resync(); }
 
   idlePing(now);
   fuseTicks();
@@ -1407,6 +1425,10 @@ function play(observe = false) {
   document.body.classList.toggle('observing', observe);
   localStorage.setItem('bv.name', name);
   renderer = createRenderer($('game'), world);
+  // Gulls. The renderer decides when one calls and when one comes down, because it is the
+  // only thing that knows where they are drawn; the sounds belong here with the rest.
+  renderer.onGullCry = (tx, ty) => sfx.play('gull', tx, ty);
+  renderer.onGullDown = (tx, ty) => sfx.play('gullhit', tx, ty);
   // The sea dances to the music. The renderer asks once a frame; see audio/listen.js.
   const listen = createListener();
   renderer.setSound(dtMs => {

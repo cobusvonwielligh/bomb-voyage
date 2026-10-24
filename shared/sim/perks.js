@@ -74,11 +74,15 @@ export function maybeDrop(state, tx, ty, blockType) {
   drop(state, tx, ty, rollDroppable(state));
 }
 
-export function drop(state, tx, ty, type) {
+/**
+ * @param capped false for a coin that was EARNED rather than rolled — a gull's — which must not
+ *   use up one of the round's GOLD_MAX_PER_ROUND. See GULL_* in constants.js.
+ */
+export function drop(state, tx, ty, type, capped = true) {
   if (state.perks.some(k => k.tx === tx && k.ty === ty)) return;
   // Counted on the DROP, not on the pickup: the cap is on how much gold a round contains, and a
   // coin that expires on the floor was still gold this round had in it.
-  if (type === PERK.GOLD) state.goldDropped = (state.goldDropped || 0) + 1;
+  if (type === PERK.GOLD && capped) state.goldDropped = (state.goldDropped || 0) + 1;
   const perk = { id: state.nextPerkId++, tx, ty, type, until: state.tick + PERK_EXPIRE_TICKS };
   state.perks.push(perk);
   state.events.push({ e: 'perkadd', tick: state.tick, id: perk.id, x: tx, y: ty, p: type });

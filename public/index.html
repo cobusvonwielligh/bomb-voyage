@@ -309,12 +309,15 @@
          the same sentence twice. -->
     <button id="respawn">respawn</button>
     <!-- Auto-respawn. Remembered across sessions like the volume sliders, because it is a
-         preference rather than a per-round choice. -->
+         preference rather than a per-round choice. A real checkbox underneath — keyboard,
+         screen readers and main.js all see an ordinary input — dressed as a sliding switch. -->
     <label id="autoRow"
-      ><input type="checkbox" id="autoRespawn" /><span
-        >auto respawn</span
-      ></label
-    >
+      ><span class="lbl">auto respawn</span
+      ><input type="checkbox" id="autoRespawn" role="switch" /><span
+        class="switch"
+        aria-hidden="true"
+        ><span class="knob"></span></span
+    ></label>
     <button id="spectate" class="ghost">spectate mode</button>
     <button id="deadLeave" class="ghost">leave</button>
   </div>
@@ -564,15 +567,6 @@
 
 <script type="module" src="/client/main.js"></script>
 <style>
-  /* ========================================
-   LANDING PAGE MASCOT
-   Keep the main mascot at its original size
-   ======================================== */
-  #mascot img {
-    width: 210px;
-    height: 210px;
-  }
-
   /* ========================================
    IN-GAME AVATAR / FACE
    Shrink by 15% and move slightly up

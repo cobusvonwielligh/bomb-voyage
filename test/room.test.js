@@ -19,7 +19,8 @@ let server;
 const startServer = () => new Promise((resolve, reject) => {
   server = spawn(process.execPath, ['server/index.js'], {
     cwd: ROOT,
-    env: { ...process.env, PORT: String(PORT), LAG: '0', DEPLOY_TOKEN: '' },
+    // MIN_BOTS=0: these tests are about two people, and auto-bots would make it eight.
+    env: { ...process.env, PORT: String(PORT), LAG: '0', DEPLOY_TOKEN: '', MIN_BOTS: '0' },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   const bail = setTimeout(() => reject(new Error('server did not come up')), 10_000);

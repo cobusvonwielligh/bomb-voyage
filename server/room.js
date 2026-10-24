@@ -9,12 +9,13 @@ import {
   TILE_PX, UNITS_PER_TILE, FUSE_TICKS, FIRE_TICKS, playerColor, SCORE, ROUND_INTERMISSION_MS,
   progressFor,
   STREAK_WINDOW_TICKS, STREAK_NAMES, STREAK_ACE, GAMESPEED_MIN, GAMESPEED_MAX,
-  IDLE_KICK_TICKS,
+  IDLE_KICK_TICKS, AUTO_BOTS_EMPTY_ROUNDS,
 } from '../shared/constants.js';
 import { MAPS, encodeCells } from '../shared/maps.js';
 import { createState, createPlayer, expireStatuses, applyStatus, tileCentre } from '../shared/sim/state.js';
 import { blocked, unstick } from '../shared/sim/movement.js';
 import { tick as simTick } from '../shared/sim/round.js';
+import { gullWire } from '../shared/sim/gulls.js';
 import { createBrain, think, dangerMap } from './ai.js';
 
 // How long a seat is held for someone who vanished. A closed laptop lid, a wifi roam or a tunnel
@@ -32,6 +33,9 @@ const newStreak = () => ({ count: 0, lastTick: -1e9, victims: new Set() });
 export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = MAX_PLAYERS, leaderboard = null,
   // Overridable so a test can watch a seat be recycled without waiting 45 real seconds.
   graceTicks = RECONNECT_GRACE_TICKS,
+  // How many bots to keep topped up while people are here; see AUTO_BOTS_MIN. Zero — the
+  // default, so a test room stays exactly as its test seats it — turns the policy off.
+  minBots = 0,
 }) {
   // Start somewhere random rather than always on the first map. Rotation between rounds works
   // fine, but a server that restarts — a deploy, a crash, a reboot — always came back to Arena,
@@ -59,6 +63,14 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
 
   // Monotonic, so "the most recently added bot" survives bots being removed from the middle.
   let botSeq = 0;
+
+  // The automatic top-up. Off once a host removes bots by hand; back on after the room has been
+  // empty of people for AUTO_BOTS_EMPTY_ROUNDS rounds in a row. See AUTO_BOTS_MIN.
+  let autoBots = minBots > 0;
+  let emptyRounds = 0;
+  // Whether a connected human was seen at any point this round, not just at its end: somebody
+  // who played eight minutes and left before the whistle was present.
+  let humanThisRound = false;
 
   // seat -> { count, lastTick, victims:Set }. Server-side presentation only: nothing in here is
   // read by the simulation, so it cannot affect determinism.
@@ -111,6 +123,7 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       held.lastInputAt = state.tick;
       held.name = name || held.name;
       if (state.players[existing]) state.players[existing].name = held.name;
+      topUpBots();
       return { seat: existing, resumed: true, playerId, displaced: null };
     }
 
@@ -134,6 +147,7 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     const p = createPlayer(seat, name);
     state.players[seat] = p;
     respawn(p);
+    topUpBots();
     return { seat, resumed: false, playerId: id, displaced };
   }
 
@@ -161,6 +175,9 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     const s = seats[seat];
     if (!s) return null;
     const info = { name: s.name, bot: !!s.isBot };
+    // A host throwing a bot out by hand has told us how many bots they want. Topping it straight
+    // back up would be the server overruling them; see AUTO_BOTS_MIN.
+    if (s.isBot) autoBots = false;
     release(seat);
     return info;
   }
@@ -325,6 +342,7 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
         s.lastAckTick = state.tick;
         continue;
       }
+      if (s.connected) humanThisRound = true;
       if (s.inputs.has(state.tick)) {
         s.mask = s.inputs.get(state.tick);
         s.inputs.delete(state.tick);
@@ -397,6 +415,7 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     bankScores();
     awardMedals(standings);
     leaderboard?.flush();
+    retireIdleBots();
 
     onBroadcast({
       t: 'roundend',
@@ -502,6 +521,7 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     const players = [];
     for (const p of state.players) if (p) players.push(playerWire(p));
     const ev = state.events.slice();
+    const gullsWire = state.gulls.map(gullWire);
     onBroadcast(seat => ({
       t: 'snap',
       tick: state.tick,
@@ -512,6 +532,9 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       // In the snapshot rather than derived from `melt` events: movement prediction reads them,
       // and a client that joined mid-puddle or missed a snapshot must still agree with us.
       puddles: state.puddles,
+      // Descriptions, not positions: a client draws the whole flight from its own clock. Absent
+      // when the sky is empty, which is most of the time.
+      ...(gullsWire.length ? { gulls: gullsWire } : null),
       ev,
     }));
   }
@@ -578,6 +601,7 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       bombs: state.bombs,
       perks: state.perks,
       puddles: state.puddles,
+      gulls: state.gulls.map(gullWire),
       // Every rule constant the client needs, so a server tuning change needs no client deploy.
       config: {
         tickHz: TICK_HZ, snapEvery: SNAP_EVERY_TICKS, tileSize: TILE_PX,
@@ -624,6 +648,7 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       players: seats.filter(s => s && s.connected).length,
       reserved: seats.filter(s => s && !s.connected).length,
       bots: botCount(),
+      autoBots,
       gamespeed,
       tickMsP50: +(sorted[sorted.length >> 1] || 0).toFixed(2),
       tickMsP99: +(sorted[Math.floor(sorted.length * 0.99)] || 0).toFixed(2),
@@ -653,9 +678,15 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
 
   const botCount = () => seats.filter(s => s?.isBot).length;
 
-  /** Make the number of bots exactly n, adding or removing from the end. */
-  function setBots(n) {
+  /**
+   * Make the number of bots exactly n, adding or removing from the end.
+   *
+   * @param byHand a host typed this. Asking for FEWER bots than there are switches the
+   *   automatic top-up off, for the same reason a /kick of one does — see kickSeat.
+   */
+  function setBots(n, { byHand = false } = {}) {
     n = Math.max(0, Math.min(maxPlayers - 1, n | 0));   // never fill the last human seat
+    if (byHand && n < botCount()) autoBots = false;
     while (botCount() > n) {
       const seat = seats.findLastIndex(s => s?.isBot);
       if (seat < 0) break;
@@ -679,6 +710,34 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       respawn(p);
     }
     return botCount();
+  }
+
+  /** Somebody arrived: make sure there is a fight waiting for them. See AUTO_BOTS_MIN. */
+  function topUpBots() {
+    humanThisRound = true;
+    if (!autoBots || botCount() >= minBots) return;
+    const had = botCount();
+    const got = setBots(minBots);
+    if (got > had) {
+      onBroadcast({ t: 'chat', i: -1, name: 'SERVER',
+        msg: `${got - had} bot${got - had === 1 ? '' : 's'} joined the crew` });
+    }
+  }
+
+  /**
+   * End of a round with nobody in it: count it, and after AUTO_BOTS_EMPTY_ROUNDS in a row send
+   * the bots home and hand the top-up back to the room. That reset is the only thing that turns
+   * a host's "no bots, thanks" back off — everyone has gone, so nobody is being overruled.
+   */
+  function retireIdleBots() {
+    emptyRounds = humanThisRound ? 0 : emptyRounds + 1;
+    humanThisRound = false;
+    if (!minBots || emptyRounds < AUTO_BOTS_EMPTY_ROUNDS) return;
+    if (botCount()) {
+      setBots(0);
+      console.log(`bots   none of them had anyone to play with for ${emptyRounds} rounds; removed`);
+    }
+    autoBots = true;
   }
 
   /** Start the round over on the same map, keeping everyone seated. */
@@ -802,6 +861,8 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     respawn,
     roundMinutes: () => Math.round((roundTicks / TICK_HZ / 60) * 10) / 10,
     isBot: seat => !!seats[seat]?.isBot,
+    /** Whether the room is topping bots up by itself right now. See AUTO_BOTS_MIN. */
+    get autoBots() { return autoBots; },
     maps: () => MAPS.map(m => m.id),
     gamespeed: () => gamespeed,
     // Exactly one tick, by hand. The loop calls this; tests call it directly so that behaviour

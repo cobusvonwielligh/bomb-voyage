@@ -10,6 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { AUTO_BOTS_MIN } from '../shared/constants.js';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -49,6 +50,8 @@ export const config = {
   tlsKey: pick('TLS_KEY', 'server', 'tls_key', ''),
   dataDir: path.resolve(ROOT, pick('DATA_DIR', 'server', 'data_dir', './data')),
   maxPlayers: num('MAX_PLAYERS', 'server', 'max_players', 16),
+  // Bots kept topped up while anybody is playing. 0 switches the policy off. See AUTO_BOTS_MIN.
+  minBots: num('MIN_BOTS', 'server', 'min_bots', AUTO_BOTS_MIN),
 
   // Shared secret for POST /deploy. Empty disables the endpoint entirely.
   deployToken: pick('DEPLOY_TOKEN', 'deploy', 'token', ''),

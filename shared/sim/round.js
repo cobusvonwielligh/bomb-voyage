@@ -16,6 +16,7 @@ import { collect, scatterOnDeath } from './perks.js';
 import { regenerate, expirePuddles } from './blocks.js';
 import { burns } from './fire.js';
 import { spread as spreadStatuses } from './statuses.js';
+import { gulls } from './gulls.js';
 
 export function tick(state, inputs, { onRespawn } = {}) {
   // 1. statuses expire before anything reads them
@@ -35,6 +36,10 @@ export function tick(state, inputs, { onRespawn } = {}) {
 
   // 6. fire damage: blocks were already hit inside detonate, players die here
   killInFire(state);
+
+  // 6b. gulls overhead, and any that dived into this tick's fire. After the fire and before the
+  // pickups, so a coin knocked out of one lands on a floor everyone is about to check.
+  gulls(state);
 
   // 7. pickups. Perks are fireproof — see the note in perks.js.
   collect(state);

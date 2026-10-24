@@ -164,9 +164,18 @@ client deploy. The client must read these, never hardcode them.
   "puddles": [
     { "tx": 11, "ty": 7, "at": 10470, "until": 10590 }
   ],
+  "gulls": [
+    { "id": 2, "x0": -1024, "y0": 2900, "x1": 10496, "y1": 3400, "t0": 10200, "dur": 340,
+      "weave": 61, "dive": 48 }
+  ],
   "ev": [ <event>, ... ]
 }
 ```
+
+`gulls` is a flight **description**, not a position: start and end in units, departure tick,
+duration, and two phase offsets. `gullAt(g, tick)` in `shared/sim/gulls.js` turns it into a
+position and an altitude for any (fractional) tick, so the client draws the whole flight from its
+own clock. Omitted when the sky is empty, which is most of the time; `welcome` always carries it.
 
 `puddles` is melted ice: slow, slippery tiles that dry up at `until`. It is in every snapshot
 (and in `welcome`) rather than derived from `melt` events, because movement prediction reads it —
@@ -210,7 +219,13 @@ Events are things that happen at an instant and must not be missed. Each has `e`
 { "e": "status",   "tick": 10480, "i": 3, "s": 4, "until": 10780 }
 { "e": "join",     "tick": 10400, "i": 5, "name": "Francois", "c": 7, "rank": 2 }
 { "e": "leave",    "tick": 10900, "i": 5 }
+{ "e": "gullhit",  "tick": 10480, "id": 2, "x": 3200, "y": 2100, "by": 3, "cx": 12, "cy": 8 }
 ```
+
+`gullhit`: a gull dived into live fire. `x`,`y` in units where it was hit, `by` whose fire it
+was (-1 for nobody's), `cx`,`cy` the tile its gold coin landed on (absent if there was no bare
+floor within three tiles). A client that misses it sees the gull vanish from `gulls` before its
+flight is over and treats that as a hit too.
 
 **Reliability.** WebSocket is ordered and reliable, so events cannot be lost in transit. They can
 still be *missed by a client that joined late* — which is why `welcome` carries full state. A
@@ -254,6 +269,18 @@ the rest of the round. Once a second, it heals itself.
 
 Sent when the host runs `/roundtime`. The HUD clock counts down to `endsAtTick`, so a client
 that ignored this would count toward the wrong number.
+
+### `gamespeed`
+
+```json
+{ "t": "gamespeed", "pct": 150 }
+```
+
+Sent when the host runs `/gamespeed`; `welcome.config.gamespeed` carries the current value. A
+tick still means 1/30 s of game time — only how often the server issues them changes — so the
+client **must** rescale its clock and its fixed-step loop to `TICK_MS * 100 / pct`. A client that
+ignored it stamped its inputs for the wrong ticks: at 200% every input landed in the server's past
+and was dropped, and players were pinned to the tile they stood on.
 
 ### `roundend`
 

@@ -26,7 +26,7 @@ const MAX_PER_FRAME = {
   boom: 3, blockdie: 4, blocknew: 2, status: 2, death: 3, fuse: 2, melt: 2,
   // A keg is loud enough that two at once is already a wall. Chat and pickups are one a frame
   // because more than one is never information.
-  kegboom: 2, chat: 1, mention: 1, glug: 1, hiccup: 1, ready: 1,
+  kegboom: 2, chat: 1, mention: 1, glug: 1, hiccup: 1, ready: 1, gull: 1, gullhit: 1,
 };
 const DEFAULT_MAX_PER_FRAME = 4;
 
@@ -815,6 +815,76 @@ export function createSfx({ listener }) {
       pop.frequency.exponentialRampToValueAtTime(220, ct + 0.04);
       pop.connect(cg);
       pop.start(ct); pop.stop(ct + 0.07);
+    },
+
+    /**
+     * A gull overhead: the long call, "kee-ow, kyow-kyow".
+     *
+     * A gull's voice is a nasal, slightly hoarse wail that leaps UP into the note and slides
+     * down out of it. Built from a sawtooth through two resonances — the nasal band near
+     * 1.9 kHz and a body near 900 Hz — with a fast wobble on the pitch, which is the hoarseness.
+     * Three calls, the first long and the two after it short and lower, the way they actually
+     * do it. Quiet: it is the sound of the place, not an event.
+     */
+    gull(c, out, t, level) {
+      const calls = [[0, 0.34, 1], [0.42, 0.17, 0.86], [0.64, 0.17, 0.8]];
+      const pitch = jit(1, 0.06);
+      for (const [at, len, rel] of calls) {
+        const s = t + at;
+        const g = voiceGain(c, out, s, { a: 0.03, d: len, peak: 0.07 * level * rel, send: 0.3 });
+        const o = c.createOscillator();
+        o.type = 'sawtooth';
+        const f0 = 980 * pitch * rel;
+        o.frequency.setValueAtTime(f0 * 0.82, s);
+        o.frequency.exponentialRampToValueAtTime(f0 * 1.12, s + len * 0.22);
+        o.frequency.exponentialRampToValueAtTime(f0 * 0.6, s + len);
+        const wob = c.createOscillator();
+        const depth = c.createGain();
+        wob.frequency.value = jit(34, 0.1);
+        depth.gain.value = 26;
+        wob.connect(depth); depth.connect(o.frequency);
+        const nasal = c.createBiquadFilter();
+        nasal.type = 'bandpass'; nasal.frequency.value = 1900; nasal.Q.value = 3.2;
+        const body = c.createBiquadFilter();
+        body.type = 'bandpass'; body.frequency.value = 900; body.Q.value = 1.4;
+        o.connect(nasal); o.connect(body);
+        nasal.connect(g); body.connect(g);
+        o.start(s); o.stop(s + len + 0.05);
+        wob.start(s); wob.stop(s + len + 0.05);
+      }
+    },
+
+    /**
+     * A gull caught in a blast: a strangled squawk, a puff of feathers, and the coin — two bright
+     * bell partials a beat later, so the ear hears "got it" and then "and it paid".
+     */
+    gullhit(c, out, t, level) {
+      const g = voiceGain(c, out, t, { a: 0.004, d: 0.16, peak: 0.16 * level, send: 0.2 });
+      const o = c.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(jit(1500, 0.05), t);
+      o.frequency.exponentialRampToValueAtTime(jit(620, 0.05), t + 0.15);
+      const bp = c.createBiquadFilter();
+      bp.type = 'bandpass'; bp.frequency.value = 1700; bp.Q.value = 2.5;
+      o.connect(bp); bp.connect(g);
+      o.start(t); o.stop(t + 0.2);
+
+      const fg = voiceGain(c, out, t + 0.02, { a: 0.01, d: 0.28, peak: 0.1 * level });
+      const n = noiseSource();
+      const hp = c.createBiquadFilter();
+      hp.type = 'highpass'; hp.frequency.value = 2500;
+      n.connect(hp); hp.connect(fg);
+      n.start(t + 0.02); n.stop(t + 0.34);
+
+      for (const [i, note] of [100, 107].entries()) {
+        const at = t + 0.5 + i * 0.07;
+        const bg = voiceGain(c, out, at, { a: 0.002, d: 0.5, peak: 0.12 * level, send: 0.3 });
+        const b = c.createOscillator();
+        b.type = 'sine';
+        b.frequency.value = hz(note);
+        b.connect(bg);
+        b.start(at); b.stop(at + 0.6);
+      }
     },
 
     /** You, drunk. A small involuntary noise, occasionally, while the rum is on you. */

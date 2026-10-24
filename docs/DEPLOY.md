@@ -136,6 +136,7 @@ Precedence is **environment variable > `config.ini` > built-in default**, so a o
 | | `tls_cert` / `tls_key` | `TLS_CERT` / `TLS_KEY` | blank | Blank → plain HTTP, which is local dev. |
 | | `data_dir` | `DATA_DIR` | `./data` | Leaderboard and certificate copies. |
 | | `max_players` | `MAX_PLAYERS` | `16` | |
+| | `min_bots` | `MIN_BOTS` | `6` | Bots kept topped up while anyone plays; 0 turns it off |
 | `deploy` | `token` | `DEPLOY_TOKEN` | blank | Secret for `POST /deploy`. **Blank disables the endpoint entirely** — correct on a laptop. |
 | | `ssh_host` / `ssh_user` / `ssh_key` | same | — | Used by `infra/deploy.sh`. |
 | `dev` | `lag` / `jitter` | `LAG` / `JITTER` | `0` | Outbound delay in ms. The process **refuses to start** if either is non-zero while TLS is configured. |

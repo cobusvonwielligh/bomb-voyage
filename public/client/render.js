@@ -13,9 +13,10 @@ import {
 import { cellType, cellHp } from '/shared/maps.js';
 import {
   drawTile, drawFire, drawPerk, drawRock, drawShip, playerShades, PALETTE, bake, bakeSea,
-  PERK_GLOWS, drawBombLive, CASTS_SHADOW,
+  PERK_GLOWS, drawBombLive, CASTS_SHADOW, drawGull, drawFeather,
 } from '/assets/art.js';
 import { bombTile } from '/shared/sim/bombs.js';
+import { gullAt } from '/shared/sim/gulls.js';
 
 const CHUNK_PX = TILE_PX * CHUNK_TILES;
 
@@ -585,25 +586,31 @@ export function createRenderer(canvas, world) {
   }
   const rockPush = { x: 0, y: 0 };
 
-  const flowX = (x, y, t) => {
+  /* The flow at a point, both components at once, into `out`.
+   *
+   * It used to be two functions, flowX and flowY, and each one evaluated the envelope and the
+   * wave for every train — the same two sines computed twice for every particle, every frame,
+   * just to take a different component of one vector. One pass, half the trigonometry. */
+  const flow = { x: 0, y: 0 };
+  function flowAt(x, y, t, out) {
     rockFlow(x, y, rockPush);
-    let v = Math.cos(current.angle) * current.speed + rockPush.x;
+    let vx = Math.cos(current.angle) * current.speed + rockPush.x;
+    let vy = Math.sin(current.angle) * current.speed + rockPush.y;
     for (const s of current.trains) {
-      const a = s.amp * envelopeAt(s, x, y, t);
-      v += Math.sin((x * s.dx + y * s.dy) * s.k - t * s.w + s.phase) * a * -s.dy;
+      const push = Math.sin((x * s.dx + y * s.dy) * s.k - t * s.w + s.phase)
+        * s.amp * envelopeAt(s, x, y, t);
+      vx -= push * s.dy;
+      vy += push * s.dx;
     }
-    return v;
-  };
+    out.x = vx; out.y = vy;
+    return out;
+  }
 
-  const flowY = (x, y, t) => {
-    // rockPush was filled by the flowX call for this same point, one line earlier in drawDrops.
-    let v = Math.sin(current.angle) * current.speed + rockPush.y;
-    for (const s of current.trains) {
-      const a = s.amp * envelopeAt(s, x, y, t);
-      v += Math.sin((x * s.dx + y * s.dy) * s.k - t * s.w + s.phase) * a * s.dx;
-    }
-    return v;
-  };
+  // The particles' strokes, batched: one path per (alpha, width) bucket instead of a stroke call
+  // per particle. Six alphas across the 0.12-0.42 range the particles are seeded with is finer
+  // than anyone can tell apart on a moving streak.
+  const DROP_ALPHAS = 6;
+  const dropPaths = Array.from({ length: DROP_ALPHAS * 2 }, () => []);
 
   function drawDrops(vw, vh, ox, oy, dt) {
     if (dropsFor !== world.map) seedDrops();
@@ -621,12 +628,13 @@ export function createRenderer(canvas, world) {
      * stretch with the mids, brighten with the highs, surge on every beat and run on the music's
      * clock — so in a busy passage the whole ocean flickered with them. Now they follow the plain
      * current on the plain clock, and the music lives in the coast and the bioluminescence. */
+    for (const b of dropPaths) b.length = 0;
     for (const d of drops) {
-      const fx = flowX(d.x, d.y, seaT), fy = flowY(d.x, d.y, seaT);
+      flowAt(d.x, d.y, seaT, flow);
       // Ease toward the current rather than snapping to it, so particles have momentum and the
       // field reads as water being pushed rather than as dots teleporting along a curve.
-      d.vx += (fx - d.vx) * 0.08;
-      d.vy += (fy - d.vy) * 0.08;
+      d.vx += (flow.x - d.vx) * 0.08;
+      d.vy += (flow.y - d.vy) * 0.08;
       d.x += d.vx * dt;
       d.y += d.vy * dt;
 
@@ -640,11 +648,21 @@ export function createRenderer(canvas, world) {
           && cellType(map.cells[ty * map.w + tx]) !== BLOCK.WATER) continue;
 
       const sp = Math.hypot(d.vx, d.vy) || 1;
-      ctx.globalAlpha = d.a;
-      ctx.lineWidth = sp > 18 ? 1.6 : 1;
+      const bucket = Math.min(DROP_ALPHAS - 1, ((d.a - 0.12) / 0.3 * DROP_ALPHAS) | 0)
+        + (sp > 18 ? DROP_ALPHAS : 0);
+      dropPaths[bucket].push(d.x, d.y, d.x - (d.vx / sp) * d.len, d.y - (d.vy / sp) * d.len);
+    }
+    for (let b = 0; b < dropPaths.length; b++) {
+      const seg = dropPaths[b];
+      if (!seg.length) continue;
+      const k = b % DROP_ALPHAS;
+      ctx.globalAlpha = 0.12 + (k + 0.5) * (0.3 / DROP_ALPHAS);
+      ctx.lineWidth = b >= DROP_ALPHAS ? 1.6 : 1;
       ctx.beginPath();
-      ctx.moveTo(d.x, d.y);
-      ctx.lineTo(d.x - (d.vx / sp) * d.len, d.y - (d.vy / sp) * d.len);
+      for (let i = 0; i < seg.length; i += 4) {
+        ctx.moveTo(seg[i], seg[i + 1]);
+        ctx.lineTo(seg[i + 2], seg[i + 3]);
+      }
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
@@ -702,16 +720,44 @@ export function createRenderer(canvas, world) {
    * Deterministic in the map, never random. Scenery that moves when you respawn is a bug as far
    * as the eye is concerned.
    */
-  const SHIP_SCALE = 2;
+  // 2.5 times the 2 she was, in two steps the user asked for: two thirds larger, then half again.
+  const SHIP_SCALE = 2 * 1.66 * 1.5;
   const SHIP_ALPHA = 0.42;
+  // The rings and the shadow under her were sized for a scale of 2; they grow with her.
+  const SHIP_GROW = SHIP_SCALE / 2;
+  // drawShip's own extent, in its units: the wake rings reach ±80 along and ±41 across.
+  const SHIP_BOX_W = 180, SHIP_BOX_H = 100;
   // Nearly solid. A boulder is a real object sitting in the water, not a shadow under it —
   // what keeps it in the background is its COLOUR, which is mixed well down toward the deep
   // sea, not its transparency. Fading it out just made it look like a rendering fault.
   const ROCK_ALPHA = 0.88;
-  // Her centre sits this far outside the island's bounding box. The visible ocean margin is two
-  // or three tiles, so at two and a half she is half in frame and half past the edge of the
-  // board — present, cut off, and obviously not something you can interact with.
-  const SHIP_OFFSHORE_TILES = 2.5;
+  // Her centre sits this far outside the island's bounding box: half her beam plus the same
+  // clearance from the coast she had at her old size, so growing her pushed her out to sea
+  // rather than into the island. Still half past the edge of the board — present, cut off, and
+  // obviously not something you can interact with.
+  const SHIP_OFFSHORE_TILES = (57 / 2) * SHIP_SCALE / TILE_PX + 0.7;
+
+  /* She is baked, not drawn.
+   *
+   * drawShip is a hundred and fifty-odd path operations, every frame, for something that never
+   * changes shape — the single most expensive piece of scenery on the board. Drawn once into a
+   * canvas at the exact device scale she is shown at, then blitted, she looks identical and costs
+   * one drawImage. Re-baked only when the zoom or the pixel ratio changes. */
+  let shipSprite = null, shipSpriteKey = '';
+  function bakedShip() {
+    const k = SHIP_SCALE * view.zoom * view.dpr;
+    const key = k.toFixed(4);
+    if (shipSprite && shipSpriteKey === key) return shipSprite;
+    const el = document.createElement('canvas');
+    el.width = Math.ceil(SHIP_BOX_W * k);
+    el.height = Math.ceil(SHIP_BOX_H * k);
+    const c = el.getContext('2d');
+    c.scale(k, k);
+    c.translate(SHIP_BOX_W / 2, SHIP_BOX_H / 2);
+    drawShip(c);
+    shipSprite = el; shipSpriteKey = key;
+    return el;
+  }
 
   let mooredFor = null, moored = null;
   function mooring() {
@@ -761,8 +807,9 @@ export function createRenderer(canvas, world) {
     ctx.save();
     ctx.globalAlpha = SHADOW_ALPHA * 0.45;
     ctx.fillStyle = '#000';
+    const G = SHIP_GROW;
     ctx.beginPath();
-    ctx.ellipse(sv.dx / SHIP_SCALE, 6 + sv.dy / SHIP_SCALE * 0.7, 26, 9, 0, 0, 7);
+    ctx.ellipse(sv.dx / SHIP_SCALE * G, (6 + sv.dy / SHIP_SCALE * 0.7) * G, 26 * G, 9 * G, 0, 0, 7);
     ctx.fill();
     ctx.restore();
 
@@ -770,14 +817,14 @@ export function createRenderer(canvas, world) {
     ctx.save();
     ctx.strokeStyle = PALETTE.foam;
     ctx.globalAlpha = 0.09 + 0.04 * lap;
-    ctx.lineWidth = 2.6 + lap * 1.1;
-    ctx.beginPath(); ctx.ellipse(0, 7, 30 * (1 + lap * 0.04), 11 * (1 + lap * 0.06), 0, 0, 7); ctx.stroke();
+    ctx.lineWidth = (2.6 + lap * 1.1) * G;
+    ctx.beginPath(); ctx.ellipse(0, 7 * G, 30 * G * (1 + lap * 0.04), 11 * G * (1 + lap * 0.06), 0, 0, 7); ctx.stroke();
     ctx.globalAlpha = 0.045 + 0.025 * lap;
-    ctx.lineWidth = 8 + lap * 3;
-    ctx.beginPath(); ctx.ellipse(0, 8, 40, 15, 0, 0, 7); ctx.stroke();
+    ctx.lineWidth = (8 + lap * 3) * G;
+    ctx.beginPath(); ctx.ellipse(0, 8 * G, 40 * G, 15 * G, 0, 0, 7); ctx.stroke();
     ctx.restore();
-    ctx.scale(SHIP_SCALE, SHIP_SCALE);
-    drawShip(ctx);
+    ctx.drawImage(bakedShip(), -SHIP_BOX_W / 2 * SHIP_SCALE, -SHIP_BOX_H / 2 * SHIP_SCALE,
+      SHIP_BOX_W * SHIP_SCALE, SHIP_BOX_H * SHIP_SCALE);
     ctx.restore();
   }
 
@@ -788,7 +835,7 @@ export function createRenderer(canvas, world) {
    * a rock that is politely fully visible looks placed, one that runs off the edge looks like
    * the island carried on under the water.
    *
-   * They are not just paint: the flow field is deflected round them (see flowX/flowY) and the
+   * They are not just paint: the flow field is deflected round them (see flowAt) and the
    * shoreline foam spawns off them, so the water acknowledges they are there. A static rock in a
    * moving current is the one thing that would make the sea look fake.
    */
@@ -829,6 +876,10 @@ export function createRenderer(canvas, world) {
    */
   const ROCK_FULLY_VISIBLE = 1;
   const ROCK_MIN_VISIBLE = 0.2;
+  // How much bigger than its band the set is drawn, in two rounds of the user asking: the
+  // largest doubled and then +75%, the others +70% and then +50%.
+  const ROCK_GROW_LARGEST = 2 * 1.75;
+  const ROCK_GROW_OTHERS = 1.7 * 1.5;
 
   function waterRocks() {
     const viewKey = Math.round(view.w / 40) * 1000 + Math.round(view.h / 40);
@@ -850,34 +901,50 @@ export function createRenderer(canvas, world) {
 
     seaRocks = [];
     const spin = (Math.random() * 4) | 0;
+
+    /* Sized first, placed second, because the sizes depend on each other.
+     *
+     * Each rock gets the radius its band allows, as before, and then the whole set is scaled up:
+     * the biggest by ROCK_GROW_LARGEST and the rest by ROCK_GROW_OTHERS. Grown that much they no
+     * longer fit the band they were sized for, and that is the point — they are meant to loom.
+     * So the guarantees relax with them: the "fully visible" rock is now kept clear of the coast
+     * and allowed to run off the board, and the others stay clear of the coast too. */
+    // The side the ship is moored off, in this function's numbering (mooring() counts 1 as up,
+    // here 1 is down). Grown this large, a rock and the ship on one side would sit on each other.
+    const shipSide = [0, 3, 2, 1][(world.map.w * 31 + world.map.h * 17) % 4];
+    const plans = [];
     for (let i = 0; i < SEA_ROCKS; i++) {
-      const side = i === 0
+      let side = i === 0
         ? widest + (Math.random() < 0.5 ? 0 : 2)        // same axis, either end
         : (spin + i) % 4;
+      if (side === shipSide) side = (side + 2) % 4;
       const horizontal = side % 2 === 0;
-      const sign = side % 4 < 2 ? 1 : -1;
       const axis = horizontal ? 0 : 1;
-
       const inner = halfLand[axis] + TILE_PX * 1.2;     // just clear of the coast
       const outer = halfView[axis];                      // the edge of the board
       const band = outer - inner;
       const full = i < ROCK_FULLY_VISIBLE;
-      // A thin band still gets a rock; it is simply a smaller one. The fully-visible rock has
-      // to fit the band twice over — once either side of its centre — so it is capped harder.
+      // A thin band still gets a rock; it is simply a smaller one.
       const want = TILE_PX * (2.1 + Math.random() * 1.9);
-      // No floor on the full one: "entirely on screen" beats "a decent size", and on a cramped
-      // band a small rock is still a rock. The others may be as big as the band allows.
       const r = full
         ? Math.max(TILE_PX * 0.35, Math.min(want, band / 2))
         : Math.max(TILE_PX * 0.9, Math.min(want, band * 0.8));
+      plans.push({ side, horizontal, axis, inner, outer, full, r });
+    }
+    const largest = plans.reduce((a, b) => (b.r > a.r ? b : a), plans[0]);
+    for (const p of plans) p.r *= p === largest ? ROCK_GROW_LARGEST : ROCK_GROW_OTHERS;
 
-      // Distance from the island's centre, along the chosen axis.
-      const dist = full
-        // Entirely inside: clear of the coast on one side, clear of the board edge on the other.
+    for (const { side, horizontal, axis, inner, outer, full, r } of plans) {
+      const sign = side % 4 < 2 ? 1 : -1;
+
+      // Distance from the island's centre, along the chosen axis — never so close that the rock
+      // would sit under the coast.
+      const dist = Math.max(inner + r * 0.9, full
+        // As far inside as it fits: clear of the coast, and of the board edge if it can be.
         ? (inner + r + Math.max(inner + r, outer - r)) / 2
         // Partly outside: `visible` is how much of its width is left on screen, so the centre
         // sits that far short of the edge plus the rest of its radius beyond it.
-        : outer + r * (1 - 2 * (ROCK_MIN_VISIBLE + Math.random() * 0.3));
+        : outer + r * (1 - 2 * (ROCK_MIN_VISIBLE + Math.random() * 0.3)));
 
       // And a slide along the shore, so they are not all on the centre line of their side. The
       // fully-visible one is clamped so the slide cannot push it off the OTHER edge, which is
@@ -1095,8 +1162,9 @@ export function createRenderer(canvas, world) {
       const t = g.age / g.span;
       if (t >= 1) { glow.splice(i, 1); continue; }
       // Carried by the real current, slowly — it is in the water, not on the screen.
-      g.x += flowX(g.x, g.y, seaT) * 0.3 * dt;
-      g.y += flowY(g.x, g.y, seaT) * 0.3 * dt;
+      flowAt(g.x, g.y, seaT, flow);
+      g.x += flow.x * 0.3 * dt;
+      g.y += flow.y * 0.3 * dt;
       const a = g.peak * smooth(0, 0.22, t) * (1 - smooth(0.5, 1, t))
         * (0.82 + 0.18 * Math.sin(seaT * g.tw + g.ph)) * lift;
       if (a < 0.01) continue;
@@ -1184,7 +1252,42 @@ export function createRenderer(canvas, world) {
    * twenty-four bands — and it breathes at the same gentle rate whether anything is playing or
    * not, which is what a coastline should do.
    */
+  /* Painted into its own layer, a dozen times a second, and blitted every frame.
+   *
+   * It is the costliest thing in the sea — a fillRect per block per strip of coast, a few
+   * thousand a frame — and it moves on periods of tens of seconds, so repainting it sixty times a
+   * second redrew the same picture fifty-odd times. At twelve the motion is indistinguishable.
+   * World-pixel resolution, because these are blocks of glow at four percent alpha and nobody
+   * can see their edges soften when the board is zoomed. */
+  const EQ_REPAINT_MS = 83;
+  const EQ_PAD = EQ_MAX + 1;
+  let eqLayer = null, eqLayerCtx = null, eqLayerFor = null, eqAge = Infinity;
+
   function drawCoastEq(dtMs) {
+    if (eqLayerFor !== world.map) {
+      eqLayer = document.createElement('canvas');
+      eqLayer.width = (world.map.w + EQ_PAD * 2) * TILE_PX;
+      eqLayer.height = (world.map.h + EQ_PAD * 2) * TILE_PX;
+      eqLayerCtx = eqLayer.getContext('2d');
+      eqLayerFor = world.map;
+      eqAge = Infinity;
+    }
+    eqAge += dtMs;
+    if (eqAge >= EQ_REPAINT_MS) {
+      paintCoastEq(Math.min(eqAge, 250));
+      eqAge = 0;
+    }
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 1;
+    ctx.drawImage(eqLayer, -EQ_PAD * TILE_PX, -EQ_PAD * TILE_PX);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  function paintCoastEq(dtMs) {
+    const ctx = eqLayerCtx;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, eqLayer.width, eqLayer.height);
+    ctx.translate(EQ_PAD * TILE_PX, EQ_PAD * TILE_PX);
     const n = EQ_BANDS;
     if (eqLen.length !== n) { eqLen = new Float32Array(n); eqBlur = new Float32Array(n); }
     eqT += dtMs / 1000;
@@ -1229,6 +1332,42 @@ export function createRenderer(canvas, world) {
     }
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
+  }
+
+  /* The shallows: two bands of paler water stepping away from the coast.
+   *
+   * They used to be filled tile by tile every frame — a fillRect per sea-facing edge per band,
+   * several hundred of them — for a shape that only changes when the map does. Now they are
+   * painted once into a layer the size of the map plus its margin and blitted. The layer is
+   * baked SHALLOWS_HEADROOM brighter than drawn at rest, so the bass can lift it by drawing it at
+   * a higher alpha; globalAlpha can only ever dim. */
+  const SHALLOWS_PAD = 3;
+  const SHALLOWS_HEADROOM = 1.15;
+  let shallowsCanvas = null, shallowsFor = null;
+  function shallowsLayer() {
+    if (shallowsFor === world.map && shallowsCanvas) return shallowsCanvas;
+    const map = world.map, P = SHALLOWS_PAD;
+    const el = document.createElement('canvas');
+    el.width = (map.w + P * 2) * TILE_PX;
+    el.height = (map.h + P * 2) * TILE_PX;
+    const c = el.getContext('2d');
+    c.translate(P * TILE_PX, P * TILE_PX);
+    const band = (reachTiles, alpha, colour) => {
+      c.globalAlpha = Math.min(1, alpha * SHALLOWS_HEADROOM);
+      c.fillStyle = colour;
+      for (const s of shoreline()) {
+        for (let n = 1; n <= reachTiles; n++) {
+          if (s.e & 1) c.fillRect((s.tx + n) * TILE_PX, s.ty * TILE_PX, TILE_PX, TILE_PX);
+          if (s.e & 4) c.fillRect((s.tx - n) * TILE_PX, s.ty * TILE_PX, TILE_PX, TILE_PX);
+          if (s.e & 2) c.fillRect(s.tx * TILE_PX, (s.ty - n) * TILE_PX, TILE_PX, TILE_PX);
+          if (s.e & 8) c.fillRect(s.tx * TILE_PX, (s.ty + n) * TILE_PX, TILE_PX, TILE_PX);
+        }
+      }
+    };
+    band(2, 0.16, PALETTE.seaMid);      // the outer, deeper step
+    band(1, 0.42, PALETTE.seaLight);
+    shallowsCanvas = el; shallowsFor = map;
+    return el;
   }
 
   function drawSea(vw, vh, ox, oy, dtMs) {
@@ -1334,35 +1473,12 @@ export function createRenderer(canvas, world) {
     // stepping from pale to deep in a single tile.
     ctx.save();
     ctx.translate(ox, oy);
-    const shelf = (reachTiles, alpha, colour) => {
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = colour;
-      for (const s of shoreline()) {
-        for (let n = 1; n <= reachTiles; n++) {
-          if (s.e & 1) ctx.fillRect((s.tx + n) * TILE_PX, s.ty * TILE_PX, TILE_PX, TILE_PX);
-          if (s.e & 4) ctx.fillRect((s.tx - n) * TILE_PX, s.ty * TILE_PX, TILE_PX, TILE_PX);
-          if (s.e & 2) ctx.fillRect(s.tx * TILE_PX, (s.ty - n) * TILE_PX, TILE_PX, TILE_PX);
-          if (s.e & 8) ctx.fillRect(s.tx * TILE_PX, (s.ty + n) * TILE_PX, TILE_PX, TILE_PX);
-        }
-      }
-    };
-    /** One row of sea, exactly `n` tiles out from the rock all the way round. */
-    const shelfRow = (n, alpha) => {
-      if (n < 1 || alpha < 0.004) return;
-      ctx.globalAlpha = alpha;
-      for (const s of shoreline()) {
-        if (s.e & 1) ctx.fillRect((s.tx + n) * TILE_PX, s.ty * TILE_PX, TILE_PX, TILE_PX);
-        if (s.e & 4) ctx.fillRect((s.tx - n) * TILE_PX, s.ty * TILE_PX, TILE_PX, TILE_PX);
-        if (s.e & 2) ctx.fillRect(s.tx * TILE_PX, (s.ty - n) * TILE_PX, TILE_PX, TILE_PX);
-        if (s.e & 8) ctx.fillRect(s.tx * TILE_PX, (s.ty + n) * TILE_PX, TILE_PX, TILE_PX);
-      }
-    };
-
-    // Both bands breathe with the bass: the shallows glow on the kick.
-    // The shallows breathe very slightly with the bass.
+    // The shallows breathe very slightly with the bass. Baked once per map (see shallowsLayer)
+    // and lifted toward full strength by the kick, rather than re-filled tile by tile.
     const kickLift = mood.bass * 0.5;
-    shelf(2, 0.16 * (1 + kickLift * 0.4), PALETTE.seaMid);      // the outer, deeper step
-    shelf(1, 0.42 * (1 + kickLift * 0.15), PALETTE.seaLight);
+    const shallows = shallowsLayer();
+    ctx.globalAlpha = (1 + kickLift * 0.3) / SHALLOWS_HEADROOM;
+    ctx.drawImage(shallows, -SHALLOWS_PAD * TILE_PX, -SHALLOWS_PAD * TILE_PX);
 
     drawCoastEq(dtMs);
 
@@ -1652,6 +1768,246 @@ export function createRenderer(canvas, world) {
     }
   }
 
+  // ─── gulls ──────────────────────────────────────────────────────────────────
+  //
+  // The flight is the server's (see shared/sim/gulls.js): every frame asks gullAt where a bird
+  // is at the smoothed tick, so it is drawn exactly where a blast has to catch it. Everything
+  // else here — the wingbeat, the lean into the weave, the shadow, the cry, the tumble when one
+  // is hit — is presentation, and none of it is told to the server.
+
+  const gullSeen = new Map();      // id -> { def, x, y, alt, heading, cryAt, gone }
+  const falls = [];                // gulls on their way down
+  const feathers = [];             // what came off them
+  const coinGlints = [];           // the coin landing
+  let gullT = 0;                   // the smoothed tick the birds were last drawn at
+
+  /** Everything needed to draw one gull at a fractional tick. */
+  function gullPose(g, t) {
+    const now = gullAt(g, t), ahead = gullAt(g, t + 1), behind = gullAt(g, t - 1);
+    const heading = Math.atan2(ahead.y - now.y, ahead.x - now.x);
+    // Lean into the weave: how fast the heading is turning, which way.
+    let turn = heading - Math.atan2(now.y - behind.y, now.x - behind.x);
+    if (turn > Math.PI) turn -= Math.PI * 2; else if (turn < -Math.PI) turn += Math.PI * 2;
+    const climbing = ahead.alt > now.alt + 0.002;
+    const diving = ahead.alt < now.alt - 0.002;
+
+    /* The wingbeat.
+     *
+     * Gulls glide far more than they flap, so a bird flapping all the time reads as a pigeon.
+     * Flapping happens in bursts on a slow per-bird cycle, and always on the climb out of a dive
+     * — that is where the work is. Going down, the wings tuck back. From above a wing raised or
+     * lowered is foreshortened, so a beat is the visible span swinging between about half and
+     * all of it: the cosine of a wing swinging through ±58 degrees. */
+    const burst = Math.sin(seaT * 0.8 + g.id * 2.3) > 0.45;
+    let span = 0.97 + 0.03 * Math.sin(seaT * 1.7 + g.id);
+    if (climbing || burst) {
+      const beat = Math.sin((seaT * (climbing ? 4.2 : 3.3) + g.id * 0.37) * Math.PI * 2);
+      span = Math.cos(beat * 1.01);
+    }
+    const fold = diving ? Math.min(1, (1 - now.alt) * 1.25) : 0;
+    return {
+      x: (now.x / UNITS_PER_TILE) * TILE_PX, y: (now.y / UNITS_PER_TILE) * TILE_PX,
+      alt: now.alt, heading, span, fold, lean: Math.max(-1, Math.min(1, turn * 9)),
+      // Closer to the camera when high. The size change is the second half of the height cue —
+      // the first is the shadow.
+      scale: 0.78 + 0.4 * now.alt,
+    };
+  }
+
+  /** How far the shadow sits from the bird: right under it at the bottom of a dive. */
+  function gullShadowOffset(alt) {
+    const { dx, dy } = sunVec();
+    const len = Math.hypot(dx, dy) || 1;
+    const reach = 3 + 44 * alt;
+    return { sx: (dx / len) * reach, sy: (dy / len) * reach };
+  }
+
+  /* The shadows, on the ground, with the other shadows — before the players stand on them.
+   *
+   * This is the tell. A gull is only catchable at the bottom of a dive, and from straight above
+   * height is invisible; what you can see is the shadow sliding in until it is underneath the
+   * bird and turning crisp. */
+  function drawGullShadows(ox, oy, t) {
+    if (!world.gulls.length) return;
+    for (const g of world.gulls) {
+      if (gullSeen.get(g.id)?.gone) continue;
+      const p = gullPose(g, t);
+      const { sx, sy } = gullShadowOffset(p.alt);
+      ctx.save();
+      ctx.fillStyle = '#000';
+      ctx.globalAlpha = 0.3 - 0.16 * p.alt;
+      ctx.translate(ox + p.x + sx, oy + p.y + sy);
+      ctx.rotate(p.heading);
+      ctx.scale(p.scale * 0.92, p.scale * 0.92);
+      drawGull(ctx, { span: p.span, fold: p.fold, lean: p.lean, shadow: true });
+      ctx.restore();
+    }
+  }
+
+  /** A gull is down: the tumble, a burst of feathers, and the coin's glint where it lands. */
+  function gullDown(def, x, y, coin) {
+    const t = gullT || world.tick;
+    const p = gullPose(def, t);
+    const ahead = gullAt(def, t + 1), now = gullAt(def, t);
+    const vx = ((ahead.x - now.x) / UNITS_PER_TILE) * TILE_PX * 30;
+    const vy = ((ahead.y - now.y) / UNITS_PER_TILE) * TILE_PX * 30;
+    const px = (x / UNITS_PER_TILE) * TILE_PX, py = (y / UNITS_PER_TILE) * TILE_PX;
+    falls.push({ x: px, y: py, vx, vy, heading: p.heading, alt: p.alt, age: 0,
+      spin: (Math.random() < 0.5 ? -1 : 1) * (7 + Math.random() * 4),
+      coin: coin ? { x: (coin.cx + 0.5) * TILE_PX, y: (coin.cy + 0.5) * TILE_PX } : null });
+    for (let i = 0; i < 14 && feathers.length < 60; i++) {
+      const a = Math.random() * Math.PI * 2, v = 18 + Math.random() * 46;
+      feathers.push({
+        x: px, y: py, vx: Math.cos(a) * v + vx * 0.25, vy: Math.sin(a) * v + vy * 0.25,
+        rot: Math.random() * Math.PI * 2, vr: (Math.random() * 2 - 1) * 5,
+        life: 1, span: 1.3 + Math.random() * 1.1, ph: Math.random() * 6.28,
+        size: 0.8 + Math.random() * 0.6,
+        tone: Math.random() < 0.6 ? '#f2f5f7' : Math.random() < 0.7 ? '#b7c2cc' : '#2a2e35',
+      });
+    }
+    pops.push({ x: px, y: py, life: 1 });
+    api.onGullDown?.(x / UNITS_PER_TILE, y / UNITS_PER_TILE);
+  }
+
+  /** Called with the server's `gullhit`, which knows exactly where it was and where the coin went. */
+  function gullHit(e) {
+    const seen = gullSeen.get(e.id);
+    if (seen?.gone) return;
+    const def = seen?.def ?? world.gulls.find(g => g.id === e.id);
+    if (!def) return;
+    gullSeen.set(e.id, { ...(seen || {}), def, gone: true });
+    gullDown(def, e.x, e.y, e.cx !== undefined ? { cx: e.cx, cy: e.cy } : null);
+  }
+
+  /**
+   * Bookkeeping per frame: new birds, birds that left, and birds that vanished early.
+   *
+   * A gull that disappears from the snapshot before its flight is over was shot down, whether or
+   * not the `gullhit` event made it here — events ride in snapshots, and a snapshot can be lost
+   * on the datagram channel. Without this it would simply blink out of the sky.
+   */
+  function trackGulls(t) {
+    const live = new Set();
+    const [lx, ly, lw, lh] = landBounds();
+    for (const g of world.gulls) {
+      live.add(g.id);
+      let s = gullSeen.get(g.id);
+      if (!s) gullSeen.set(g.id, s = { def: g, cryAt: -1, gone: false });
+      const at = gullAt(g, t);
+      s.x = at.x; s.y = at.y;
+      // A cry now and then, but only over or near the island — out past the edge of the board
+      // nobody can see what is making the noise.
+      const tx = at.x / UNITS_PER_TILE, ty = at.y / UNITS_PER_TILE;
+      const near = tx > lx - 3 && tx < lx + lw + 3 && ty > ly - 3 && ty < ly + lh + 3;
+      if (!near) continue;
+      if (s.cryAt < 0) s.cryAt = seaT + 0.3 + Math.random() * 1.6;
+      else if (seaT >= s.cryAt) {
+        api.onGullCry?.(tx, ty);
+        s.cryAt = seaT + 4.5 + Math.random() * 6;
+      }
+    }
+    for (const [id, s] of gullSeen) {
+      if (live.has(id)) continue;
+      if (!s.gone && t < s.def.t0 + s.def.dur - 4) gullDown(s.def, s.x, s.y, null);
+      gullSeen.delete(id);
+    }
+  }
+
+  function drawGulls(ox, oy, t, dtMs) {
+    const dt = dtMs / 1000;
+    for (const g of world.gulls) {
+      if (gullSeen.get(g.id)?.gone) continue;
+      const p = gullPose(g, t);
+      ctx.save();
+      ctx.translate(ox + p.x, oy + p.y);
+      ctx.rotate(p.heading);
+      ctx.scale(p.scale, p.scale);
+      drawGull(ctx, p);
+      ctx.restore();
+    }
+
+    // The tumble: spinning, wings flailing, dropping out of the sky and shrinking as it goes.
+    for (let i = falls.length - 1; i >= 0; i--) {
+      const f = falls[i];
+      f.age += dt;
+      const FALL_S = 0.62, FADE_S = 0.3;
+      if (f.age > FALL_S + FADE_S) { falls.splice(i, 1); continue; }
+      const k = Math.min(1, f.age / FALL_S);
+      const drag = Math.exp(-dt * 4);
+      f.vx *= drag; f.vy *= drag;
+      f.x += f.vx * dt; f.y += f.vy * dt;
+      f.heading += f.spin * dt;
+      if (k >= 1 && !f.landed) {
+        f.landed = true;
+        ripples.push({ x: f.x, y: f.y, life: 1, max: TILE_PX * 0.6, rate: 2, w: 1.4 });
+        if (f.coin) coinGlints.push({ x: f.coin.x, y: f.coin.y, life: 1, rot: Math.random() * 6 });
+      }
+      const alt = f.alt * (1 - k);
+      const scale = (0.78 + 0.4 * alt) * (1 - 0.25 * k);
+      const { sx, sy } = gullShadowOffset(alt);
+      ctx.save();
+      ctx.globalAlpha = f.age > FALL_S ? Math.max(0, 1 - (f.age - FALL_S) / FADE_S) : 1;
+      ctx.save();
+      ctx.globalAlpha *= 0.3;
+      ctx.fillStyle = '#000';
+      ctx.translate(ox + f.x + sx, oy + f.y + sy);
+      ctx.rotate(f.heading);
+      ctx.scale(scale * 0.92, scale * 0.92);
+      drawGull(ctx, { span: 0.55, fold: 0.3, shadow: true });
+      ctx.restore();
+      ctx.translate(ox + f.x, oy + f.y);
+      ctx.rotate(f.heading);
+      ctx.scale(scale, scale);
+      drawGull(ctx, { span: 0.5 + 0.2 * Math.sin(f.age * 38), fold: 0.3, lean: Math.sin(f.age * 31) });
+      ctx.restore();
+    }
+
+    // Feathers: thrown out, then drifting and rocking, the way a feather never falls straight.
+    for (let i = feathers.length - 1; i >= 0; i--) {
+      const q = feathers[i];
+      q.life -= dt / q.span;
+      if (q.life <= 0) { feathers.splice(i, 1); continue; }
+      const drag = Math.exp(-dt * 3.2);
+      q.vx *= drag; q.vy *= drag;
+      q.x += q.vx * dt + Math.sin(seaT * 4 + q.ph) * 6 * dt;
+      q.y += q.vy * dt + 7 * dt;
+      q.rot += q.vr * dt * q.life;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, q.life * 2.5) * 0.95;
+      ctx.translate(ox + q.x, oy + q.y);
+      ctx.rotate(q.rot + Math.sin(seaT * 5 + q.ph) * 0.5);
+      ctx.scale(q.size, q.size);
+      drawFeather(ctx, q.tone);
+      ctx.restore();
+    }
+
+    // The coin's arrival: a gold ring and a four-point star, so the eye goes to where it fell.
+    for (let i = coinGlints.length - 1; i >= 0; i--) {
+      const s = coinGlints[i];
+      s.life -= dt / 0.75;
+      if (s.life <= 0) { coinGlints.splice(i, 1); continue; }
+      const x = ox + s.x, y = oy + s.y, k = 1 - s.life;
+      ctx.save();
+      ctx.globalAlpha = s.life * 0.7;
+      ctx.strokeStyle = '#ffd86b';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(x, y, 4 + k * 14, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = Math.min(1, s.life * 1.6);
+      ctx.translate(x, y);
+      ctx.rotate(s.rot + k * 1.6);
+      const r = 3 + 6 * Math.sin(Math.min(1, k * 1.4) * Math.PI);
+      ctx.fillStyle = '#fff3c4';
+      ctx.beginPath();
+      for (let n = 0; n < 4; n++) {
+        const a = (n / 4) * Math.PI * 2;
+        ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+        ctx.lineTo(Math.cos(a + Math.PI / 4) * r * 0.25, Math.sin(a + Math.PI / 4) * r * 0.25);
+      }
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+  }
+
   // ─── frame ──────────────────────────────────────────────────────────────────
 
   function frame(dtMs = 16) {
@@ -1808,7 +2164,7 @@ export function createRenderer(canvas, world) {
      * smoothly by the time since it last changed and capped just short of the next one: the ring
      * and the fuse run continuously and still reach zero on the frame the blast appears. */
     if (world.tick !== bombClock.tick) { bombClock.tick = world.tick; bombClock.at = performance.now(); }
-    const tickNow = world.tick + Math.min(1.95, (performance.now() - bombClock.at) / TICK_MS);
+    const tickNow = world.tick + Math.min(1.95, (performance.now() - bombClock.at) / (world.tickMs || TICK_MS));
     for (const b of world.bombs) {
       const owner = (b.o ?? b.owner) % 16;
       ctx.save();
@@ -1840,12 +2196,19 @@ export function createRenderer(canvas, world) {
      * other's shadow — and a shadow that disappears when somebody walks past it is worse than
      * no shadow. All the shadows belong to the floor; all the players stand on top of them. */
     drawSunShadows(alive, ox, oy);
+    // Gulls on the same clock the bombs count down on, which is the clock the fire is drawn on:
+    // the bird is drawn exactly where a blast would have to catch it.
+    gullT = tickNow;
+    trackGulls(tickNow);
+    drawGullShadows(ox, oy, tickNow);
     for (const p of alive) drawOne(ctx, p, ox, oy, p.i === world.you);
 
     drawAim(ox, oy, dtMs);
     for (const p of alive) drawTipsy(ctx, p, ox, oy);
     for (const p of alive) drawStamina(ctx, p, ox, oy);
     drawFloaters(ox, oy, dtMs);
+    // Over everything on the island: they are in the air.
+    drawGulls(ox, oy, tickNow, dtMs);
 
     /* A vignette that breathes with the music, drawn last so it sits over everything.
      *
@@ -2143,13 +2506,45 @@ export function createRenderer(canvas, world) {
 
     drawStatusPips(c, p, px, py);
 
-    c.font = '10px ui-monospace, monospace';
+    const label = nameLabel(p.name, isMe ? PALETTE.gold : playerShades(p.i).light);
+    c.drawImage(label.el, px + TILE_PX / 2 - label.w / 2, py - 3 - LABEL_BASE, label.w, LABEL_H);
+  }
+
+  /* Names over heads, baked.
+   *
+   * A stroked-then-filled line of text per player per frame is sixteen pairs of font
+   * rasterisations sixty times a second, for strings that change once a round. Each name is
+   * rendered once into a small canvas at the device scale it is shown at, and blitted after
+   * that — the same pixels for a drawImage each. Keyed on scale too, so a zoom change re-bakes
+   * rather than blurring; cleared wholesale if it ever grows past what a room could need. */
+  const LABEL_H = 16, LABEL_BASE = 12;
+  const labels = new Map();
+  function nameLabel(text, colour) {
+    const k = view.zoom * view.dpr;
+    const key = `${text}|${colour}|${k}`;
+    let l = labels.get(key);
+    if (l) return l;
+    if (labels.size > 96) labels.clear();
+    const el = document.createElement('canvas');
+    const font = '10px ui-monospace, monospace';
+    const probe = el.getContext('2d');
+    probe.font = font;
+    const w = Math.ceil(probe.measureText(text).width) + 6;
+    el.width = Math.ceil(w * k);
+    el.height = Math.ceil(LABEL_H * k);
+    const c = el.getContext('2d');
+    c.scale(k, k);
+    c.font = font;
     c.textAlign = 'center';
+    c.lineJoin = 'round';
     c.lineWidth = 3;
     c.strokeStyle = 'rgba(0,0,0,0.75)';
-    c.strokeText(p.name, px + TILE_PX / 2, py - 3);
-    c.fillStyle = isMe ? PALETTE.gold : playerShades(p.i).light;
-    c.fillText(p.name, px + TILE_PX / 2, py - 3);
+    c.strokeText(text, w / 2, LABEL_BASE);
+    c.fillStyle = colour;
+    c.fillText(text, w / 2, LABEL_BASE);
+    l = { el, w };
+    labels.set(key, l);
+    return l;
   }
 
   /**
@@ -2370,8 +2765,10 @@ export function createRenderer(canvas, world) {
   }
 
   resize();
-  return {
-    frame, resize, invalidateAll, invalidateTile, mapChanged, addMelt,
+  const api = {
+    frame, resize, invalidateAll, invalidateTile, mapChanged, addMelt, gullHit,
+    /** Hooks for the gulls' sounds, in tiles: `onGullCry(tx, ty)` and `onGullDown(tx, ty)`. */
+    onGullCry: null, onGullDown: null,
 
     /**
      * Somebody said something short. Shown over their head for a few seconds.
@@ -2404,4 +2801,5 @@ export function createRenderer(canvas, world) {
     addFlash(amount, colour = '255,255,255') { flash = Math.min(1, flash + amount); flashColour = colour; },
     get chunkRedraws() { return redrawsThisSecond; },
   };
+  return api;
 }

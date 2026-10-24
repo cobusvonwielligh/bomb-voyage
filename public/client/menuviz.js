@@ -72,10 +72,11 @@ const MOUSE_FORCE = 0.275;
 /* The visualiser's colours, turning at the same rate as the animated panel borders — see
  * `.edge` in style.css.
  *
- * Gold and maroon, not the borders' rainbow. The bars used to borrow the borders' six stops, and
- * on a dark page the lavender and the two blue-greens dominated — the landing page read as
- * purple. The mascot's world is gold and a deep bandana red, so the bars run between them: bright
- * gold, old gold, amber, a lit maroon, the deep maroon, and a warm rose on the way back.
+ * Gold and maroon. The bars used to share the borders' old rainbow, and on a dark page the
+ * lavender and the two blue-greens dominated — the landing page read as purple. The mascot's
+ * world is gold and a deep bandana red, so the bars run between them: bright gold, old gold,
+ * amber, a lit maroon, the deep maroon, and a warm rose on the way back. The panel borders now
+ * run the same six stops, so keep the two lists in step by hand.
  *
  * The PERIOD still matches the borders' 28 seconds, and that is the part that matters: two
  * things cycling at different speeds read as two things, whatever their colours.

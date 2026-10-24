@@ -3,7 +3,7 @@
 
 import {
   MAX_PLAYERS, START_BOMBS, START_RADIUS, UNITS_PER_TILE, DIR_D, STATUS, STATUS_TICKS,
-  STAMINA_MAX,
+  STAMINA_MAX, GULL_FIRST_TICK,
 } from '../constants.js';
 import { buildMap, cellType, cellHp, packCell } from '../maps.js';
 import { BLOCK, BLOCK_WALKABLE } from '../constants.js';
@@ -34,6 +34,12 @@ export function createState(mapDef, seed = mapDef.seed) {
     perkTakeRate: 0,
     // Seeded, so drops and wall regrowth are reproducible. The sim never calls Math.random().
     next: rng(seed ^ 0x9e3779b9),
+    // Gulls overhead; see sim/gulls.js. They draw from their OWN stream, so adding them did not
+    // shift a single drop or regrowth roll that `next` was already making.
+    gulls: [],
+    nextGullId: 1,
+    nextGullAt: GULL_FIRST_TICK,
+    gullNext: rng(seed ^ 0x6a09e667),
     events: [],
   };
 }

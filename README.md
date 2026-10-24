@@ -1,7 +1,7 @@
 # Bomb Voyage
 
-A lightweight 16-player browser clone of [Game of Bombs](https://gameofbombs.com), built for
-Friday-afternoon games at eezi.
+A lightweight 16-player browser bomb game for Friday-afternoon games at eezi, inspired by
+Bomberman, [Game of Bombs](https://gameofbombs.com) and Crazy Arcade.
 
 **Live:** https://bombvoyage.online · **Health:** [/healthz](https://bombvoyage.online/healthz)
 · **Sprites:** [/art-preview.html](https://bombvoyage.online/art-preview.html)
@@ -20,7 +20,7 @@ work breakdown and is now history.
 | ✅ The game | 16 players, 5 maps, 10-minute rounds, bots, perks, stamina, powder kegs |
 | ✅ Transport | **WebTransport over QUIC**, racing WebSocket, whichever connects first wins |
 | ✅ Deployment | TLS, systemd, reboot-safe, one-level rollback, ~6 s end to end |
-| ✅ Tests | 273, `node --test`, no framework. Green on every push. |
+| ✅ Tests | 291, `node --test`, no framework. Green on every push. |
 | ✅ Domain | `bombvoyage.online`, canonical. Aliases redirect to it. |
 | ✅ Observer mode | Spectate from the menu, or from the death card without losing your seat to nobody |
 
@@ -32,8 +32,10 @@ is ready in about **50 ms**. The netcode is designed to survive 180 ms, so there
 ## What this is
 
 - Up to **16 players**, 5 maps, 10-minute rounds (`/roundtime` to change it live).
-- Grid-based Bomberman rules, matched closely enough that Game of Bombs veterans feel at home,
-  plus **stamina** and **powder kegs** of our own.
+- Grid-based bomb-and-run rules in the Bomberman tradition, familiar to anyone who has played
+  Game of Bombs or Crazy Arcade, plus **stamina**, **powder kegs** and **seagulls** of our own.
+- **Bots keep you company.** The moment someone joins there are at least six; after two rounds
+  with nobody there they leave. A host who removes bots by hand is not overruled.
 - One server, one hostname, one port — **443, both TCP and UDP**. No CDNs, no third-party
   domains, no build step.
 - Vanilla JS on the client, Node on the server. Two runtime dependencies: `ws` and the
@@ -55,7 +57,7 @@ no payments, no persistent world, no mobile, no matchmaking, no anti-cheat.
 npm install                        # ws, plus the WebTransport pair
 cp config.example.ini config.ini   # optional — defaults work without it
 npm start                          # http://localhost:8080
-npm test                           # 273 tests, node --test, no framework
+npm test                           # 291 tests, node --test, no framework
 ```
 
 WebTransport needs TLS and a native addon, so locally you get WebSocket and the client never
@@ -142,5 +144,6 @@ Settled. Reopen one before writing code, not after.
 
 ## Credits
 
-Game design is Game of Bombs'. This is a clone for private office play, not a product.
-Do not copy their art assets into this repo — everything here is drawn from scratch in code.
+Inspired by Bomberman, Game of Bombs and Crazy Arcade. Built for private office play, not as a
+product. Do not copy anyone's art assets into this repo — everything here is drawn from scratch
+in code.

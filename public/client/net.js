@@ -10,11 +10,21 @@ import { createTransport } from './transport.js';
 export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onScores, onStreak,
   onRoundTime, onRejected }) {
   let ws = null;
-  // serverTick ≈ performance.now()/TICK_MS + tickOffset. Keeping an offset rather than a
+  // serverTick ≈ performance.now()/tickMs + tickOffset. Keeping an offset rather than a
   // timestamped sample means the estimate is continuous: a new ping nudges it instead of
   // restarting it, which is the difference between smooth remote players and a hitch every
   // two seconds.
   let tickOffset = null;
+  /* How long a tick lasts in wall-clock time HERE, which is not always TICK_MS.
+   *
+   * /gamespeed changes how often the server issues ticks, never what a tick means. The clock
+   * below used to divide by TICK_MS regardless, so at 200% the server ran twice as fast as this
+   * estimate of it: every input was stamped for a tick the server had already simulated, was
+   * dropped as too late, and the server held your last mask — usually "standing still" — while
+   * prediction walked you off and reconciliation dragged you back. Stuck in one tile. At 50% it
+   * was the mirror image: inputs piled up in the server's buffer faster than it consumed them,
+   * and the buffer evicted exactly the ones it needed next. */
+  let tickMs = TICK_MS;
   let clientTick = 0;
   const rtts = [];
   const pending = new Map();
@@ -35,7 +45,25 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
   /** Where we think the server is right now. */
   function serverTickNow() {
     if (tickOffset === null) return clientTick;
-    return performance.now() / TICK_MS + tickOffset;
+    return performance.now() / tickMs + tickOffset;
+  }
+
+  /**
+   * Follow the server's tick rate, as a percentage of real time.
+   *
+   * The estimate is re-anchored at the instant of the change so it stays continuous — the tick
+   * we think the server is on right now is the same number either side of the switch, only the
+   * rate it advances at differs. Then the lead is recomputed, because a lead measured in ticks
+   * at one rate is the wrong number of milliseconds at another.
+   */
+  function setSpeed(pct) {
+    const next = TICK_MS * 100 / (Number(pct) > 0 ? Number(pct) : 100);
+    if (next === tickMs) return;
+    const now = tickOffset === null ? null : serverTickNow();
+    tickMs = next;
+    if (now !== null) tickOffset = now - performance.now() / tickMs;
+    clientTick = targetTick();
+    sinceCorrection = 0;
   }
 
   /**
@@ -49,7 +77,7 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
    * Blending from a known-wrong seed takes five pings to crawl out of, so do not blend yet.
    */
   function observeServerTick(serverTick) {
-    const implied = serverTick + (rttMin() / 2) / TICK_MS - performance.now() / TICK_MS;
+    const implied = serverTick + (rttMin() / 2) / tickMs - performance.now() / tickMs;
     if (tickOffset === null || rtts.length < 2 || Math.abs(implied - tickOffset) > 25) {
       tickOffset = implied;
     } else {
@@ -59,7 +87,7 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
 
   /** Run far enough ahead that this tick's input lands before the server simulates it. */
   function targetTick() {
-    return Math.ceil(serverTickNow() + (rttMin() / 2 + CLOCK_SAFETY_MS) / TICK_MS) + 1;
+    return Math.ceil(serverTickNow() + (rttMin() / 2 + CLOCK_SAFETY_MS) / tickMs) + 1;
   }
 
   function open() {
@@ -97,6 +125,8 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
             hello = { ...hello, playerId: m.playerId };
           }
           connectedAt = performance.now();
+          // The rate first: the tick below is converted to a clock using it.
+          if (m.config?.gamespeed) setSpeed(m.config.gamespeed);
           observeServerTick(m.tick);
           clientTick = targetTick();
           onWelcome?.(m);
@@ -133,6 +163,8 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
         // The host changed the round length. The clock in the bar counts down to this, so a
         // client that ignored it would show the wrong number until the next round.
         case 'roundtime': onRoundTime?.(m); break;
+        // The host changed /gamespeed. Not optional: see `tickMs`.
+        case 'gamespeed': setSpeed(m.pct); break;
       }
     }
   }
@@ -198,6 +230,8 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
     },
 
     get clientTick() { return clientTick; },
+    /** Wall-clock milliseconds per tick at the server's current /gamespeed. */
+    get tickMs() { return tickMs; },
     get rtt() { return Math.round(rttMin()); },
     /** 'webtransport' or 'websocket' — shown in the HUD so a bad round can be attributed. */
     get transport() { return kind; },

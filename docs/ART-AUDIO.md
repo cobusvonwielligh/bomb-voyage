@@ -164,6 +164,26 @@ simulation has dropped it, which is what makes the end read as evaporation rathe
 The melt itself is a flash, two rings of meltwater pushing out, and a dozen ice shards thrown off
 with drag, plus the `melt` sound.
 
+### Gulls
+
+`drawGull` in `art.js`, top-down, about 44 px across the wings. Top-down a bird *is* its wings,
+so the read is all outline and paint: long narrow wings with a forward wrist and a hand swept back
+behind it, pale grey back and wings against a white head and tail, black wingtips with a white
+mirror spot, a yellow bill with the red gonys spot.
+
+- **Flight** comes from `gullAt` in `shared/sim/gulls.js`, evaluated at the same smoothed tick
+  the bomb fuses use, so the bird is drawn exactly where the server will test it against fire.
+- **Wingbeat** is foreshortening: the visible span swings with the cosine of a ±58° stroke. Gulls
+  glide far more than they flap, so beats come in bursts and on every climb out of a dive; going
+  down, the wings tuck back. It leans into its weave.
+- **Height** is the shadow, which slides in under the bird and sharpens at the bottom of a dive
+  — the only moment it can be hit — plus a size change of about a third.
+- **Hit:** a tumble that spins and shrinks to the ground and lands with a ring, fourteen feathers
+  thrown out and rocking as they drift, and a gold ring and star where the coin lands.
+- **Sound:** `gull` is the long call — a hoarse sawtooth through a nasal and a body resonance,
+  leaping up into the note and sliding down, three calls, quiet, only near the island. `gullhit`
+  is a strangled squawk, a puff of feathers, then two bell partials for the coin.
+
 ---
 
 ## 5a. Cast gold
@@ -206,6 +226,11 @@ it is more gold.
 
 Dark panels, gold headings, white body text — close to Game of Bombs' own menu so it reads as
 familiar.
+
+**Gold and maroon throughout.** Every panel and dialog (`.edge`) has the landing page's colours:
+a border sweeping bright gold → old gold → amber → lit maroon → deep maroon → rose on a 28 s turn
+(the same six stops as the menu VU), and a faint maroon wash rising from the top of the fill. The
+auto-respawn setting is a sliding gold switch, not a native checkbox.
 
 - Panel: `#1a2029`, 2 px border `#ffd21f` at 40 %, 4 px corner radius.
 - Headings: UI gold, uppercase, letter-spaced.

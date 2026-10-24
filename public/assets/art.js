@@ -1339,6 +1339,137 @@ export function drawShip(c) {
   c.beginPath(); c.moveTo(lx - 2.4, 0); c.lineTo(lx + 2.4, 0); c.stroke();
 }
 
+// ─── gulls ────────────────────────────────────────────────────────────────────
+
+/* A herring gull, from directly above, flying along +x. About 44px across the wings at scale 1.
+ *
+ * Top-down, a bird is its wings. What makes this one a GULL rather than a generic bird is three
+ * things, all in the outline and the paint rather than the detail: long narrow wings with a
+ * forward-pointing wrist and a hand swept back behind it (the "M"), a pale grey back and wings
+ * against a white head and tail, and black wingtips with a white spot in each. Get those and the
+ * yellow bill is a bonus.
+ *
+ * `span` is how much of the wing you can see, 0..1 — a wing raised or lowered in a beat is
+ * foreshortened from above, which is the whole flap. `fold` tucks the wings back for a dive.
+ * `lean` is a roll into a turn: one wing a touch longer than the other. With `shadow` set,
+ * only the silhouette is drawn, in whatever fill the caller has set up, for the shadow pass.
+ */
+const GULL = {
+  white: '#f5f7f8', whiteShade: '#d9dfe4', mantle: '#aab6c1',
+  edge: '#e7edf2', tip: '#191c21', bill: '#f0c43a', gonys: '#d2402e', outline: 'rgba(24,30,38,0.7)',
+};
+
+function gullWing(c, sign, span, fold) {
+  const r = 2.4;                                   // where the wing meets the body
+  const s = 20 * span * (1 - 0.42 * fold);         // half-span beyond the body
+  const back = 7 + 7 * fold;                       // how far the tip sweeps behind the root
+  c.moveTo(3.6, sign * r);
+  // Leading edge: out and a little FORWARD to the wrist, then raked back to the tip.
+  c.bezierCurveTo(4.8, sign * (r + s * 0.18), 5.4 - fold * 2, sign * (r + s * 0.36),
+    4.4 - fold * 3, sign * (r + s * 0.46));
+  c.bezierCurveTo(1.5 - fold * 3, sign * (r + s * 0.66), -back + 3, sign * (r + s * 0.94),
+    -back, sign * (r + s));
+  // Trailing edge: the hand's long primaries, a notch at the wrist, then the secondaries home.
+  c.bezierCurveTo(-back - 0.5, sign * (r + s * 0.86), -back + 0.6, sign * (r + s * 0.66),
+    -4.6, sign * (r + s * 0.5));
+  c.bezierCurveTo(-5.6, sign * (r + s * 0.32), -5.2, sign * (r + s * 0.12), -4.2, sign * r);
+  c.closePath();
+}
+
+function gullBody(c) {
+  // Tail first, a short square fan, then the body over it.
+  c.moveTo(-7.5, -2.5);
+  c.lineTo(-13.2, -3.1);
+  c.quadraticCurveTo(-14, 0, -13.2, 3.1);
+  c.lineTo(-7.5, 2.5);
+  c.closePath();
+  c.moveTo(10.5, 0);
+  c.ellipse(0.5, 0, 10, 3.7, 0, 0, Math.PI * 2);
+  c.moveTo(11.6, 0);
+  c.arc(8.6, 0, 3, 0, Math.PI * 2);
+}
+
+export function drawGull(c, { span = 1, fold = 0, lean = 0, shadow = false } = {}) {
+  const ls = span * (1 + lean * 0.12), rs = span * (1 - lean * 0.12);
+  if (shadow) {
+    c.beginPath();
+    gullWing(c, -1, ls, fold);
+    gullWing(c, 1, rs, fold);
+    gullBody(c);
+    c.fill();
+    return;
+  }
+
+  c.lineJoin = 'round';
+  // Wings, with a dark outline so the bird holds its shape over pale sand as well as dark water.
+  for (const [sign, sp] of [[-1, ls], [1, rs]]) {
+    c.beginPath(); gullWing(c, sign, sp, fold);
+    c.fillStyle = GULL.mantle; c.fill();
+    c.strokeStyle = GULL.outline; c.lineWidth = 0.9; c.stroke();
+
+    c.save();
+    c.beginPath(); gullWing(c, sign, sp, fold); c.clip();
+    const s = 20 * sp * (1 - 0.42 * fold);
+    // The inner wing a shade darker toward the trailing edge — a wing is a curved surface, and
+    // the far side of the curve is the side away from the light.
+    const shade = c.createLinearGradient(5, 0, -10, 0);
+    shade.addColorStop(0, 'rgba(142,156,171,0)');
+    shade.addColorStop(1, 'rgba(120,134,150,0.7)');
+    c.fillStyle = shade;
+    c.fillRect(-20, sign > 0 ? 2.4 : -2.4 - s, 30, s);
+    // Black tips across the outer third of the hand, with the white "mirror" near each end.
+    const tipFrom = 2.4 + s * 0.7;
+    c.fillStyle = GULL.tip;
+    c.fillRect(-20, sign > 0 ? tipFrom : -2.4 - s - 2, 30, s * 0.3 + 2);
+    c.fillStyle = GULL.white;
+    const back = 7 + 7 * fold;
+    c.beginPath();
+    c.arc(-back + 2.2, sign * (2.4 + s * 0.9), 1.05, 0, Math.PI * 2);
+    c.arc(-back + 4.4, sign * (2.4 + s * 0.8), 0.75, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+
+    // A pale leading edge, which is where the light catches a wing from above.
+    c.beginPath();
+    c.moveTo(3.6, sign * 2.6);
+    c.bezierCurveTo(4.8, sign * (2.4 + s * 0.18), 5.4 - fold * 2, sign * (2.4 + s * 0.36),
+      4.4 - fold * 3, sign * (2.4 + s * 0.46));
+    c.strokeStyle = GULL.edge; c.lineWidth = 1.1; c.stroke();
+  }
+
+  // Body, head and tail: white, with the grey saddle of the back between the wings.
+  c.beginPath(); gullBody(c);
+  c.fillStyle = GULL.white; c.fill();
+  c.strokeStyle = GULL.outline; c.lineWidth = 0.8; c.stroke();
+  c.beginPath(); c.ellipse(-0.8, 0, 5.4, 2.7, 0, 0, Math.PI * 2);
+  c.fillStyle = GULL.mantle; c.fill();
+  // The underside of the body, shaded on the side away from the light.
+  c.beginPath(); c.ellipse(0.5, 1.4, 8.5, 1.6, 0, 0, Math.PI * 2);
+  c.fillStyle = GULL.whiteShade; c.globalAlpha = 0.5; c.fill(); c.globalAlpha = 1;
+
+  // Bill: yellow, hooked, with the red spot on the lower mandible that every gull chick pecks at.
+  c.beginPath();
+  c.moveTo(11.1, -0.95); c.lineTo(14.8, -0.2); c.quadraticCurveTo(15.4, 0.3, 14.6, 0.6);
+  c.lineTo(11.1, 0.95); c.closePath();
+  c.fillStyle = GULL.bill; c.fill();
+  c.beginPath(); c.arc(13.6, 0.45, 0.55, 0, Math.PI * 2);
+  c.fillStyle = GULL.gonys; c.fill();
+  // Eyes, one each side of the crown — from above that is all of an eye you can see.
+  c.fillStyle = '#20252c';
+  c.fillRect(9.2, -2.1, 1, 1); c.fillRect(9.2, 1.1, 1, 1);
+}
+
+/** One loose feather, a few pixels long, for the burst when a gull is hit. Drawn along +x. */
+export function drawFeather(c, tone) {
+  c.beginPath();
+  c.moveTo(3, 0);
+  c.quadraticCurveTo(0, -1.4, -3, -0.3);
+  c.quadraticCurveTo(0, 1.2, 3, 0);
+  c.fillStyle = tone; c.fill();
+  c.strokeStyle = 'rgba(40,46,54,0.35)'; c.lineWidth = 0.5;
+  c.beginPath(); c.moveTo(3, 0); c.lineTo(-3.4, 0); c.stroke();
+}
+
 // ─── mascot ───────────────────────────────────────────────────────────────────
 
 /**

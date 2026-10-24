@@ -340,8 +340,11 @@ canvas#game {
  * menu text. Implemented as a padding-box/border-box mask rather than a pseudo-element, so the
  * border follows the border-radius exactly and costs one compositor layer instead of two.
  *
- * The stops are the palette's hues at half saturation. At full saturation a rainbow border is
- * the brightest thing on screen, and the brightest thing on screen should be a player or a fire.
+ * Gold and maroon, the landing page's colours, not the rainbow it was. Six stops — bright gold,
+ * old gold, amber, a lit maroon, the deep maroon and a warm rose — the same six the menu's VU
+ * runs through (EDGE_HUES in menuviz.js), on the same 28-second turn, so the whole interface
+ * reads as one light. The rainbow put lavender and two blue-greens round every panel, and next
+ * to cast-gold type and a maroon backdrop that read as a second, unrelated theme.
  */
 
 @property --spin {
@@ -512,6 +515,9 @@ canvas#game {
     /* Texture first, so it lies over the fill and under the content. All three are clipped to
        the padding box, or the weave would run through the animated border and muddy it. */
     var(--weave) padding-box,
+    /* The landing page's maroon, rising from the top of every panel: the same light the menu
+       backdrop is lit with, faint enough that the panel is still dark where the text is. */
+    radial-gradient(130% 70% at 50% 0%, #3a141f59, #2a101800 70%) padding-box,
     linear-gradient(var(--panel-fill, #11161ee6), var(--panel-fill, #11161ee6))
       padding-box,
     /* Centred on the bottom-right corner rather than the middle: the sweep then runs across the
@@ -519,13 +525,13 @@ canvas#game {
        moving past rather than as a spinning wheel. */
     conic-gradient(
         from var(--spin) at 100% 100%,
-        #c7b057,
-        #ce8c6e,
-        #c4837e,
-        #b490da,
-        #7badd3,
-        #78b39b,
-        #c7b057
+        #edc24e,
+        #cc9434,
+        #c4683a,
+        #a83442,
+        #801e32,
+        #b85c54,
+        #edc24e
       )
       border-box;
   animation: spin 28s linear infinite;
@@ -930,10 +936,13 @@ body.observing #who {
 .eq b {
   display: block;
   width: 2px;
-  height: 3px;
+  /* Full height, squashed by a transform from main.js. Writing `height` sixty times a second
+     forced a layout of the dock every frame; a scale is composited and costs nothing. */
+  height: 11px;
   border-radius: 1px;
   background: currentColor;
   transform-origin: bottom;
+  transform: scaleY(0.27);
 }
 /* The bars are driven from the ANALYSER, not from a keyframe — see syncMeter() in main.js.
  *
@@ -943,7 +952,7 @@ body.observing #who {
  * this exists, and you can tell instantly without being able to say why: real bars land on the
  * beat. The transition is what fills the gap between frames at low refresh rates. */
 .eq b {
-  transition: height 0.06s linear;
+  transition: transform 0.06s linear;
 }
 
 /* Stopped: the bars hold at their shortest and the whole readout steps back. */
@@ -2018,7 +2027,7 @@ body.dead #rank { color: #8a5a5a; }
   /* px, not em: `#streak` has no font-size of its own, so `1.25em` resolved against the
      inherited 16px and drew a 20px ribbon behind 118px type — a pinstripe, not a band. */
   width: 150vw;
-  height: 78px;
+  height: 62px;
   margin-left: -75vw;
   transform: translateY(-62%) skewX(-13deg) scaleX(0);
   background: linear-gradient(
@@ -2089,7 +2098,7 @@ body.dead #rank { color: #8a5a5a; }
 /* The name gets the accent and some weight: it is the half of the message that says whether
    this is a thing to celebrate or a thing to worry about. */
 #streak .who {
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--gold);
   opacity: 1;
@@ -2106,13 +2115,13 @@ body.dead #rank { color: #8a5a5a; }
 /* 15% off every rung. They were sized for a banner in the middle of an empty screen; up at a
    third they sit over the board, and anything covering the board has to earn its width. */
 #streak.s2 .big {
-  font-size: clamp(34px, 4.4vw, 56px);
+  font-size: clamp(27px, 3.5vw, 45px);
 }
 #streak.s3 .big {
-  font-size: clamp(39px, 5.4vw, 70px);
+  font-size: clamp(31px, 4.3vw, 56px);
 }
 #streak.s4 .big {
-  font-size: clamp(44px, 6.6vw, 85px);
+  font-size: clamp(35px, 5.3vw, 68px);
   color: #fff;
   text-shadow:
     0 0 44px #edc24e,
@@ -2120,7 +2129,7 @@ body.dead #rank { color: #8a5a5a; }
     var(--banner-shadow);
 }
 #streak.ace .big {
-  font-size: clamp(49px, 7.8vw, 100px);
+  font-size: clamp(39px, 6.2vw, 80px);
   color: #fff;
   text-shadow:
     0 0 48px #ffc98a,
@@ -2131,11 +2140,11 @@ body.dead #rank { color: #8a5a5a; }
 /* The top two rungs get a hotter band and a wider rule as well, or the escalation lives entirely
    in the font size and stops being felt somewhere around the third one. */
 #streak.s3::before {
-  height: 94px;
+  height: 75px;
 }
 #streak.s4::before,
 #streak.ace::before {
-  height: 114px;
+  height: 91px;
   filter: brightness(1.4);
 }
 #streak.ace::before {
@@ -2292,18 +2301,18 @@ body.dead #rank { color: #8a5a5a; }
     opacity: 1;
   }
   34% {
-    width: 420px;
-    margin-left: -210px;
+    width: 336px;
+    margin-left: -168px;
     opacity: 1;
   }
   80% {
-    width: 420px;
-    margin-left: -210px;
+    width: 336px;
+    margin-left: -168px;
     opacity: 0.7;
   }
   100% {
-    width: 520px;
-    margin-left: -260px;
+    width: 416px;
+    margin-left: -208px;
     opacity: 0;
   }
 }
@@ -2453,7 +2462,7 @@ body.dead #rank { color: #8a5a5a; }
   width: 600px;
   position: relative;
   box-shadow:
-    0 0 80px #6b21a840,
+    0 0 80px #80203238,
     0 22px 60px #000b;
 }
 .card.small {
@@ -2524,39 +2533,107 @@ body.dead #rank { color: #8a5a5a; }
  * Under the button rather than beside it, and quiet: it is a setting, not a fourth choice, and
  * the respawn button has to stay the one thing the eye lands on. The whole row is the hit
  * target — a 13px checkbox on its own is a dexterity test. */
+/* A sliding switch rather than a checkbox: the label on the left in the same face as the ghost
+ * buttons under it, and a gold-and-maroon pill on the right whose knob slides across and lights.
+ * The native box was a 14px browser-blue square in a card where everything else is cast in
+ * gold — the one control on the card that looked like it came from another page. */
 #autoRow {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-  padding: 7px 9px;
-  border-radius: 8px;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 8px 10px 8px 12px;
+  border-radius: 10px;
+  border: 1px solid #edc24e1f;
+  background: linear-gradient(180deg, #2a101833, #2a101866);
   font-family: var(--nums);
-  font-size: 11.5px;
+  font-size: 12px;
+  font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--dim);
+  color: #c9b48a;
   cursor: pointer;
   user-select: none;
   transition:
-    color 0.12s,
-    background 0.12s;
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s;
 }
 #autoRow:hover {
-  color: var(--ink);
-  background: #ffffff0a;
+  color: var(--gold-hi);
+  border-color: #edc24e47;
 }
+/* The real input, invisible but still focusable and still the thing that is clicked. */
 #autoRow input {
-  accent-color: var(--gold);
-  width: 14px;
-  height: 14px;
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
   margin: 0;
-  cursor: pointer;
+  pointer-events: none;
 }
-/* On, it says so: the label takes the accent, so you can tell at a glance without reading the
-   box — which matters because you are about to stop looking at this card entirely. */
+#autoRow .switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: linear-gradient(180deg, #1a0a0f, #3a1520);
+  box-shadow:
+    inset 0 2px 4px #000b,
+    inset 0 0 0 1px #edc24e33;
+  transition:
+    background 0.2s,
+    box-shadow 0.2s;
+}
+#autoRow .knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #8a7a66, #5a4c3c);
+  box-shadow:
+    0 2px 3px #000a,
+    inset 0 1px 0 #ffffff33;
+  transition:
+    transform 0.22s cubic-bezier(0.3, 1.4, 0.5, 1),
+    background 0.2s,
+    box-shadow 0.2s;
+}
+/* On: the track fills with maroon-lit gold and the knob slides across, cast and glowing. */
+#autoRow input:checked + .switch {
+  background: linear-gradient(180deg, #6d4709, #a06a12 60%, #c08d22);
+  box-shadow:
+    inset 0 2px 4px #0008,
+    inset 0 0 0 1px #f6e7a966,
+    0 0 12px #edc24e55;
+}
+#autoRow input:checked + .switch .knob {
+  transform: translateX(18px);
+  background: linear-gradient(180deg, var(--gold-lit), var(--gold) 55%, var(--gold-deep));
+  box-shadow:
+    0 2px 4px #000a,
+    0 0 8px #f6e7a9aa,
+    inset 0 1px 0 #ffffffaa;
+}
+#autoRow input:focus-visible + .switch {
+  outline: 2px solid var(--gold-hi);
+  outline-offset: 2px;
+}
+/* On, it says so in the label too, so it reads at a glance without finding the switch —
+   which matters because you are about to stop looking at this card entirely. */
 #autoRow:has(input:checked) {
   color: var(--gold);
+  border-color: #edc24e40;
+}
+@media (prefers-reduced-motion: reduce) {
+  #autoRow .knob {
+    transition: none;
+  }
 }
 
 /* Leaving is the one choice on this card you cannot undo, so it is the one that is coloured.
@@ -2971,13 +3048,13 @@ body.dead #rank { color: #8a5a5a; }
   inset: 0;
   background: conic-gradient(
     from var(--spin) at 100% 100%,
+    #f6e7a9,
     #edc24e,
-    #ff9a5c,
-    #ff7a9a,
-    #b78bff,
-    #5cc6ff,
-    #5ce0b0,
-    #edc24e
+    #c4683a,
+    #a83442,
+    #801e32,
+    #cc9434,
+    #f6e7a9
   );
   -webkit-mask-image: url("/assets/img/bomb-barrels.png");
   mask-image: url("/assets/img/bomb-barrels.png");
@@ -3034,7 +3111,7 @@ body.dead #rank { color: #8a5a5a; }
   position: relative;
   z-index: 1;
   /* A soft shadow under him instead of a frame around him. */
-  filter: drop-shadow(0 18px 24px #000a) drop-shadow(0 0 40px #6b21a855);
+  filter: drop-shadow(0 18px 24px #000a) drop-shadow(0 0 40px #80203255);
 }
 
 /* The gradient outline follows his SILHOUETTE rather than sitting on a circle around him.
@@ -3049,13 +3126,13 @@ body.dead #rank { color: #8a5a5a; }
   inset: 0;
   background: conic-gradient(
     from var(--spin) at 100% 100%,
+    #f6e7a9,
     #edc24e,
-    #ff9a5c,
-    #ff7a9a,
-    #b78bff,
-    #5cc6ff,
-    #5ce0b0,
-    #edc24e
+    #c4683a,
+    #a83442,
+    #801e32,
+    #cc9434,
+    #f6e7a9
   );
   -webkit-mask-image: url("/assets/img/mascot.png");
   mask-image: url("/assets/img/mascot.png");
@@ -3351,13 +3428,13 @@ label {
 .hoverFlow:focus-visible {
   background: conic-gradient(
     from var(--spin),
-    #c7b057,
-    #ce8c6e,
-    #c4837e,
-    #b490da,
-    #7badd3,
-    #78b39b,
-    #c7b057
+    #edc24e,
+    #cc9434,
+    #c4683a,
+    #a83442,
+    #801e32,
+    #b85c54,
+    #edc24e
   );
   -webkit-background-clip: text;
   background-clip: text;

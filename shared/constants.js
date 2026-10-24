@@ -188,6 +188,37 @@ export const POWDER_GUARANTEE_TICK = Math.round(0.6 * 10 * 60 * TICK_HZ);
  * the way you were going for PUDDLE_SLIDE_TICKS before you stop. Momentum, not ice-rink chaos —
  * at half pace that is about a third of a tile, enough to overshoot a corner you were braking
  * for and not enough to carry you into a blast you were standing clear of. */
+/* Seagulls.
+ *
+ * Now and then a gull crosses the island — one at a time usually, two at most — on a straight
+ * line with a lazy weave in it, entering and leaving well outside the board. It is scenery right
+ * up until somebody catches one in a blast, and then it drops a gold coin.
+ *
+ * Catching one is meant to be HARD, and three things make it so:
+ *   - it is only low enough to hit during a dive: a short dip every few seconds, the bottom
+ *     GULL_LOW_TICKS of it, which you can read coming from its shadow closing in under it;
+ *   - only fire still in its lethal window counts, the same window that kills players;
+ *   - it is quick — about four tiles a second — and over water there is nothing to burn it with.
+ * So it is a timing shot against a moving target, which is the most satisfying thing a bomb can
+ * do in a game about standing still in the right place.
+ *
+ * The coin does not count against GOLD_MAX_PER_ROUND. That cap is about the floor paying out
+ * by luck; this one was earned.
+ */
+export const GULL_FIRST_TICK = 25 * TICK_HZ;         // the first one comes early, so people see it
+export const GULL_GAP_MIN_TICKS = 40 * TICK_HZ;      // then one every 40-90 s
+export const GULL_GAP_MAX_TICKS = 90 * TICK_HZ;
+export const GULL_MAX = 2;
+export const GULL_SPEED_UNITS = 34;                  // per tick: just under four tiles a second
+export const GULL_OFFMAP_TILES = 4;                  // how far outside the map it enters and leaves
+export const GULL_WEAVE_UNITS = 300;                 // the side-to-side drift, a little over a tile
+export const GULL_WEAVE_TICKS = 170;                 // ...over about six seconds
+export const GULL_DIVE_EVERY_TICKS = 105;            // a dive every three and a half seconds
+export const GULL_DIVE_TICKS = 27;                   // each lasting a bit under one
+// The bottom of the dive, when it is low enough to burn: the middle two fifths of each dive,
+// about eleven ticks, which is one tick in nine of its flight.
+export const GULL_LOW_ALT = 0.22;
+
 export const ICE_CHANCE = 0.05;
 export const PUDDLE_TICKS = 8 * TICK_HZ;
 // The drying-up, scaled with the lifetime so the tail is still the same share of it — a puddle
@@ -560,6 +591,19 @@ export const STREAK_ACE = 'ACE';
 
 export const GAMESPEED_MIN = 10, GAMESPEED_MAX = 200;   // percent of TICK_HZ
 export const BAN_MAX_HOURS = 24;
+
+/* Bots, kept topped up by the room itself.
+ *
+ * The moment a person joins there are at least AUTO_BOTS_MIN bots, so one or two early arrivals
+ * have something to fight instead of an empty island. Once no human has been present for
+ * AUTO_BOTS_EMPTY_ROUNDS whole rounds the bots are all removed — sixteen brains playing to nobody
+ * all weekend is wasted CPU.
+ *
+ * A host removing bots by hand (/kick bot N, or /bots lower than it is) switches the top-up off:
+ * re-adding what somebody just deliberately took away is the server arguing with its host. It
+ * comes back on only after the room has emptied and stayed empty for those same two rounds. */
+export const AUTO_BOTS_MIN = 6;
+export const AUTO_BOTS_EMPTY_ROUNDS = 2;
 
 // Wall regrowth stops once this much of the open floor is wall again, or a long round silts up
 // into a maze nobody can cross.

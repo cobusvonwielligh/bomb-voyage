@@ -21,6 +21,7 @@ export function createWorld() {
     bombs: [],
     perks: [],
     puddles: [],          // melted ice; movement reads these, so prediction needs them too
+    gulls: [],            // flight descriptions; drawn with gullAt, see shared/sim/gulls.js
     fires: [],            // derived locally, never sent — see docs/NETCODE.md §1a
     burst: new Set(),     // bomb ids already turned into fire here
     pending: [],          // inputs sent but not yet acknowledged
@@ -47,6 +48,7 @@ export function createWorld() {
     w.bombs = m.bombs || [];
     w.perks = m.perks || [];
     w.puddles = m.puddles || [];
+    w.gulls = m.gulls || [];
     // Derived state belongs to the old map; a new round must not inherit its fires.
     w.fires.length = 0;
     w.burst.clear();
@@ -136,6 +138,8 @@ export function createWorld() {
     w.tick = snap.tick;
     w.perks = snap.perks || [];
     w.puddles = snap.puddles || [];
+    // Omitted from the snapshot when the sky is empty, so absent means none.
+    w.gulls = snap.gulls || [];
 
     // Keep any bomb we already know about: the server drops it from the snapshot the moment it
     // explodes, and we may not have reached its fuse tick yet.

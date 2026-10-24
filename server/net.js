@@ -125,7 +125,7 @@ export function createCommands({ room, config, reply, announce, kick, bans }) {
         if (!args.length) return reply(ws, `${room.botCount()} bots. /bots N to change.`);
         const n = Number(args[0]);
         if (!Number.isFinite(n)) return reply(ws, 'usage: /bots N');
-        const got = room.setBots(n);
+        const got = room.setBots(n, { byHand: true });
         return announce(`${nameOf(seat)} set bots to ${got}`);
       }
 
@@ -244,6 +244,7 @@ export function attachHub(server, config) {
     },
     maxPlayers: config.maxPlayers,
     leaderboard: config.leaderboard,
+    minBots: config.minBots ?? 0,
   });
   room.start();
 

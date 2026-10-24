@@ -355,6 +355,24 @@ appearing next to somebody would be a free kill nobody could read coming. It run
 function's wall-fill cap, because a guarantee that only fires on maps which happen to be open is
 not a guarantee, and a full map is exactly when a keg is most wanted.
 
+## 8c. Seagulls
+
+Now and then a gull crosses the island: the first about 25 s into a round, then one every
+40–90 s, never more than two in the air. Each flies a straight line with a lazy weave in it,
+entering and leaving well outside the board, at just under four tiles a second.
+
+| | |
+|---|---|
+| Catchable | only at the bottom of a dive — a dip every ~3.5 s, low for ~11 ticks of it |
+| Hit by | fire in its lethal window on the tile under it, exactly what kills a player |
+| Drops | **one gold coin**, on the nearest bare floor. Does **not** count against the round's five |
+| Credit | the kill feed names whoever's fire it was; the coin goes to whoever picks it up |
+
+It is meant to be hard: one tick in nine of a flight is low enough, it is quick, and over water
+there is nothing to burn it with. The tell is the shadow — at cruising height it sits well off to
+one side of the bird, and in a dive it slides in underneath and turns crisp. Gulls draw from
+their own random stream, so adding them changed no drop or regrowth roll.
+
 ---
 
 ## 9. Observer mode
@@ -415,7 +433,13 @@ Kill feed lines share the chat panel.
 Anyone: `/bots N`, `/who`, `/logout`, `/help`.
 
 Host only: `/restart`, `/godmode`, `/kick bot N`, `/kick NAME [hours]`, `/map 0-4`,
-`/gamespeed 1-200`, `/roundtime 0.1-60`.
+`/gamespeed 10-200`, `/roundtime 0.1-60`.
+
+**Bots look after themselves.** The moment a person joins, the room tops itself up to at least
+six bots (`min_bots` in config.ini, 0 to switch off). After two whole rounds with no person
+present, every bot is removed. A host who removes bots by hand — `/kick bot N`, kicking one by
+name, or `/bots` lower than it is — switches the top-up off, and it stays off until the room has
+emptied and sat empty for those two rounds. Asking for *more* bots never switches it off.
 
 **The host is a role, not a name.** It is the configured admin while they are connected and the
 longest-standing human otherwise, so a room is never left without somebody who can restart it —

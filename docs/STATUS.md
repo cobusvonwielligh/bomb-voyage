@@ -1,6 +1,6 @@
 # Bomb Voyage — Where We Stand
 
-Last updated: **2026-10-24**. Live on `bombvoyage.online`. 273 tests passing.
+Last updated: **2026-10-24**. Live on `bombvoyage.online`. 291 tests (the three deploy-webhook smoke tests need bash, so CI runs those).
 
 This document replaces the "⬜ The game: not started" line in the README. The game is built, the
 whole plan in [PLAN.md](PLAN.md) has been walked through, and several decisions in it have since
@@ -18,7 +18,7 @@ accurate; the parts that describe *what is not built yet* are not.
 |---|---|
 | Playable end to end | ✅ |
 | Deployed, TLS, auto-restart, rollback | ✅ |
-| Bots | ✅ 15 of them, pathfinding and fleeing; `npm run botbench` measures them |
+| Bots | ✅ up to 15, pathfinding and fleeing; at least 6 appear the moment anyone joins, and they leave after two empty rounds. `npm run botbench` measures them |
 | Maps | ✅ 5 |
 | Art and audio | ✅ art in code; music is four produced files (see §2e) |
 | Transport | ✅ **WebTransport over QUIC, with WebSocket as the fallback** |
@@ -84,13 +84,30 @@ it and nobody else — and the only one rare enough to be an event rather than a
 - **Powder kegs.** A destructible block that detonates at radius 7 on the tick it breaks. At most
   six a round, at least one guaranteed. They chain into each other and into bombs, because a keg
   *is* a bomb as far as the blast code is concerned. See [RULES.md](RULES.md) §10.
+- **Seagulls.** One crosses the island every minute or so. Catch one in a blast at the bottom of
+  its dive — hard on purpose: about one tick in nine of its flight, and its shadow is the tell —
+  and it drops a gold coin that does not count against the round's five. The server describes a
+  flight once (start, end, departure tick, phases) and the client draws it from its own clock,
+  so a gull costs a few dozen bytes a snapshot. See [RULES.md](RULES.md) §8c and
+  `shared/sim/gulls.js`.
+- **Bots that manage themselves.** At least six the moment anybody joins; all of them gone after
+  two rounds with nobody there. A host removing bots by hand turns the top-up off until the room
+  has emptied for those two rounds. See [RULES.md](RULES.md) §12.
 
 ### (e) Art is still code. The music is not.
 
 Four PNGs live in `public/assets/img/`: the mascot, its cropped face, a stack of kegs and an icon.
 They are landing-page and HUD decoration only. **Everything inside the game — terrain, players,
-bombs, fire, perks, the sea, the moored ship, the boulders — is still drawn from shapes in
-code**, and that rule has not moved.
+bombs, fire, perks, the sea, the moored ship, the boulders, the gulls — is still drawn from
+shapes in code**, and that rule has not moved. The ship (2.5× her original size now) and the
+sea boulders (the largest 3.5×, the rest about 2.5×) are sized in `render.js`.
+
+What changed is how often some of it is drawn. Static or slow things are painted once into an
+offscreen canvas and blitted: the ship, the shallows bands, players' name labels, and the coastal
+glow (repainted at ~12 Hz rather than every frame — it moves on periods of tens of seconds). The
+sea's 590 flow particles evaluate the current once per particle instead of twice and stroke in a
+dozen batched paths instead of 590. The dock meter scales its bars with a transform instead of
+writing `height`, which was forcing a layout every frame. Nothing visible was taken away.
 
 **The music is four produced files**, in `assets/audio/`: `theme`, `drift`, `suspend`,
 `undertow`. Around three minutes each, cycling, with the theme excluded for the duration of a
@@ -132,6 +149,7 @@ The assets folder is now `art.js` plus `img/`, `fonts/` and `audio/`.
 | `blocks.js` | Damage, destruction, wall regrowth, keg placement |
 | `perks.js` | Drop table, pickup, supply-and-demand drop rate, scatter on death |
 | `statuses.js` | Contagious statuses and their spread — dormant since the Gift went |
+| `gulls.js` | Seagulls: flight as a pure function of the tick, spawning, and blast hits (server-only decision) |
 | `round.js` | The one ordered tick: the only place that decides what happens before what |
 
 Deterministic throughout: integers only, one tile is 256 units, no wall clock, no
@@ -182,6 +200,8 @@ Every one of these is in `shared/constants.js`. Nothing is inline.
 | Rum | 2.7% of drops. Softens damage, sways your walk, rolls your camera for 20 s |
 | Gold | 2.1% of drops, ≤5 a round. 400 XP. Changes nothing about the round — it is a collectible |
 | Kegs | ≤6 a round, ≥1 guaranteed, radius 7 |
+| Gulls | first at 25 s, then every 40–90 s, ≤2 aloft, ~4 tiles/s, one coin each when downed |
+| Bots | ≥6 while anyone plays (`min_bots`), removed after 2 empty rounds |
 | Zoom | fitted to the **island**, floor 0.68, 2 tiles of sea minimum |
 | Levels | 100 hours to Veteran (level 20) |
 
@@ -206,6 +226,7 @@ is the index.
 | Fire overshooting a chain | Blast arms passed straight through other bombs instead of stopping at them |
 | Two bombs from one tap | Placement ran per tick. Harmless while the bomb landed underfoot; aimed placement made the second attempt fall back to the tile you were standing on |
 | Scores lost on deploy | Only written at round end and disconnect, and `leaderboard.stop()` was not awaited before `process.exit` |
+| Stuck in one tile after `/gamespeed` | The client clock and fixed-step loop always ran at 30 Hz. At 200% every input was stamped for a tick the server had already simulated and was dropped; at 50% the server's input buffer evicted the ones it needed next. The client now scales both by the server's rate (`gamespeed` message, `welcome.config.gamespeed`) |
 | Searching `server/net.js` returned nothing | The file held raw control bytes inside a character class, so grep and `git diff` treated it as binary and said nothing at all. `test/sources.test.js` now fails on any raw control byte |
 
 ---
@@ -252,6 +273,8 @@ Accounts, payments, matchmaking, mobile, anti-cheat, a persistent world. Unchang
 - **The QUIC addon is compiled on the box** and stashed outside the app directory, because
   `npm ci` deletes `node_modules`. The deploy script restores it; if that step ever disappears,
   WebTransport dies silently at the next lockfile change. See [DEPLOY.md](DEPLOY.md) §9.
+- **Bots:** `min_bots` in config.ini (env `MIN_BOTS`), default 6, 0 switches the automatic top-up
+  off. `/healthz` reports `autoBots`.
 - **Host commands:** `/restart`, `/godmode`, `/kick`, `/map`, `/gamespeed`, `/roundtime`. The host
   is the named admin when present and the longest-standing human otherwise, so a room is never
   left without someone who can run it.

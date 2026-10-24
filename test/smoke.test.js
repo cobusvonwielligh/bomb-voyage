@@ -25,6 +25,8 @@ const startServer = () => new Promise((resolve, reject) => {
       PORT: String(PORT),
       LAG: '0',
       DEPLOY_TOKEN,
+      // Seat counts below are exact, so no automatic bots joining alongside the test client.
+      MIN_BOTS: '0',
       // Never let a test actually redeploy anything.
       DEPLOY_SCRIPT: '/dev/null',
     },
