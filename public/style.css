@@ -1835,13 +1835,16 @@ h1 {
 #titleWrap {
   position: relative;
   width: fit-content; max-width: 100%;
-  margin-inline: auto;
+  /* 15px up. A negative TOP margin rather than a transform, so the slogan and the form below
+     come up with it — a transform would move the title off its own space and leave the gap it
+     used to fill sitting there empty. */
+  margin: -15px auto 0;
 }
 #version {
   position: absolute; right: 0; top: 100%;
-  margin-top: -4px;
-  font-family: var(--nums); font-size: 9.5px;
-  letter-spacing: .16em;
+  margin-top: -3px;
+  font-family: var(--nums); font-size: 8px;
+  letter-spacing: .14em;
   color: var(--dim); opacity: .72;
   pointer-events: none;
   white-space: nowrap;
