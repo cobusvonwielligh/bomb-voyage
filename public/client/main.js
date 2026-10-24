@@ -47,7 +47,6 @@ const PERK_LABEL = {
   2: { text: '+1 FIRE', colour: '#ff9b4a' },
   3: { text: '+1 SPEED', colour: '#5fd8f0' },
   4: { text: 'SHIELD', colour: '#5ad1a0' },
-  5: { text: 'GIFT', colour: '#ff8fd8' },
   15: { text: '+ STIM', colour: '#ffe04a' },
   16: { text: 'RUM', colour: '#d99a55' },
 };

@@ -150,7 +150,6 @@ export function createSfx({ listener }) {
     [PERK.FIRE]: [79, 83],      // major third — bright
     [PERK.SKATE]: [81, 93],     // octave, quick — it is about speed
     [PERK.SHIELD]: [84, 91],    // high and open
-    [PERK.GIFT]: [80, 75],      // DOWN, because it might be a disease
   };
 
   // ─── the sounds ─────────────────────────────────────────────────────────────

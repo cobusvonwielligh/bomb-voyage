@@ -92,10 +92,10 @@ test('MAX_PER_FRAME keys are all real voices', () => {
 });
 
 test('every perk that can drop has its own pickup interval', () => {
-  // A perk with no entry falls back to a generic two-note blip, which is fine — but the five that
-  // are actually in v1 should each be distinguishable.
+  // A perk with no entry falls back to a generic two-note blip, which is fine — but the four
+  // original upgrades should each be distinguishable. Rum has its own voice (glug).
   const block = sfxSrc.slice(sfxSrc.indexOf('const PERK_NOTES = {'));
-  for (const name of ['BOMB', 'FIRE', 'SKATE', 'SHIELD', 'GIFT']) {
+  for (const name of ['BOMB', 'FIRE', 'SKATE', 'SHIELD']) {
     assert.ok(block.includes(`[PERK.${name}]`), `no pickup sound for ${name}`);
     assert.ok(PERK[name] !== undefined, `PERK.${name} does not exist`);
   }

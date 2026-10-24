@@ -51,7 +51,7 @@ import { drawTile, drawPlayer, drawBomb, drawFire, drawPerk, playerShades, PALET
 
 const $ = id => document.getElementById(id);
 const BLOCK_NAMES = Object.fromEntries(Object.entries(BLOCK).map(([k, v]) => [v, k.toLowerCase()]));
-const PERK_NAMES = { 1: 'bomb', 2: 'fire', 3: 'skate', 4: 'shield', 5: 'gift', 9: 'reserved' };
+const PERK_NAMES = { 1: 'bomb', 2: 'fire', 3: 'skate', 4: 'shield', 15: 'stim', 16: 'rum', 9: 'reserved' };
 
 function cell(parent, label, paint) {
   const scale = +$('scale').value;
@@ -92,7 +92,7 @@ function render() {
       cell($('fire'), `${kind} ${rot}`, c => drawFire(c, { kind, rot, age: 0 }));
   cell($('fire'), 'core fading', c => drawFire(c, { kind: 'core', age: 0.8 }));
 
-  for (const t of [1, 2, 3, 4, 5, 9])
+  for (const t of [1, 2, 3, 4, 15, 16, 9])
     cell($('perks'), PERK_NAMES[t], c => drawPerk(c, { type: t }));
 }
 

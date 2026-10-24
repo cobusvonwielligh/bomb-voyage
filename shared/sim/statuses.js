@@ -4,7 +4,7 @@
 // docs/RULES.md §7.
 
 import {
-  STATUS, STATUS_TICKS, CONTAGIOUS, CONTAGION_COOLDOWN_TICKS, HITBOX_UNITS, HITBOX_REDUCED_UNITS,
+  STATUS, CONTAGIOUS, CONTAGION_COOLDOWN_TICKS, HITBOX_UNITS, HITBOX_REDUCED_UNITS,
 } from '../constants.js';
 import { has, applyStatus } from './state.js';
 
@@ -77,13 +77,4 @@ export function spread(state) {
   if (state.contagion.size > 64) {
     for (const [k, until] of state.contagion) if (until < state.tick) state.contagion.delete(k);
   }
-}
-
-/** Give someone a random disease — what an unlucky Gift does. */
-export function infect(state, p, next) {
-  if (has(p, STATUS.INVULN)) return null;
-  const bit = CONTAGIOUS_LIST[(next() * CONTAGIOUS_LIST.length) | 0];
-  applyStatus(state, p, bit, STATUS_TICKS[bit]);
-  state.events.push({ e: 'status', tick: state.tick, i: p.i, s: bit, until: state.tick + STATUS_TICKS[bit] });
-  return bit;
 }
