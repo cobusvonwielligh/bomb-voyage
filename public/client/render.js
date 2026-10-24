@@ -888,10 +888,12 @@ export function createRenderer(canvas, world) {
    *
    * Additive, dim, with a faint brighter block at the tip, and drawn under the island so a bar
    * reaching into a bay is simply covered by the land. */
-  const EQ_MAX = 2.5;                                   // tiles of reach, at full scale
+  // Twice the blocks of the last pass, spread over twice the reach, each at half the light: the
+  // same glow over a larger area, so it reads as a tint on the water rather than as a bar.
+  const EQ_MAX = 5;                                     // tiles of reach, at full scale
   const EQ_SUB = 4;                                     // blocks per tile, outward
   // Half of what it was again — 0.15 and a 0.3 cap — at the user's request after a real round.
-  const EQ_ALPHA = 0.075, EQ_CAP_ALPHA = 0.14;
+  const EQ_ALPHA = 0.038, EQ_CAP_ALPHA = 0.07;
   const EQ_SHADES = 24;
   const EQ_COLOURS = Array.from({ length: EQ_SHADES }, (_, k) =>
     `hsl(${(205 - k * 2.3) | 0} 55% ${(54 + k * 0.7) | 0}%)`);  // deep blue bass to aqua treble
