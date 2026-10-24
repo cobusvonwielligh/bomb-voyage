@@ -64,11 +64,16 @@ export function createRenderer(canvas, world) {
   const CALM = {
     bass: 0, mid: 0, high: 0, level: 0, beat: 0, beats: 0,
     bpm: 0, phase: 0, lock: 0, spark: 0, sparks: 0, tone: 0.5, accent: 0, accents: 0,
-    eq: new Float32Array(16),
+    eq: new Float32Array(24),
   };
   let soundOf = null, sound = CALM, lastSparks = 0;
+  /* The music as the open sea feels it: the listener's bands and beat, eased again — a fifth of
+   * a second to rise, most of a second to fall. The raw beat snaps up and decays in a fifth of a
+   * second, and read directly it made everything it touched jump. */
+  const mood = { bass: 0, mid: 0, high: 0, level: 0, beat: 0 };
   let eqFor = null, eqCoast = [];            // shoreline tiles with their band, per map
-  const eqLen = new Float32Array(16);        // drawn bar lengths, in tiles, eased
+  let eqLen = new Float32Array(24);          // bar lengths per band, in tiles, eased
+  let eqBlur = new Float32Array(24);         // the same, blurred across neighbours; what is drawn
   let flowT = 0;                             // the surface texture's clock; see drawSea
   // The vignette, cached against the view size it was built for.
   let vignette = null, vignetteFor = null;
@@ -865,24 +870,30 @@ export function createRenderer(canvas, world) {
 
   /* The island is the speaker.
    *
-   * A sixteen-band equaliser built out of the sea itself: every stretch of coast belongs to one
-   * band, and that band's level pushes a bar of light out from the rock, up to EQ_MAX tiles,
-   * made of sea tiles exactly like the shallows are. Bands run round the island by angle — bass
-   * at the bottom, treble at the top, mirrored left and right — so the whole coastline is the
-   * spectrum, and you can watch a bassline work the south shore while the hats flicker on the
-   * north.
+   * An equaliser built out of the sea itself: the coast is the spectrum, by angle round the
+   * island — bass at the bottom, treble at the top, mirrored left and right — and the level
+   * there lifts a soft bar of light out of the shallows.
    *
-   * Each band is scored against its own history in the listener, so every bar dances around
-   * its own usual height rather than the bass towering over everything. Additive light, a bright
-   * cap on the tip of every bar like a meter's peak, and it is drawn under the island, so a bar
-   * that reaches into a bay is simply covered by the land. */
-  const EQ = 16;
-  // Tones down from the first version (4.5 tiles, 0.34 alpha, a 0.75 cap), which in a real round
-  // was the brightest thing on the screen. A glow along the coast, not a stage light.
-  const EQ_MAX = 3;                                     // tiles, at full scale
-  const EQ_ALPHA = 0.15, EQ_CAP_ALPHA = 0.3;
-  const EQ_COLOURS = Array.from({ length: EQ }, (_, k) =>
-    `hsl(${(205 - k * 3.4) | 0} 62% ${(54 + k * 1.1) | 0}%)`);  // deep blue bass to aqua treble
+   * Three things make it read as water rather than as a meter, and all three came from it being
+   * too jumpy in a real round:
+   *
+   *   SLOW     the listener eases each band over a quarter of a second up and most of one down,
+   *            and the bars ease again here on top of that.
+   *   SMOOTH   neighbouring bands are blurred together, and every strip of coast reads its
+   *            height at its exact position between two bands — so the coast is one continuous
+   *            rolling profile, not a staircase where one stretch hands over to the next.
+   *   FINE     each tile is split into a grid: EQ_SUB blocks outward and two across, small
+   *            inset blocks rather than whole-tile slabs. More resolution, far less weight.
+   *
+   * Additive, dim, with a faint brighter block at the tip, and drawn under the island so a bar
+   * reaching into a bay is simply covered by the land. */
+  const EQ_MAX = 2.5;                                   // tiles of reach, at full scale
+  const EQ_SUB = 4;                                     // blocks per tile, outward
+  // Half of what it was again — 0.15 and a 0.3 cap — at the user's request after a real round.
+  const EQ_ALPHA = 0.075, EQ_CAP_ALPHA = 0.14;
+  const EQ_SHADES = 24;
+  const EQ_COLOURS = Array.from({ length: EQ_SHADES }, (_, k) =>
+    `hsl(${(205 - k * 2.3) | 0} 55% ${(54 + k * 0.7) | 0}%)`);  // deep blue bass to aqua treble
 
   /* Bioluminescence.
    *
@@ -913,8 +924,8 @@ export function createRenderer(canvas, world) {
       x, y, age: -delay,
       span: 2 + Math.random() * 1.5,
       size: 7 + Math.random() * 6,
-      peak: 0.22 + Math.random() * 0.2,
-      tw: 4 + Math.random() * 6, ph: Math.random() * Math.PI * 2,
+      peak: 0.11 + Math.random() * 0.1,
+      tw: 1.4 + Math.random() * 2.2, ph: Math.random() * Math.PI * 2,     // a slow shimmer, not a flicker
       tint: Math.random() < 0.65 ? 0 : 1,
     });
   }
@@ -936,13 +947,13 @@ export function createRenderer(canvas, world) {
   function feedGlow(dtMs) {
     if (!world.map || !soundOf) return;
     const dt = dtMs / 1000;
-    const rate = 0.5 + lifted(sound.high) * 4 + lifted(sound.mid) * 1.2;      // per second
+    const rate = 0.3 + mood.high * 2 + mood.mid * 0.6;                         // per second
     const n = Math.floor(rate * dt) + (Math.random() < (rate * dt) % 1 ? 1 : 0);
     for (let i = 0; i < n; i++) { const p = shallowsPoint(); if (p) spawnGlow(p[0], p[1]); }
     if (sound.sparks !== lastSparks) {
       lastSparks = sound.sparks;
       const p = shallowsPoint();
-      if (p) for (let i = 0; i < 3; i++) {
+      if (p) for (let i = 0; i < 2; i++) {
         spawnGlow(p[0] + (Math.random() - 0.5) * 12, p[1] + (Math.random() - 0.5) * 12, i * 0.12);
       }
     }
@@ -955,7 +966,7 @@ export function createRenderer(canvas, world) {
       glowSprite('rgba(224,246,255,1)', 'rgba(120,205,250,0.45)', 'rgba(40,120,200,0.1)'),
     ];
     const dt = dtMs / 1000;
-    const lift = 1 + sound.beat * 0.45;
+    const lift = 1 + mood.beat * 0.2;
     const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
     ctx.globalCompositeOperation = 'lighter';
     for (let i = glow.length - 1; i >= 0; i--) {
@@ -968,7 +979,7 @@ export function createRenderer(canvas, world) {
       g.x += flowX(g.x, g.y, seaT) * 0.3 * dt;
       g.y += flowY(g.x, g.y, seaT) * 0.3 * dt;
       const a = g.peak * smooth(0, 0.22, t) * (1 - smooth(0.5, 1, t))
-        * (0.72 + 0.28 * Math.sin(seaT * g.tw + g.ph)) * lift;
+        * (0.82 + 0.18 * Math.sin(seaT * g.tw + g.ph)) * lift;
       if (a < 0.01) continue;
       ctx.globalAlpha = Math.min(1, a);
       ctx.drawImage(glowSprites[g.tint], g.x - g.size / 2, g.y - g.size / 2, g.size, g.size);
@@ -977,61 +988,87 @@ export function createRenderer(canvas, world) {
     ctx.globalAlpha = 1;
   }
 
+  /**
+   * The coast, cut into strips: two per sea-facing tile edge, each half a tile wide, each with
+   * its own continuous position along the spectrum (0 bass … 1 treble). Cached per map.
+   */
   function coastEq() {
     if (eqFor === world.map && eqCoast.length) return eqCoast;
     eqFor = world.map;
     eqCoast = [];
+    const S = TILE_PX, step = S / EQ_SUB, half = S / 2;
     const [lx, ly, lw, lh] = landBounds();
     const cx = lx + lw / 2, cy = ly + lh / 2;
     for (const s of shoreline()) {
       for (const [bit, dx, dy] of [[1, 1, 0], [4, -1, 0], [2, 0, -1], [8, 0, 1]]) {
         if (!(s.e & bit)) continue;
-        // 0 straight below the centre, 1 straight above, either way round.
-        const t = Math.abs(Math.atan2(s.tx + 0.5 - cx, s.ty + 0.5 - cy)) / Math.PI;
-        eqCoast.push({ tx: s.tx, ty: s.ty, dx, dy, band: Math.min(EQ - 1, (t * EQ) | 0) });
+        for (let h = 0; h < 2; h++) {
+          // Where this half-strip sits along the coast, in tiles, for its spectrum position.
+          const mx = dx ? s.tx + 0.5 + dx * 0.5 : s.tx + 0.25 + h * 0.5;
+          const my = dy ? s.ty + 0.5 + dy * 0.5 : s.ty + 0.25 + h * 0.5;
+          const pos = Math.abs(Math.atan2(mx - cx, my - cy)) / Math.PI;   // 0 below, 1 above
+          eqCoast.push({
+            // First block, the one touching the rock, and how to step outward from it.
+            x: dx > 0 ? (s.tx + 1) * S : dx < 0 ? s.tx * S - step : s.tx * S + h * half,
+            y: dy > 0 ? (s.ty + 1) * S : dy < 0 ? s.ty * S - step : s.ty * S + h * half,
+            sx: dx * step, sy: dy * step,
+            w: dx ? step : half, h: dy ? step : half,
+            pos, shade: Math.min(EQ_SHADES - 1, (pos * EQ_SHADES) | 0),
+          });
+        }
       }
     }
-    eqCoast.sort((a, b) => a.band - b.band);           // one fillStyle change per band
+    eqCoast.sort((a, b) => a.shade - b.shade);         // one fillStyle change per shade
     return eqCoast;
   }
 
   function drawCoastEq(dtMs) {
     const eq = sound.eq;
-    if (!eq) return;
-    let any = false;
-    for (let k = 0; k < EQ; k++) {
-      const target = Math.max(0, (eq[k] - 0.3) / 0.7) * EQ_MAX;
-      // Eased on top of the listener's, so the bars glide rather than jump.
-      eqLen[k] += (target - eqLen[k]) * (1 - Math.exp(-dtMs / 90));
-      if (eqLen[k] > 0.05) any = true;
+    if (!eq || !eq.length) return;
+    const n = eq.length;
+    if (eqLen.length !== n) { eqLen = new Float32Array(n); eqBlur = new Float32Array(n); }
+    const k = 1 - Math.exp(-dtMs / 260);               // a second, slower glide on top
+    for (let b = 0; b < n; b++) {
+      // The smoothed bands live lower than the raw ones did (peaks are rounded off), so the map
+      // starts a little lower too — otherwise slowing the bars down would also have shortened
+      // them, and the reduction would have been far more than the half that was asked for.
+      const target = Math.max(0, Math.min(1, (eq[b] - 0.26) / 0.5)) * EQ_MAX;
+      eqLen[b] += (target - eqLen[b]) * k;
     }
+    // Blur across neighbouring bands, twice, so no band stands up on its own like a post. The
+    // eased lengths are left alone; the blur is only what is drawn.
+    eqBlur.set(eqLen);
+    for (let pass = 0; pass < 2; pass++) {
+      let prev = eqBlur[0];
+      for (let b = 0; b < n; b++) {
+        const cur = eqBlur[b], next = eqBlur[Math.min(n - 1, b + 1)];
+        eqBlur[b] = prev * 0.25 + cur * 0.5 + next * 0.25;
+        prev = cur;
+      }
+    }
+    let any = false;
+    for (let b = 0; b < n; b++) if (eqBlur[b] > 0.04) { any = true; break; }
     if (!any) return;
 
-    const S = TILE_PX;
     ctx.globalCompositeOperation = 'lighter';
-    let band = -1;
+    let shade = -1;
+    const deepest = EQ_MAX * EQ_SUB;
     for (const c of coastEq()) {
-      const L = eqLen[c.band];
-      if (L < 0.05) continue;
-      if (c.band !== band) { band = c.band; ctx.fillStyle = EQ_COLOURS[band]; }
-      const steps = Math.ceil(L);
-      for (let n = 1; n <= steps; n++) {
-        const frac = Math.min(1, L - (n - 1));
-        ctx.globalAlpha = EQ_ALPHA * frac * (1 - (n - 1) / (EQ_MAX + 1.5));
-        const x = (c.tx + c.dx * n) * S, y = (c.ty + c.dy * n) * S;
-        // Inset, so each tile is a separate segment like the blocks of an LED meter. Solid, a run
-        // of coast in one band merged into a slab and read as the water level rising.
-        ctx.fillRect(x + 2, y + 2, S - 4, S - 4);
-        if (n === steps) {
-          // The cap: a bright edge on the outer side of the tip tile, where the bar ends.
+      // Read the height at this strip's exact place between two bands.
+      const f = c.pos * (n - 1), b0 = f | 0, b1 = Math.min(n - 1, b0 + 1), t = f - b0;
+      const L = (eqBlur[b0] * (1 - t) + eqBlur[b1] * t) * EQ_SUB;     // in blocks
+      if (L < 0.15) continue;
+      if (c.shade !== shade) { shade = c.shade; ctx.fillStyle = EQ_COLOURS[shade]; }
+      const blocks = Math.ceil(L);
+      for (let i = 0; i < blocks; i++) {
+        const frac = Math.min(1, L - i);
+        const x = c.x + c.sx * i, y = c.y + c.sy * i;
+        ctx.globalAlpha = EQ_ALPHA * frac * (1 - i / (deepest + 3));
+        ctx.fillRect(x + 1, y + 1, c.w - 2, c.h - 2);
+        if (i === blocks - 1) {
+          // The tip: one faintly brighter block where the bar ends.
           ctx.globalAlpha = EQ_CAP_ALPHA * frac;
-          const fill = ctx.fillStyle;
-          ctx.fillStyle = '#e8fbff';
-          if (c.dx > 0) ctx.fillRect(x + S - 5, y + 2, 3, S - 4);
-          else if (c.dx < 0) ctx.fillRect(x + 2, y + 2, 3, S - 4);
-          else if (c.dy < 0) ctx.fillRect(x + 2, y + 2, S - 4, 3);
-          else ctx.fillRect(x + 2, y + S - 5, S - 4, 3);
-          ctx.fillStyle = fill;
+          ctx.fillRect(x + 1, y + 1, c.w - 2, c.h - 2);
         }
       }
     }
@@ -1044,7 +1081,7 @@ export function createRenderer(canvas, world) {
     seaT += dtMs / 1000;
     // The music's clock and push. See `sound` at the top of the renderer.
     // The surface texture drifts a touch faster when the music is busy. A touch.
-    flowT += (dtMs / 1000) * (1 + lifted(sound.level) * 0.5);
+    flowT += (dtMs / 1000) * (1 + mood.level * 0.25);
 
     ctx.fillStyle = PALETTE.seaDeep;
     ctx.fillRect(0, 0, vw, vh);
@@ -1109,7 +1146,7 @@ export function createRenderer(canvas, world) {
     // Tinted by the brightness of the mix: dark, bass-heavy passages pull the water toward deep
     // indigo, bright ones toward teal. Slow — `tone` has a 700 ms release — so it reads as the
     // light changing over the sea, never as a flash.
-    const lift = lifted(sound.bass) * 0.035 + sound.beat * 0.012;
+    const lift = mood.bass * 0.018 + mood.beat * 0.006;
     if (lift > 0.004) {
       const t = sound.tone;
       ctx.fillStyle = `rgba(${(52 - 22 * t) | 0},${(92 + 70 * t) | 0},${(196 - 14 * t) | 0},${lift})`;
@@ -1168,7 +1205,7 @@ export function createRenderer(canvas, world) {
 
     // Both bands breathe with the bass: the shallows glow on the kick.
     // The shallows breathe very slightly with the bass.
-    const kickLift = lifted(sound.bass);
+    const kickLift = mood.bass * 0.5;
     shelf(2, 0.16 * (1 + kickLift * 0.4), PALETTE.seaMid);      // the outer, deeper step
     shelf(1, 0.42 * (1 + kickLift * 0.15), PALETTE.seaLight);
 
@@ -1534,6 +1571,14 @@ export function createRenderer(canvas, world) {
 
     // Listen before drawing a single wave, so everything this frame hears the same instant.
     sound = soundOf ? soundOf(dtMs) : CALM;
+    // And smoothed once more, here, for everything on the open sea. See mood.
+    {
+      const up = 1 - Math.exp(-dtMs / 180), down = 1 - Math.exp(-dtMs / 700);
+      const glide = (key, v) => { mood[key] += (v - mood[key]) * (v > mood[key] ? up : down); };
+      glide('bass', lifted(sound.bass)); glide('mid', lifted(sound.mid));
+      glide('high', lifted(sound.high)); glide('level', lifted(sound.level));
+      glide('beat', sound.beat);
+    }
 
     feedGlow(dtMs);
 
@@ -1657,7 +1702,7 @@ export function createRenderer(canvas, world) {
      * Cached per view: a radial gradient is cheap but not free, and this one only changes when
      * the board is resized.
      */
-    const squeeze = sound.beat * 0.22 + lifted(sound.bass) * 0.12;
+    const squeeze = mood.beat * 0.11 + mood.bass * 0.06;
     if (vignetteFor !== `${vw}x${vh}`) {
       vignetteFor = `${vw}x${vh}`;
       const vg = ctx.createRadialGradient(vw / 2, vh / 2, Math.min(vw, vh) * 0.34,

@@ -68,10 +68,15 @@ const HISTORY = 40;               // frames of delay line; ~650 ms at 60 fps
 
 /* The equaliser: EQ_BANDS log-spaced bands, each its own z-score like the three broad ones, so
  * every band dances around its own usual level instead of the bass towering over the treble.
- * Fast in, quick out — these are drawn as bars, and bars that sag for a second read as lag. */
-export const EQ_BANDS = 16;
+ *
+ * SLOW, on purpose. These started as meter ballistics — 25 ms up, 160 ms down — and in a round
+ * that read as jumpy: every transient flicked a whole stretch of coast. The coast is scenery,
+ * not a meter, so it gets water's timing: a quarter of a second to rise, most of a second to
+ * settle, and a longer history so a band's "usual" does not chase every phrase. */
+export const EQ_BANDS = 24;
 const EQ_LO = 45, EQ_HI = 11000;
-const EQ_ATTACK_MS = 25, EQ_RELEASE_MS = 160;
+const EQ_ATTACK_MS = 240, EQ_RELEASE_MS = 750;
+const EQ_HISTORY_MS = 4500;
 
 /* Accents: an onset ANYWHERE in the spectrum, not just the kick. Ambient beds have almost no
  * kicks — measured in game, one detected beat every two seconds and a tempo lock that never
@@ -201,14 +206,16 @@ export function createListener() {
         eqEdges = [];
         for (let i = 0; i <= EQ_BANDS; i++) eqEdges.push(binOf(EQ_LO * Math.pow(EQ_HI / EQ_LO, i / EQ_BANDS)));
       }
-      const eqK = 1 - Math.exp(-dtMs / 2500);
+      const eqK = 1 - Math.exp(-dtMs / EQ_HISTORY_MS);
       for (let k = 0; k < EQ_BANDS; k++) {
         let v = 0;
         for (let i = eqEdges[k], e = Math.max(eqEdges[k] + 1, eqEdges[k + 1]); i < e; i++) if (bins[i] > v) v = bins[i];
         const d = v - eqAvg[k];
         eqAvg[k] += d * eqK;
         eqDev[k] += (d * d - eqDev[k]) * eqK;
-        const target = Math.max(0, Math.min(1, 0.35 + (d / Math.max(5, Math.sqrt(eqDev[k]))) * 0.32));
+        // A floor of 12 byte steps on the spread: below that is the analyser's own frame-to-frame
+        // jitter, and scoring it let a quiet band dance to noise as much as a loud one to music.
+        const target = Math.max(0, Math.min(1, 0.35 + (d / Math.max(12, Math.sqrt(eqDev[k]))) * 0.32));
         const tau = target > eqNow[k] ? EQ_ATTACK_MS : EQ_RELEASE_MS;
         eqNow[k] += (target - eqNow[k]) * (1 - Math.exp(-dtMs / tau));
       }

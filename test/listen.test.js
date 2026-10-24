@@ -8,7 +8,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createListener } from '../public/client/audio/listen.js';
+import { createListener, EQ_BANDS } from '../public/client/audio/listen.js';
 
 const FPS = 60, RATE = 44100, FFT = 2048;
 const binHz = RATE / FFT;
@@ -107,20 +107,29 @@ test('everything comes out delayed by the output latency', () => {
   for (const s of shift) assert.ok(s >= 5 && s <= 7, `delayed by ${s} frames, expected 6 (100 ms)`);
 });
 
-test('the equaliser moves with the music, band by band', () => {
+test('the equaliser moves with the music, band by band, and never jumps', () => {
   // A kick every half second lives in the bottom bands: they must swing far more than the top.
+  // And smoothly — the coast is scenery, not a meter, and the fast version read as jumpy.
   const listen = createListener();
   const an = fakeAnalyser(0.5);
   const lo = [], hi = [];
-  for (let f = 0; f < 8 * FPS; f++) {
+  let prev = null, maxStep = 0;
+  // Twenty seconds, measured over the last eight: each band's sense of "usual" takes a few
+  // seconds to settle, and before then every band is still sliding toward it.
+  for (let f = 0; f < 20 * FPS; f++) {
     const out = listen(an, true, 1000 / FPS);
-    assert.equal(out.eq.length, 16);
-    if (f > 3 * FPS) { lo.push(out.eq[1]); hi.push(out.eq[14]); }
+    assert.equal(out.eq.length, EQ_BANDS);
+    if (f > 12 * FPS) {
+      lo.push(out.eq[2]); hi.push(out.eq[EQ_BANDS - 3]);
+      if (prev) for (let b = 0; b < EQ_BANDS; b++) maxStep = Math.max(maxStep, Math.abs(out.eq[b] - prev[b]));
+      prev = Float32Array.from(out.eq);
+    }
     an.tick();
   }
   const range = a => Math.max(...a) - Math.min(...a);
-  assert.ok(range(lo) > 0.4, `bass bar only moved ${range(lo).toFixed(2)}`);
+  assert.ok(range(lo) > 0.1, `bass bar only moved ${range(lo).toFixed(2)}`);
   assert.ok(range(lo) > range(hi) * 2, 'the treble bar moved as much as the bass bar on a kick');
+  assert.ok(maxStep < 0.05, `a band moved ${maxStep.toFixed(3)} in one frame — that is a jump`);
 });
 
 test('accents answer musical events that are not kicks', () => {
