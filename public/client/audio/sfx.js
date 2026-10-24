@@ -19,6 +19,7 @@ import {
   VOLUME_SFX_DEFAULT, SFX_MAX_DISTANCE_TILES, UNITS_PER_TILE, PERK,
 } from '/shared/constants.js';
 import { audioContext, createBus, noiseSource, hz, unlock } from './engine.js';
+import { store } from '../store.js';
 
 // Per rendered frame. `boom` and `blockdie` are the ones that genuinely need a cap; the rest are
 // belt and braces against a pathological snapshot.
@@ -56,11 +57,12 @@ const WIDE_PAN = new Set(['spawn']);
 export function createSfx({ listener }) {
   let bus = null, space = null;
   let volume = readVolume();
+  // Another tab has the speakers; see `cede` and the BroadcastChannel in client/main.js.
+  let ceded = false;
   const spent = new Map();      // voice name -> how many already played this frame
 
   function readVolume() {
-    const v = parseFloat(localStorage.getItem('bv.sfx'));
-    return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : VOLUME_SFX_DEFAULT;
+    return store.number('bv.sfx', VOLUME_SFX_DEFAULT, 0, 1);
   }
 
   /** ±`pct` either way. Presentation only — the simulation never calls Math.random(). */
@@ -493,6 +495,60 @@ export function createSfx({ listener }) {
         o.frequency.value = hz(n);
         o.connect(g);
         o.start(t + at); o.stop(t + at + 0.45);
+      }
+    },
+
+    /**
+     * A slide: a short filtered whoosh with a scuff in front of it.
+     *
+     * Noise swept downward, which is what a body moving past a microphone actually does to the
+     * spectrum, plus one click of grit at the start for the push off. Brief on purpose — the
+     * slide itself is a third of a second, and a sound longer than the move it describes is a
+     * sound that is still going when you have already stopped.
+     */
+    slide(c, out, t, level) {
+      const g = voiceGain(c, out, t, { a: 0.012, d: 0.3, peak: 0.3 * level, send: 0.18 });
+      const s = noiseSource();
+      s.playbackRate.value = jit(1, 0.1);
+      const f = c.createBiquadFilter();
+      f.type = 'bandpass';
+      f.frequency.setValueAtTime(jit(2600, 0.12), t);
+      f.frequency.exponentialRampToValueAtTime(420, t + 0.3);
+      f.Q.value = 1.1;
+      s.connect(f); f.connect(g);
+      s.start(t); s.stop(t + 0.4);
+      // The scuff: one very short burst of top end, so the launch has a transient to it.
+      const sg = voiceGain(c, out, t, { a: 0.001, d: 0.04, peak: 0.16 * level });
+      const scuff = noiseSource();
+      const hp = c.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = 3200;
+      scuff.connect(hp); hp.connect(sg);
+      scuff.start(t); scuff.stop(t + 0.08);
+    },
+
+    /**
+     * Barged: two notes that cannot decide which way up they are, wobbling.
+     *
+     * A detuned pair sliding in opposite directions is the oldest "confused" cue there is, and it
+     * is the right one — it says disorientation without saying damage, which matters because
+     * being knocked silly costs you no health and the sound must not suggest otherwise.
+     */
+    dazed(c, out, t, level) {
+      for (const [n, dir] of [[76, 1], [79, -1]]) {
+        const g = voiceGain(c, out, t, { a: 0.008, d: 0.42, peak: 0.19 * level, send: 0.25 });
+        const o = c.createOscillator();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(hz(n), t);
+        o.frequency.exponentialRampToValueAtTime(hz(n + dir * 5), t + 0.4);
+        const lfo = c.createOscillator();
+        const lg = c.createGain();
+        lfo.frequency.value = jit(6.5, 0.2);
+        lg.gain.value = 45;                 // cents: the wobble that makes it read as dizzy
+        lfo.connect(lg); lg.connect(o.detune);
+        o.connect(g);
+        o.start(t); o.stop(t + 0.5);
+        lfo.start(t); lfo.stop(t + 0.5);
       }
     },
 
@@ -943,6 +999,33 @@ export function createSfx({ listener }) {
         o.start(at); o.stop(at + 0.3);
       }
     },
+
+    /**
+     * GO. The end of the five-second count-in, and the only sound in the game that means
+     * "everything starts now".
+     *
+     * A fifth up from the last tick of the count, two octaves of it at once, with a short noise
+     * crack on top so it cuts through whatever bed is already playing. Deliberately bigger than
+     * `ready`: that one unlocks a button, this one starts a round.
+     */
+    go(c, out, t) {
+      for (const [i, n] of [72, 84, 91].entries()) {
+        const g = voiceGain(c, out, t, { a: 0.003, d: 0.5 - i * 0.08, peak: 0.2, send: 0.4 });
+        const o = c.createOscillator();
+        o.type = i ? 'square' : 'sawtooth';
+        o.frequency.value = hz(n);
+        o.connect(g);
+        o.start(t); o.stop(t + 0.7);
+      }
+      const ng = voiceGain(c, out, t, { a: 0.001, d: 0.12, peak: 0.14, send: 0.3 });
+      const s = noiseSource();
+      const f = c.createBiquadFilter();
+      f.type = 'bandpass';
+      f.frequency.value = 2400;
+      f.Q.value = 0.8;
+      s.connect(f); f.connect(ng);
+      s.start(t); s.stop(t + 0.2);
+    },
   };
 
   // ─── public surface ─────────────────────────────────────────────────────────
@@ -961,9 +1044,12 @@ export function createSfx({ listener }) {
       return ok;
     },
 
+    /** Silence from this tab while another one has the audio. Not a volume change. */
+    cede(on) { ceded = !!on; },
+
     setVolume(v) {
       volume = Math.min(1, Math.max(0, v));
-      localStorage.setItem('bv.sfx', String(volume));
+      store.set('bv.sfx', volume);
       if (bus) bus.gain.setTargetAtTime(volume, audioContext().currentTime, 0.03);
     },
 
@@ -978,6 +1064,9 @@ export function createSfx({ listener }) {
     play(name, tx, ty, opts) {
       const voice = VOICES[name];
       if (!voice || !bus || volume <= 0) return;
+      // Another tab has the speakers. Dropped rather than played at zero, so a ceded tab also
+      // stops building audio nodes for sounds nobody can hear.
+      if (ceded) return;
 
       const cap = MAX_PER_FRAME[name] ?? DEFAULT_MAX_PER_FRAME;
       const used = spent.get(name) || 0;

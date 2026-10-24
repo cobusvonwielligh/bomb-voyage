@@ -351,8 +351,9 @@ test('the bus gain has exactly one writer, so start() cannot leave it ramping to
   assert.deepEqual(writes, ['musicGain.gain.setTargetAtTime'],
     `musicGain.gain is written in more than one place: ${writes.join(', ')}`);
   assert.match(musicSrc, /function applyGain/, 'there is no single gain writer');
-  // Duck state has to be remembered, or a restart while chat is focused comes back at full.
-  assert.match(musicSrc, /playing \? volume \* \(ducked \? 0\.4 : 1\) : 0/);
+  // Duck state has to be remembered, or a restart while chat is focused comes back at full — and
+  // so does the ceded state, or a tab that handed the speakers to another one comes back loud.
+  assert.match(musicSrc, /playing && !ceded \? volume \* \(ducked \? 0\.4 : 1\) : 0/);
 });
 
 test('the master trim lives in engine.js, where a stored slider value cannot beat it', () => {

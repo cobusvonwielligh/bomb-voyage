@@ -45,6 +45,9 @@ import {
   audioContext, createDelayLine, createMusicBus, envelope, hz, noiseSource, unlock,
 } from './engine.js';
 import { createAmbient } from './ambient.js';
+// The volume and the on/off switch are sealed like everything else this project stores. See
+// client/store.js — it is tamper evidence, not secrecy, and the header there says why.
+import { store } from '../store.js';
 
 // 116 BPM, not the 77 this started at. The Get Lucky pocket only exists around here: a
 // four-on-the-floor at 77 is a funeral march, and putting the kick on the eighths instead makes
@@ -513,10 +516,18 @@ export function createMusic() {
   const excluded = new Set();
   let volume = readVolume();
   let playing = false, ducked = false;
+  /* Another tab of this game has the speakers.
+   *
+   * One person with three tabs open was three copies of the soundtrack playing a few hundred
+   * milliseconds apart, which is worse than any one of them. The tab that is being looked at
+   * claims the audio and the others cede it — see the BroadcastChannel in client/main.js.
+   *
+   * A separate flag rather than setting the volume to zero, for the same reason `ducked` is: it
+   * is not the user's setting and it must not survive as one. `applyGain` is the only writer. */
+  let ceded = false;
 
   function readVolume() {
-    const v = parseFloat(localStorage.getItem('bv.music'));
-    return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : VOLUME_MUSIC_DEFAULT;
+    return store.number('bv.music', VOLUME_MUSIC_DEFAULT, 0, 1);
   }
 
   /* Does this person want music at all? Yes, unless they have said otherwise.
@@ -531,10 +542,10 @@ export function createMusic() {
    * a worse default than one somebody occasionally has to turn off.
    */
   const WANTED_KEY = 'bv.musicOn';
-  let wanted = localStorage.getItem(WANTED_KEY) !== '0';
+  let wanted = store.get(WANTED_KEY) !== '0';
   const setWanted = v => {
     wanted = v;
-    localStorage.setItem(WANTED_KEY, v ? '1' : '0');
+    store.set(WANTED_KEY, v ? '1' : '0');
   };
 
   async function build() {
@@ -637,7 +648,7 @@ export function createMusic() {
     // Silence while stopped is deliberate, not a fallthrough. Each track's delay line rings for
     // about two seconds after its last note, and moving the slider must not un-mute that tail
     // once the user has explicitly turned the music off.
-    const target = playing ? volume * (ducked ? 0.4 : 1) : 0;
+    const target = playing && !ceded ? volume * (ducked ? 0.4 : 1) : 0;
     musicGain.gain.setTargetAtTime(target, ctx.currentTime, tc);
   }
 
@@ -789,7 +800,9 @@ export function createMusic() {
     get seaAnalyser() { return seaAnalyser; },
 
     /** Is anybody hearing it? Paused or faded to zero, the sea should be still. */
-    get audible() { return playing && volume > 0; },
+    // `audible` is what the sea asks before it lights the coast, so a ceded tab must report
+    // false: a visualiser dancing to music coming out of a different window is a bug.
+    get audible() { return playing && volume > 0 && !ceded; },
 
     /**
      * The frequency tap, or null before the first gesture has built the graph.
@@ -866,8 +879,20 @@ export function createMusic() {
       // An empty slider reads as NaN, and NaN in an AudioParam throws and takes the chain down.
       if (!Number.isFinite(v)) return;
       volume = Math.min(1, Math.max(0, v));
-      localStorage.setItem('bv.music', String(volume));
+      store.set('bv.music', volume);
       applyGain();
+    },
+
+    /**
+     * Hand the speakers to another tab, or take them back.
+     *
+     * Silent but still RUNNING: the sequencer keeps its place, so coming back to the tab resumes
+     * the track where it would have been rather than restarting it mid-phrase.
+     */
+    cede(on) {
+      if (ceded === !!on) return;
+      ceded = !!on;
+      applyGain(0.12);
     },
 
     /** Ducked while chat is focused, per docs/ART-AUDIO.md §6. */
