@@ -43,6 +43,9 @@ export function createLeaderboard({ dataDir }) {
           gold: positive(e.gold),
           silver: positive(e.silver),
           bronze: positive(e.bronze),
+          // Gold COINS, which are a different thing entirely from a gold medal — see the note
+          // on `coins` in shared/sim/state.js for how nearly those two became one field.
+          coins: positive(e.coins),
         });
       }
       return out;
@@ -64,21 +67,28 @@ export function createLeaderboard({ dataDir }) {
     score: e.score,
     kills: e.kills,
     deaths: e.deaths,
+    // Medals are podium finishes; coins are picked up off the floor. Two features, two fields,
+    // one very nearly shared name.
     gold: e.gold ?? 0,
     silver: e.silver ?? 0,
     bronze: e.bronze ?? 0,
+    coins: e.coins ?? 0,
     // Lifetime score IS the XP, so the level comes straight off it rather than being stored.
     // One derivation, in shared/, used by the server and the client alike.
     ...progressFor(e.score),
   });
 
-  function record(playerId, { name, score, kills, deaths } = {}) {
+  /** Everything earned by playing. Medals come from `award` instead — see below. */
+  function record(playerId, { name, score, kills, deaths, coins } = {}) {
     if (typeof playerId !== 'string' || !playerId) return;
-    const e = players.get(playerId) ?? { name: 'anon', score: 0, kills: 0, deaths: 0 };
+    // `coins` defaults in for every record written before coins existed, so an old file loads
+    // without a migration and a player who has never seen one starts at zero rather than NaN.
+    const e = players.get(playerId) ?? { name: 'anon', score: 0, kills: 0, deaths: 0, coins: 0 };
     if (name != null) e.name = sanitizeName(name);
     e.score += positive(score);
     e.kills += positive(kills);
     e.deaths += positive(deaths);
+    e.coins = (e.coins || 0) + positive(coins);
     players.set(playerId, e);
     dirty = true;
   }

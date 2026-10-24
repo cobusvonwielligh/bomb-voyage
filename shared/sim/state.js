@@ -25,6 +25,9 @@ export function createState(mapDef, seed = mapDef.seed) {
     puddles: [],
     nextBombId: 1,
     nextPerkId: 1,
+    // Gold coins dropped so far this round. See GOLD_MAX_PER_ROUND — counted on the drop, so a
+    // coin nobody reached still used up one of the five.
+    goldDropped: 0,
     // Powder kegs placed so far this round. See POWDER_MAX_PER_ROUND.
     powderPlaced: 0,
     // Decaying count of recent pickups; drives the drop rate. See maybeDrop in sim/perks.js.
@@ -50,6 +53,14 @@ export function createPlayer(i, name) {
     status: 0,         // bitmask
     statusUntil: {},   // STATUS bit -> tick
     score: 0, kills: 0, deaths: 0,
+    /* Gold coins collected this life. Banked to the leaderboard like score and kills.
+     *
+     * `coins`, not `gold`. The leaderboard already had a `gold` — first-place finishes, one of
+     * gold/silver/bronze — and the two features landed in the same field from opposite
+     * branches: a coin pickup incremented the medal count and winning a round incremented the
+     * coin counter. Both read perfectly and both were wrong. The trio is a coherent set, so the
+     * one that renames is this one, and "coins" is what it actually is. */
+    coins: 0,
     // Was the bomb key down last tick? Edge detection for placement — see bombs.place.
     bombHeld: false,
     stamina: STAMINA_MAX,

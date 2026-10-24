@@ -487,6 +487,10 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     i: p.i, x: p.x, y: p.y, d: p.dir, st: p.alive ? 1 : 0,
     b: p.bombs, f: p.radius, sp: p.speed, sh: p.shields,
     s: p.score, k: p.kills, dd: p.deaths, stat: p.status,
+    // Coins. One small integer that only ever goes up, and the only stat on the wire that is
+    // not about this round — it is what the HUD counter reads. `c`, not `g`: `gold` on the
+    // leaderboard means a first-place finish.
+    c: p.coins || 0,
     // Stamina rides along because the indicator is drawn beside EVERY player, not just you:
     // seeing that the pirate chasing you is limping is the whole point of showing it at all.
     sta: p.stamina, stl: p.staminaLevel, tr: p.tired ? 1 : 0,
@@ -723,14 +727,18 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     for (let i = 0; i < maxPlayers; i++) {
       const s = seats[i], p = state.players[i];
       if (!s || !p) continue;
-      const was = s.banked ?? { score: 0, kills: 0, deaths: 0 };
-      const now = { score: Math.max(0, p.score), kills: p.kills, deaths: p.deaths };
-      if (now.score === was.score && now.kills === was.kills && now.deaths === was.deaths) continue;
+      const was = s.banked ?? { score: 0, kills: 0, deaths: 0, coins: 0 };
+      const now = {
+        score: Math.max(0, p.score), kills: p.kills, deaths: p.deaths, coins: p.coins || 0,
+      };
+      if (now.score === was.score && now.kills === was.kills
+          && now.deaths === was.deaths && now.coins === was.coins) continue;
       leaderboard.record(s.playerId, {
         name: p.name,
         score: now.score - was.score,
         kills: now.kills - was.kills,
         deaths: now.deaths - was.deaths,
+        coins: now.coins - (was.coins || 0),
       });
       s.banked = now;
     }

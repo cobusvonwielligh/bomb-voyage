@@ -237,7 +237,26 @@ export const PERK = {
   STAMINA: 15,
   // Rum: tough and useless. See STATUS.DRUNK.
   RUM: 16,
+  /* A gold coin. Changes nothing about how you play and is the rarest thing on the board.
+   *
+   * Every other perk is a capability. This is a COLLECTIBLE: it makes no difference to the
+   * round you are in, it survives the round you are in, and it is the only thing here that
+   * accumulates. Currency later; for now it is a number that goes up, which is most of what
+   * currency is anyway. */
+  GOLD: 17,
 };
+
+/* Gold coins. 2% of drops and never more than five a round.
+ *
+ * Two limits, not one, and they do different jobs. The WEIGHT makes any given coin a surprise.
+ * The CAP makes the surprise finite: without it a long round on a map full of soft walls pays
+ * out far more than a short one on a sparse map, so the reward would be a function of the map
+ * rather than of the player. Five is about one every two minutes at the top end.
+ *
+ * Worth a lot of XP, because the whole point of something this rare is that finding one matters.
+ * SCORE.GOLD is roughly four kills.
+ */
+export const GOLD_MAX_PER_ROUND = 5;
 
 /* What actually drops.
  *
@@ -247,6 +266,8 @@ export const PERK = {
  * and switches back on with one number.
  */
 export const PERK_WEIGHTS = {
+  /* 9 of 420 is 2.1%. A tenth of the rum, which was itself already the rare one. */
+  [PERK.GOLD]: 9,
   /* Every weight but rum is the old one multiplied by four.
    *
    * Rum wanted to be a quarter as likely as it was, and the honest way to do that is to make
@@ -316,7 +337,9 @@ export const STATUS_TICKS = {
   [STATUS.CHANGELING]: 300,
   [STATUS.REDUCTION]: 450,
   [STATUS.FAST_DET]: 300,
-  [STATUS.DRUNK]: 600,        // 20 s — long enough to be a decision, short enough to survive
+  // 480 ticks, 16 s. Was 600. Twenty seconds of fighting the controls is long enough that the
+  // only play is to wait it out, which makes rum a timeout rather than a trade-off.
+  [STATUS.DRUNK]: 480,
 };
 
 /* How drunk is drunk.
@@ -370,6 +393,9 @@ export const SCORE = {
   PERK_CAPPED: 15,
   BLOCK: 2,
   SURVIVE_ROUND: 50,
+  // A gold coin, which is 2% of drops and capped at five a round. Four kills' worth: rare
+  // enough that it has to be worth stopping for, bounded enough that it cannot be a strategy.
+  GOLD: 400,
 };
 
 // ─── Levels ───────────────────────────────────────────────────────────────────

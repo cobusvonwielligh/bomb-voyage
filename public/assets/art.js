@@ -503,7 +503,7 @@ function drawCracks(c, dmg, tx, ty) {
  * 12x16 figure centred in a 32px tile. dir: 0 R, 1 U, 2 L, 3 D. frame: 0|1 walk cycle.
  * Caller handles Changeling (flip Y) and Reduction (scale 0.5) with a transform.
  */
-export function drawPlayer(c, { dir = 3, frame = 0, colorIndex = 0, dead = false }) {
+export function drawPlayer(c, { dir = 3, frame = 0, colorIndex = 0, dead = false, shadow = true }) {
   const k = playerShades(colorIndex);
   const ox = TILE_PX / 2 - 6, oy = TILE_PX / 2 - 9;
   c.save();
@@ -513,7 +513,7 @@ export function drawPlayer(c, { dir = 3, frame = 0, colorIndex = 0, dead = false
   // This is the single cheapest thing that makes a sprite sit ON the floor rather than float
   // above it, and it matters more here than in most games: the floor is a flat top-down plane
   // with no horizon, so contact is the only depth cue there is.
-  if (!dead) {
+  if (!dead && shadow) {
     c.save();
     c.globalAlpha = 0.3;
     c.beginPath();
@@ -844,6 +844,7 @@ const PERK_SKIN = {
   4: { dark: '#15402f', mid: '#1d6347', rim: '#5ad1a0' },   // shield — green
   15: { dark: '#4a4212', mid: '#75671d', rim: '#ffe04a' },  // stim   — yellow
   16: { dark: '#3d2415', mid: '#64402a', rim: '#d99a55' },  // rum    — bottle brown
+  17: { dark: '#4a3608', mid: '#7d5c0f', rim: '#f6e7a9' },  // gold   — the plinth is treasure
 };
 
 export const PERK_ART = {
@@ -959,10 +960,61 @@ export const PERK_ART = {
     }
     c.restore();
   },
+  /* A gold coin, three-quarter on.
+   *
+   * Flat-on it is a yellow circle, which at this size is a yellow circle. Tilted, it has a RIM —
+   * a visible edge of thickness down one side — and that edge is the entire reason it reads as
+   * metal rather than as a dot. Everything else is the three-tone metal ramp the interface
+   * uses: dark underside, body, specular highlight, lit top-left like everything else here.
+   */
+  17: c => {
+    const DARK = '#7d5c0f', BODY = '#edc24e', LIT = '#f6e7a9', EDGE = '#4a3608';
+
+    // The thickness, drawn first and offset down-right so it shows beneath the face.
+    c.beginPath();
+    c.ellipse(17, 18.6, 9.2, 9.6, 0, 0, 7);
+    c.fillStyle = DARK;
+    c.fill();
+
+    // The face.
+    c.beginPath();
+    c.ellipse(16, 16.5, 9.2, 9.6, 0, 0, 7);
+    c.fillStyle = BODY;
+    c.fill();
+    c.strokeStyle = EDGE;
+    c.lineWidth = 1.3;
+    c.stroke();
+
+    // Inner ring, which is what makes it a COIN rather than a ball bearing.
+    c.beginPath();
+    c.ellipse(16, 16.5, 6.4, 6.8, 0, 0, 7);
+    c.strokeStyle = DARK;
+    c.lineWidth = 1.1;
+    c.stroke();
+
+    // The highlight, top-left, as a crescent rather than a dot — a dot reads as a hole.
+    c.beginPath();
+    c.ellipse(13.3, 13, 3.4, 3.8, -0.5, 0, 7);
+    c.fillStyle = LIT;
+    c.globalAlpha = 0.85;
+    c.fill();
+    c.globalAlpha = 1;
+
+    // A struck mark. Not a glyph: at a third of this size any letter is a smudge, and two
+    // crossed bars survive anything.
+    c.strokeStyle = DARK;
+    c.lineWidth = 2.2;
+    c.lineCap = 'round';
+    c.beginPath();
+    c.moveTo(16, 12.4); c.lineTo(16, 20.6);
+    c.moveTo(12.6, 16.5); c.lineTo(19.4, 16.5);
+    c.stroke();
+  },
 };
 
-/** Perks that announce themselves from across the board. Rum is the only one, for now. */
-export const PERK_GLOWS = new Set([16]);
+/* Which perks glow on the floor. Rum because it is rare; gold because it is rarer still, and
+ * because a coin that does not catch the light is a disc. */
+export const PERK_GLOWS = new Set([16, 17]);
 
 /** Perk icon on its tile plinth. Unknown/reserved types draw a question mark. */
 export function drawPerk(c, { type = 1, bob = 0 }) {
@@ -1395,6 +1447,46 @@ export function drawRock(c, tx, ty, edges) {
   }
 }
 
+/**
+ * Draw something, then put a thin black line round whatever shape it turned out to be.
+ *
+ * SILHOUETTE outlining, not per-shape outlining, and the difference is the whole point. The
+ * player is a dozen overlapping rounded rectangles; outlining each one draws lines through the
+ * middle of the figure where the helmet meets the body, which reads as a diagram. What is
+ * wanted is one line round the OUTSIDE, and the only thing that knows where the outside is is
+ * the finished pixels.
+ *
+ * So: draw it once to a scratch canvas, flood that canvas with black through `source-in` to get
+ * a black silhouette, stamp the silhouette at eight offsets around a circle, then draw the real
+ * thing on top. Eight and not four, because at four the diagonals of a round head come out
+ * visibly thinner than the straight edges.
+ *
+ * Baked once per sprite at boot, so the cost is sixteen colours x eight frames x nine draws of a
+ * 32px canvas, once. Nothing in the frame loop knows this happened.
+ */
+function outlined(c, drawShape, drawArt = drawShape, { width = 1, colour = '#0b0e13' } = {}) {
+  /* The mask comes from `drawShape` and the picture from `drawArt`, and for the player those
+   * are NOT the same thing: the sprite includes a soft ground shadow at 30% alpha, and
+   * `source-in` does not care about alpha — any pixel that is not fully transparent becomes
+   * solid black. Built from the full sprite, the "silhouette" would include the shadow, and the
+   * figure would come out standing in a hard black puddle. */
+  const scratch = canvas();
+  drawShape(scratch.getContext('2d'));
+
+  const mask = canvas();
+  const m = mask.getContext('2d');
+  m.drawImage(scratch, 0, 0);
+  m.globalCompositeOperation = 'source-in';
+  m.fillStyle = colour;
+  m.fillRect(0, 0, mask.width, mask.height);
+
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    c.drawImage(mask, Math.cos(a) * width, Math.sin(a) * width);
+  }
+  drawArt(c);
+}
+
 export function bake({ playerCount = 16 } = {}) {
   const out = { tiles: {}, players: [], bombs: [], perks: {} };
 
@@ -1409,7 +1501,9 @@ export function bake({ playerCount = 16 } = {}) {
     for (let dir = 0; dir < 4; dir++)
       for (let frame = 0; frame < 2; frame++) {
         const el = canvas();
-        drawPlayer(el.getContext('2d'), { dir, frame, colorIndex: i });
+        outlined(el.getContext('2d'),
+          cc => drawPlayer(cc, { dir, frame, colorIndex: i, shadow: false }),
+          cc => drawPlayer(cc, { dir, frame, colorIndex: i }));
         set.push(el);
       }
     out.players.push(set);

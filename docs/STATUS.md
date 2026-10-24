@@ -178,6 +178,7 @@ Every one of these is in `shared/constants.js`. Nothing is inline.
 | Respawn | 10 s, then weighted-random across every legal spawn |
 | Perk drops | 35% base, scaled by what is on the floor and how fast it is taken |
 | Rum | 2.7% of drops. Softens damage, sways your walk, rolls your camera for 20 s |
+| Gold | 2.1% of drops, ≤5 a round. 400 XP. Changes nothing about the round — it is a collectible |
 | Kegs | ≤6 a round, ≥1 guaranteed, radius 7 |
 | Zoom | fitted to the **island**, floor 0.68, 2 tiles of sea minimum |
 | Levels | 100 hours to Veteran (level 20) |

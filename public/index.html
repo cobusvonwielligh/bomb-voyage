@@ -39,6 +39,13 @@
       <path d="M9.6 5.4a3.6 3.6 0 010 5.2M11.8 3.4a6.6 6.6 0 010 9.2" stroke="currentColor"
             stroke-width="1.4" fill="none" stroke-linecap="round"/>
     </symbol>
+    <!-- A coin, three-quarter on. The offset back disc is the whole icon: flat-on it is a
+         circle, and a circle at 13px is a dot. -->
+    <symbol id="i-coin" viewBox="0 0 16 16">
+      <ellipse cx="8.8" cy="8.9" rx="6.1" ry="6.4" fill="currentColor" opacity=".45"/>
+      <ellipse cx="7.4" cy="7.6" rx="6.1" ry="6.4" fill="currentColor"/>
+      <ellipse cx="7.4" cy="7.6" rx="3.5" ry="3.8" fill="none" stroke="#000" stroke-opacity=".32" stroke-width="1.2"/>
+    </symbol>
     <symbol id="i-note" viewBox="0 0 16 16">
       <path fill="currentColor" d="M13 2v8.2a2.6 2.6 0 10-1.6 2.4V5.6L7 6.8v5.6a2.6 2.6 0 11-1.6-2.4V4.4z"/>
     </symbol>
@@ -81,7 +88,7 @@
 
 <div id="hud">
   <div id="topbar" class="edge">
-    <span id="clock"><span class="v" id="vClock">--:--</span><span class="k">left</span></span>
+    <span id="clock"><span class="v castSm" id="vClock">--:--</span><span class="k">left</span></span>
     <!-- The dot lives with the ping, because they answer the same question: is the link
          healthy. Next to the volume controls it was just another icon in a row of icons. -->
     <span class="stat"><span class="k">ping</span><span class="v" id="vPing">--</span><span id="conn" data-state="connecting" title="connecting"></span></span>
@@ -135,12 +142,16 @@
 
   <div id="side" class="edge">
     <div id="card">
-      <span id="who"></span>
+      <span id="who" class="castSm"></span>
       <span id="rank"></span>
+      <!-- Kills, deaths, gold. The round score used to be here and is not information: it is
+           a number you cannot act on, derived from the other two plus pickups, and it is
+           already the thing the scoreboard ranks by. Hours played is tracked on the server and
+           deliberately not shown — nobody needs to be told how long they have been here. -->
       <div id="cardStats">
         <span><span class="k">kills</span><span id="vKills">0</span></span>
         <span><span class="k">deaths</span><span id="vDeaths">0</span></span>
-        <span><span class="k">round</span><span id="vScore">0</span></span>
+        <span class="coinStat"><svg class="coin"><use href="#i-coin"/></svg><span id="vCoins">0</span></span>
       </div>
       <!-- Lifetime podium finishes: the trophy cabinet. Filled from the scores broadcast. -->
       <div id="cardMedals" aria-label="medals"></div>
@@ -155,7 +166,7 @@
     </div>
 
     <div>
-      <h2 class="panelHead">scoreboard</h2>
+      <h2 class="panelHead castSm">scoreboard</h2>
       <div class="liveHead"><span></span><span>pirate</span><span>k / d</span><span>score</span></div>
       <ul id="liveRows"></ul>
     </div>
@@ -191,25 +202,33 @@
          countdown IS the message, and "you died" over the top of a banner that just said so is
          the same sentence twice. -->
     <button id="respawn">respawn</button>
+    <!-- Auto-respawn. Remembered across sessions like the volume sliders, because it is a
+         preference rather than a per-round choice. -->
+    <label id="autoRow"><input type="checkbox" id="autoRespawn"><span>auto respawn</span></label>
     <button id="spectate" class="ghost">spectate mode</button>
     <button id="deadLeave" class="ghost">leave</button>
   </div>
 </div>
 
-<div id="scores" class="edge">
-  <h2 class="boardHead">this round</h2>
-  <table>
-    <thead><tr><th>#</th><th>name</th><th>level</th><th>medals</th><th class="num">kills</th><th class="num">deaths</th><th class="num">round</th><th class="num">xp</th></tr></thead>
-    <tbody id="scoreRows"></tbody>
-  </table>
-  <div id="allTime">
-    <h2>all time</h2>
+<!-- #scores is a positioning FRAME over the board; #scoresCard is the panel inside it. Two
+     elements because the frame has to match the canvas exactly and the card has to be a glance,
+     and one element cannot be both. -->
+<div id="scores">
+  <div id="scoresCard" class="edge">
+    <h2 class="boardHead castSm">this round</h2>
     <table>
-      <thead><tr><th>#</th><th>name</th><th>level</th><th>medals</th><th class="num">xp</th></tr></thead>
-      <tbody id="allTimeRows"></tbody>
+      <thead><tr><th>#</th><th>name</th><th>level</th><th>medals</th><th class="num">kills</th><th class="num">deaths</th><th class="num">coins</th><th class="num">round</th><th class="num">xp</th></tr></thead>
+      <tbody id="scoreRows"></tbody>
     </table>
+    <div id="allTime">
+      <h2 class="castSm">all time</h2>
+      <table>
+        <thead><tr><th>#</th><th>name</th><th>level</th><th>medals</th><th class="num">coins</th><th class="num">xp</th></tr></thead>
+        <tbody id="allTimeRows"></tbody>
+      </table>
+    </div>
+    <p class="sub">tab to close</p>
   </div>
-  <p class="sub">tab to close</p>
 </div>
 
 <!-- Audio, bottom left, outside the HUD on purpose.
