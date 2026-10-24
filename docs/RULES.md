@@ -185,7 +185,7 @@ Drop weights, applied after the drop roll:
 | Stim | 72 | 17.5 % | +75 maximum stamina, and tops you up | 4 |
 | Boots | 72 | 17.5 % | +1 speed step | 4 |
 | Shield | 48 | 11.7 % | Survive one death | 1 held |
-| Rum | 11 | 2.7 % | Blast arms stop killing you for 20 s; you walk drunk | — |
+| Rum | 11 | 2.7 % | Blast arms stop killing you for 12 s; you walk drunk | — |
 
 The weights live in `PERK_WEIGHTS` in `shared/constants.js`; this table is a copy of them.
 
@@ -260,7 +260,7 @@ it. Contagion has a **1 s per-pair cooldown** so a scrum does not ping-pong.
 | Changeling | 300 t | yes | Up/down and left/right inverted, sprite drawn upside down. |
 | Reduction | 450 t (15 s) | yes | Half-size hitbox (10 × 10), may pass **columns**. |
 | Fast Detonation | 300 t | yes | Your bombs fuse in 36 ticks. |
-| Drunk | 600 t (20 s) | no | From rum. Only the bomb's own tile kills you; your walk sways. |
+| Drunk | 360 t (12 s) | no | From rum. Only the bomb's own tile kills you; your walk sways. |
 
 **Invulnerability is never contagious and is never overwritten by a weaker status.**
 

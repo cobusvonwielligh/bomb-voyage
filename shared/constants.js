@@ -376,9 +376,10 @@ export const STATUS_TICKS = {
   [STATUS.CHANGELING]: 300,
   [STATUS.REDUCTION]: 450,
   [STATUS.FAST_DET]: 300,
-  // 480 ticks, 16 s. Was 600. Twenty seconds of fighting the controls is long enough that the
-  // only play is to wait it out, which makes rum a timeout rather than a trade-off.
-  [STATUS.DRUNK]: 480,
+  // 360 ticks, 12 s. Was 600, then 480. Twenty seconds of fighting the controls is long enough
+  // that the only play is to wait it out, which makes rum a timeout rather than a trade-off;
+  // sixteen was still on the long side, so a quarter came off it on request.
+  [STATUS.DRUNK]: 360,
 };
 
 /* How drunk is drunk.

@@ -197,7 +197,7 @@ Every one of these is in `shared/constants.js`. Nothing is inline.
 | Stamina | 3450 tenths (+750 per stim), empty = half pace until a third is back |
 | Respawn | 10 s, then weighted-random across every legal spawn |
 | Perk drops | 35% base, scaled by what is on the floor and how fast it is taken |
-| Rum | 2.7% of drops. Softens damage, sways your walk, rolls your camera for 20 s |
+| Rum | 2.7% of drops. Softens damage, sways your walk, rolls your camera for 12 s |
 | Gold | 2.1% of drops, ≤5 a round. 400 XP. Changes nothing about the round — it is a collectible |
 | Kegs | ≤6 a round, ≥1 guaranteed, radius 7 |
 | Gulls | first at 25 s, then every 40–90 s, ≤2 aloft, ~4 tiles/s, one coin each when downed |

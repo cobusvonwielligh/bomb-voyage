@@ -1370,6 +1370,50 @@ export function createRenderer(canvas, world) {
     return el;
   }
 
+  /* The island's own shadow, thrown onto the sea.
+   *
+   * Every block on the island casts one and so do the ship and the rocks out in the water, but
+   * the island itself sat on the sea as if lit from directly overhead — the one solid thing on
+   * the board with no shadow, and the biggest. The coast is a cliff, taller than a crate, so its
+   * shadow is longer than theirs: a core at about one and a quarter of a block's reach and a
+   * soft penumbra beyond it, both in the same sun direction as everything else.
+   *
+   * Baked per map — the coast never changes and the sun is fixed per map — blurred once at bake
+   * time, and blitted under everything that floats. The land is drawn over it afterwards, so only
+   * the part that falls on open water is ever seen. Lighter than a shadow on sand, because water
+   * scatters light and a hard dark band on it reads as a hole. */
+  const ISLAND_SHADOW_PAD = 3;
+  let islandShadow = null, islandShadowFor = null;
+  function islandShadowLayer() {
+    if (islandShadowFor === world.map && islandShadow) return islandShadow;
+    const map = world.map, P = ISLAND_SHADOW_PAD, S = TILE_PX;
+    const el = document.createElement('canvas');
+    el.width = (map.w + P * 2) * S;
+    el.height = (map.h + P * 2) * S;
+    const c = el.getContext('2d');
+    c.translate(P * S, P * S);
+    const { dx, dy } = sunVec();
+    const land = (reach, alpha, blur) => {
+      c.save();
+      c.filter = `blur(${blur}px)`;
+      c.globalAlpha = alpha;
+      c.fillStyle = '#000';
+      c.beginPath();
+      for (let ty = 0; ty < map.h; ty++) {
+        for (let tx = 0; tx < map.w; tx++) {
+          if (cellType(map.cells[ty * map.w + tx]) === BLOCK.WATER) continue;
+          c.roundRect(tx * S + dx * reach, ty * S + dy * reach, S, S, 6);
+        }
+      }
+      c.fill();
+      c.restore();
+    };
+    land(2.2, 0.14, 9);       // the penumbra, long and soft
+    land(1.25, 0.28, 3);      // the core, close in under the cliff
+    islandShadow = el; islandShadowFor = map;
+    return el;
+  }
+
   function drawSea(vw, vh, ox, oy, dtMs) {
     if (!seaNear) return;
     seaT += dtMs / 1000;
@@ -1479,6 +1523,9 @@ export function createRenderer(canvas, world) {
     const shallows = shallowsLayer();
     ctx.globalAlpha = (1 + kickLift * 0.3) / SHALLOWS_HEADROOM;
     ctx.drawImage(shallows, -SHALLOWS_PAD * TILE_PX, -SHALLOWS_PAD * TILE_PX);
+    // The island's shadow across the shallows, under the glow and everything afloat.
+    ctx.globalAlpha = 1;
+    ctx.drawImage(islandShadowLayer(), -ISLAND_SHADOW_PAD * TILE_PX, -ISLAND_SHADOW_PAD * TILE_PX);
 
     drawCoastEq(dtMs);
 
