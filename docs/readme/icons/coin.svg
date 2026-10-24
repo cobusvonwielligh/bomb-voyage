@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="18" height="18">
+<ellipse
+        cx="8.8"
+        cy="8.9"
+        rx="6.1"
+        ry="6.4"
+        fill="#edc24e"
+        opacity=".45"
+      />
+      <ellipse cx="7.4" cy="7.6" rx="6.1" ry="6.4" fill="#edc24e" />
+      <ellipse
+        cx="7.4"
+        cy="7.6"
+        rx="3.5"
+        ry="3.8"
+        fill="none"
+        stroke="#000"
+        stroke-opacity=".32"
+        stroke-width="1.2"
+      />
+</svg>

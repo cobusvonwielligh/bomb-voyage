@@ -1558,6 +1558,16 @@ const toggleScores = tapScores(() => {
 
 const openChat = tapChat(() => { $('chatInput').focus(); music.duck(true); });
 
+/* The scoreboard's two panes. Clicks only: it is a thing you read, not a thing you do mid-fight,
+ * and a second key to remember would cost more than it is worth. The pane is NOT reset when the
+ * panel closes, so somebody reading the rules between rounds still has them on the next Tab. */
+for (const b of document.querySelectorAll('#boardTabs .bt')) {
+  b.onclick = () => {
+    $('scoresCard').classList.toggle('rules', b.dataset.pane === 'rules');
+    for (const o of document.querySelectorAll('#boardTabs .bt')) o.classList.toggle('on', o === b);
+  };
+}
+
 const onEscape = tapEscape(() => {
   if (chatHasFocus()) { $('chatInput').blur(); music.duck(false); }
   else if (scoresOpen) { scoresOpen = false; $('scores').classList.remove('on'); }
@@ -1612,10 +1622,29 @@ $('chatInput').onblur = () => { music.duck(false); input.clear(); };
 $('chatInput').onkeydown = e => {
   if (e.key !== 'Enter') return;
   e.preventDefault();
+  /* And stop it here.
+   *
+   * This Enter bubbles up to the window handler that OPENS the chat, and by the time it gets
+   * there the blur below has already run — so `chatHasFocus()` is false, the handler does what
+   * it is for, and the box you just left takes focus straight back. Two correct handlers, one
+   * event, and the second undoes the first. */
+  e.stopPropagation();
   const msg = $('chatInput').value.trim();
   if (msg) net.send({ t: 'chat', msg });
   $('chatInput').value = '';
-  $('chatInput').blur();
-  music.duck(false);
-  input.clear();
+  /* Something to say is one thing; a command is a conversation.
+   *
+   * An ordinary message is finished the moment you press Enter, so the keyboard goes straight
+   * back to the board — WASD should move you, not sit in an empty text box while something
+   * walks into you. A command is not finished: the answer comes back as a SERVER line a moment
+   * later, and half of them are "no such map" or "you need to be host", which you then retype.
+   * Staying in the box is right there and wrong on the board. */
+  if (!msg.startsWith('/')) {
+    $('chatInput').blur();
+    // Focus the canvas rather than merely leaving it on <body>: a click on the board then goes
+    // where you expect, and nothing else can quietly claim the keyboard in between.
+    $('game').focus({ preventScroll: true });
+    music.duck(false);
+    input.clear();
+  }
 };

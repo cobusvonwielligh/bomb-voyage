@@ -2827,6 +2827,9 @@ body.dead #rank { color: #8a5a5a; }
    a positioning frame and nothing else. */
 #scoresCard {
   --panel-fill: #141b24f7;
+  /* #scores takes no pointer events, so the board behind it stays clickable. The card has to
+     take them back, or the tabs on it cannot be clicked and it cannot be scrolled. */
+  pointer-events: auto;
   /* 590px, matching the width the table was designed against once it grew a medals column and
      a coins column. Narrower and the headings wrap, which turns a glance into a read. */
   border-radius: 12px;
@@ -2841,6 +2844,82 @@ body.dead #rank { color: #8a5a5a; }
   #scores {
     width: calc(100vw - var(--gap) * 2);
   }
+}
+
+/* The two panes behind Tab: the boards, and the rules sheet.
+ *
+ * Tabs rather than a second key. Tab is already where you look between rounds, and a rules sheet
+ * nobody can find is a rules sheet nobody reads. */
+#boardTabs {
+  display: flex;
+  gap: 6px;
+  margin: -4px 0 12px;
+}
+#boardTabs .bt {
+  font-family: var(--display);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--dim);
+  background: #ffffff08;
+  border: 1px solid #ffffff14;
+  border-radius: 7px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+#boardTabs .bt:hover {
+  color: #e9eef7;
+}
+#boardTabs .bt.on {
+  color: var(--gold);
+  background: #edc24e1c;
+  border-color: #edc24e4d;
+}
+#rulesPane {
+  display: none;
+}
+#scoresCard.rules #rulesPane {
+  display: block;
+}
+#scoresCard.rules #boardsPane {
+  display: none;
+}
+
+/* The sheet itself: an icon and a name on one line, the sentence under it. A two-column grid was
+   the obvious layout and the wrong one, because the sentences are long and a narrow second
+   column turns every one of them into four ragged lines. */
+#rulesPane .rline {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--dim);
+  max-width: 62ch;
+}
+#rulesPane dl.rules {
+  margin: 0 0 16px;
+}
+#rulesPane dt {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  font-family: var(--display);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+#rulesPane dt svg {
+  width: 15px;
+  height: 15px;
+  color: var(--gold);
+  flex: none;
+}
+#rulesPane dd {
+  margin: 2px 0 0 22px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #c8d2de;
 }
 #scores table {
   width: 100%;

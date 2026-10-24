@@ -136,7 +136,9 @@
   </defs>
 </svg>
 
-<canvas id="game"></canvas>
+<!-- tabindex="-1": not in the tab order, but focusable in code. Sending a chat message hands
+     focus back here, so the board is what the keyboard is pointed at. -->
+<canvas id="game" tabindex="-1"></canvas>
 
 <div id="hud">
   <div id="topbar" class="edge">
@@ -328,6 +330,13 @@
      and one element cannot be both. -->
 <div id="scores">
   <div id="scoresCard" class="edge">
+    <!-- Two panes behind one key. Tab is where you already look between rounds, which makes it
+         the only place a rules sheet gets read. -->
+    <div id="boardTabs">
+      <button class="bt on" data-pane="boards" type="button">boards</button>
+      <button class="bt" data-pane="rules" type="button">rules</button>
+    </div>
+    <div id="boardsPane">
     <h2 class="boardHead castSm">this round</h2>
     <table>
       <thead>
@@ -360,6 +369,42 @@
         </thead>
         <tbody id="allTimeRows"></tbody>
       </table>
+    </div>
+    </div>
+
+    <!-- The rules sheet. The same icons the HUD uses, so a pip you saw mid-round and the line
+         that explains it are the same drawing. -->
+    <div id="rulesPane">
+      <h2 class="boardHead castSm">the rules, quickly</h2>
+      <p class="rline">
+        Ten minutes a round, across five islands. Bombs burn in a cross and stop at walls. A blast
+        that reaches another bomb sets it off too, and chains are where rounds are won. Your own
+        fire kills you exactly as fast as anyone else's.
+      </p>
+      <dl class="rules">
+        <dt><svg><use href="#i-bomb" /></svg>bombs &amp; fire</dt>
+        <dd>A cross-shaped blast, stopped by walls, passed on to any bomb it touches.</dd>
+        <dt><svg><use href="#i-fire" /></svg>powder kegs</dt>
+        <dd>Rare barrels that erupt in a huge blast the moment they break. One a round at least.</dd>
+        <dt><svg><use href="#i-bolt" /></svg>stamina</dt>
+        <dd>Sprint about ten seconds, then you limp. Stopping to catch your breath is a decision.</dd>
+        <dt><svg><use href="#i-boot" /></svg>perks</dt>
+        <dd>Extra bombs, bigger fire, boots, a shield, stim, and rum: tough, and hard to steer.</dd>
+        <dt><svg><use href="#i-shield" /></svg>ice</dt>
+        <dd>Melts into a puddle when hit. Half pace, and you slide when you let go.</dd>
+        <dt><svg><use href="#i-coin" /></svg>gold</dt>
+        <dd>The rarest drop. Worth 400, and nothing at all until the board is counted.</dd>
+        <dt><svg><use href="#i-note" /></svg>seagulls</dt>
+        <dd>Catch one in a blast at the bottom of its dive and it drops gold. Watch its shadow.</dd>
+        <dt><svg><use href="#i-crown" /></svg>streaks</dt>
+        <dd>Double, triple, ultra, rampage, and an ACE for the whole island in one run.</dd>
+      </dl>
+      <h2 class="boardHead castSm">scoring</h2>
+      <p class="rline">
+        kill +100 &#183; gold coin +400 &#183; survive the round +50 &#183; perk +5, or +15 at its
+        cap &#183; block +2 &#183; suicide &#8722;25. Lifetime score is your XP: Rookie, Been
+        around the block at 11, Pro at 16, Veteran at 20.
+      </p>
     </div>
     <p class="sub">tab to close</p>
   </div>
