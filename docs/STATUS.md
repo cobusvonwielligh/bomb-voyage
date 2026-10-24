@@ -193,7 +193,7 @@ Every one of these is in `shared/constants.js`. Nothing is inline.
 | Tick | 30 Hz, snapshots every 2 ticks (15 Hz) |
 | Round | 10 min, `/roundtime 0.1–60` to change |
 | Speed | `[27, 35, 43, 51, 59]` units/tick by boot count — 3.2 to 6.9 tiles/s |
-| Caps | 8 bombs, radius 6, 4 boots, 1 shield, 4 stims |
+| Caps | 8 bombs, radius 6, 4 boots, 2 shields, 4 stims |
 | Stamina | 3450 tenths (+750 per stim), empty = half pace until a third is back |
 | Respawn | 10 s, then weighted-random across every legal spawn |
 | Perk drops | 35% base, scaled by what is on the floor and how fast it is taken |

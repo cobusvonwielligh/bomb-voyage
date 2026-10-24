@@ -8,7 +8,7 @@ import {
   TILE_PX, CHUNK_TILES, UNITS_PER_TILE, TRACER_SAMPLES, FUSE_TICKS, FIRE_TICKS, STATUS,
   BLOCK, BLOCK_HP, SEA_MARGIN_TILES, SPAWN_POP_TICKS, SPAWN_POP_SCALE, MIN_ZOOM, MAX_ZOOM,
   PERK_FADE_TICKS, STAMINA_SHOW_AT, staminaMaxFor, PUDDLE_FADE_TICKS, TICK_MS, TICK_HZ,
-  BLOCK_WALKABLE,
+  BLOCK_WALKABLE, MAX_SHIELDS,
 } from '/shared/constants.js';
 import { cellType, cellHp } from '/shared/maps.js';
 import {
@@ -2610,6 +2610,62 @@ export function createRenderer(canvas, world) {
     ctx.restore();
   }
 
+  /* Shields, as a glowing blue border round the pirate: one ring per shield held.
+   *
+   * Counted, not just flagged. With two to hold, "has a shield" is not the question anyone
+   * needs answered — "how many hits will it take" is, about yourself and about whoever you are
+   * chasing. None is no ring at all; one is a single ring; two is a second, wider ring outside
+   * it, turning slowly the other way so the pair never reads as one thick line. Each ring is a
+   * soft glow under a thin bright edge, added rather than painted, and both breathe slowly.
+   * Blue, not the green of the HUD pip, because it has to stand off every player colour and the
+   * green is too close to half of them. */
+  function drawShields(c, p, cx, cy) {
+    const n = Math.min(MAX_SHIELDS, p.shields | 0);
+    if (n <= 0) return;
+    const breathe = 0.78 + 0.22 * Math.sin(seaT * 3.1 + p.i * 1.7);
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    for (let k = 0; k < n; k++) {
+      // Outside the friend-or-foe ring (see drawAllegiance), so the two never sit on each other.
+      const r = TILE_PX * (0.68 + 0.16 * k);
+      const turn = seaT * (k ? -0.9 : 0.6) + p.i;
+      // The second ring is broken into arcs, so two rings read as two at a glance.
+      const arcs = k ? 6 : 1;
+      const gap = k ? 0.32 : 0;
+      for (const [width, colour, alpha] of [
+        [7, '64,150,255', 0.16], [3.5, '90,175,255', 0.3], [1.5, '190,228,255', 0.85],
+      ]) {
+        c.lineWidth = width;
+        c.strokeStyle = `rgba(${colour},${alpha * breathe})`;
+        c.beginPath();
+        for (let a = 0; a < arcs; a++) {
+          const from = turn + (a / arcs) * Math.PI * 2;
+          const to = from + (Math.PI * 2) / arcs - gap;
+          c.moveTo(cx + Math.cos(from) * r, cy + Math.sin(from) * r);
+          c.arc(cx, cy, r, from, to);
+        }
+        c.stroke();
+      }
+    }
+    c.restore();
+  }
+
+  /* Friend or foe, always on: a thin white ring round you and a thin red one round everybody
+   * else. Sixteen coat colours tell you WHO; this tells you the only thing that matters in the
+   * half second before a bomb goes down — is that me. Thin and steady, under the shield rings,
+   * so it reads as an outline rather than an effect. Nothing while spectating: with no "you",
+   * nobody is an enemy. */
+  function drawAllegiance(c, p, cx, cy, isMe) {
+    if (world.you < 0) return;
+    c.save();
+    c.lineWidth = 1.3;
+    c.strokeStyle = isMe ? 'rgba(255,255,255,0.85)' : 'rgba(255,72,72,0.75)';
+    c.beginPath();
+    c.arc(cx, cy, TILE_PX * 0.56, 0, Math.PI * 2);
+    c.stroke();
+    c.restore();
+  }
+
   function drawOne(c, p, ox, oy, isMe) {
     if (!p.alive) return;
     const px = ox + (p.rx / UNITS_PER_TILE) * TILE_PX - TILE_PX / 2;
@@ -2696,6 +2752,11 @@ export function createRenderer(canvas, world) {
     }
     c.globalAlpha = 1;
 
+    // Not while they are still landing at twenty times their size: the rings would sit inside.
+    if (pop < 1.5) {
+      drawAllegiance(c, p, px + TILE_PX / 2, py + TILE_PX / 2, isMe);
+      drawShields(c, p, px + TILE_PX / 2, py + TILE_PX / 2);
+    }
     drawStatusPips(c, p, px, py);
 
     const label = nameLabel(p.name, isMe ? PALETTE.gold : playerShades(p.i).light);

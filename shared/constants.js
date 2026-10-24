@@ -356,7 +356,9 @@ export const PERK_EXPIRE_TICKS = 45 * TICK_HZ;
  * render concern — the sim still removes it on the exact tick. */
 export const PERK_FADE_TICKS = 15 * TICK_HZ;
 export const PERKS_DROPPED_ON_DEATH = 3;
-export const MAX_SHIELDS = 1;
+// Two, so a shield can be stacked: each one survives one hit, and a second is worth walking to
+// rather than a capped pickup. Drawn on the player as a blue ring per shield — see drawShields.
+export const MAX_SHIELDS = 2;
 
 // ─── Statuses ─────────────────────────────────────────────────────────────────
 
