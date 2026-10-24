@@ -3593,31 +3593,6 @@ label {
   text-align: center;
 }
 
-/* Hovering runs the same conic gradient through the glyphs themselves: the text is painted by the
- * gradient and clipped to the letterforms, so it flows rather than just changing colour.
- *
- * The PLAY button needs `background-clip: text` on a background that is also its fill, so on hover
- * it gives up its solid fill and becomes outlined gradient type instead. */
-.hoverFlow:hover,
-.hoverFlow:focus-visible {
-  background: conic-gradient(
-    from var(--spin),
-    #edc24e,
-    #cc9434,
-    #c4683a,
-    #a83442,
-    #801e32,
-    #b85c54,
-    #edc24e
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-  text-shadow: none;
-  animation: spin 16s linear infinite;
-}
-
 /* Controls.
  *
  * Keycaps rather than bold text: a row of real-looking keys is read as "press this" without

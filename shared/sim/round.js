@@ -5,11 +5,11 @@
 // cause of "it desyncs after about a minute". docs/ARCHITECTURE.md §4.
 
 import {
-  IN_BOMB, SCORE, STATUS, STATUS_TICKS, HITBOX_UNITS,
+  IN_BOMB, SCORE, STATUS, HITBOX_UNITS,
   HITBOX_REDUCED_UNITS, START_BOMBS, START_RADIUS, RESPAWN_DELAY_TICKS,
   FIRE_TICKS, FIRE_LETHAL_TICKS,
 } from '../constants.js';
-import { expireStatuses, applyStatus, has, toTile } from './state.js';
+import { expireStatuses, has, toTile } from './state.js';
 import { stepAll } from './movement.js';
 import { place, detonate, expireFires } from './bombs.js';
 import { collect, scatterOnDeath } from './perks.js';

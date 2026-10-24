@@ -13,7 +13,7 @@ import { regenerate } from '../shared/sim/blocks.js';
 import { MAPS, buildMap, cellType } from '../shared/maps.js';
 import {
   BLOCK, BLOCK_HP, POWDER_RADIUS, POWDER_MAX_PER_ROUND, POWDER_GUARANTEE_TICK,
-  REGEN_EVERY_TICKS, TICK_HZ, ROUND_TICKS,
+  REGEN_EVERY_TICKS, ROUND_TICKS,
   STAMINA_MAX, STAMINA_RECOVER_UNITS, MAX_STAMINA_LEVELS, staminaMaxFor,
   STAMINA_DRAIN_PER_TICK, STAMINA_REGEN_MOVING,
 } from '../shared/constants.js';

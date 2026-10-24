@@ -4,20 +4,12 @@ import {
   FUSE_TICKS, FUSE_TICKS_FAST, FIRE_TICKS, CHAIN_CAP_PER_TICK, IN_BOMB, STATUS, MAX_RADIUS,
   BLOCK, POWDER_RADIUS, DIR_R, DIR_U, DIR_L, DIR_D,
 } from '../constants.js';
-import { has, toTile, tileCentre, tileAt } from './state.js';
+import { has, toTile, tileAt } from './state.js';
 import { spread } from './fire.js';
 import { damage, melt } from './blocks.js';
 import { maybeDrop } from './perks.js';
 
 export const bombAt = (state, tx, ty) => state.bombs.find(b => b.tx === tx && b.ty === ty);
-
-/** A bomb is solid to everyone except the player still standing on the tile they placed it on. */
-export function blocksPlayer(state, p, tx, ty) {
-  const b = bombAt(state, tx, ty);
-  if (!b) return false;
-  if (b.owner !== p.i) return true;
-  return !(toTile(p.x) === tx && toTile(p.y) === ty);
-}
 
 /* Which tile a bomb from this player would land on.
  *
@@ -158,6 +150,3 @@ export function detonate(state) {
 export function expireFires(state) {
   if (state.fires.length) state.fires = state.fires.filter(f => f.until > state.tick);
 }
-
-/** Where a bomb sits, in sim units — used for drop placement and rendering. */
-export const bombCentre = b => ({ x: tileCentre(b.tx), y: tileCentre(b.ty) });

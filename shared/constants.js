@@ -34,8 +34,6 @@ export const MAX_ZOOM = 2;
 export const ROUND_INTERMISSION_MS = 20_000;
 
 export const CHUNK_TILES = 8; // renderer chunk size
-export const VIEW_TILES_W = 32;
-export const VIEW_TILES_H = 20;
 
 export const MAX_PLAYERS = 16;
 
@@ -94,7 +92,6 @@ export const MAX_BOMBS = 16;        // hard ceiling on bombs alive anywhere, a s
 // surprise when a Bomb pickup stops doing anything.
 export const MAX_BOMBS_CARRIED = 8;
 export const MAX_RADIUS = 6;
-export const MAX_RADIUS_BLUE = 9;  // reserved, Blue fire is not in v1
 export const START_BOMBS = 1;
 export const START_RADIUS = 1;
 export const CHAIN_CAP_PER_TICK = 64; // safety valve, see docs/RULES.md §3
@@ -138,14 +135,8 @@ export const BLOCK_HP = {
 };
 
 export const BLOCK_DESTRUCTIBLE = b => BLOCK_HP[b] > 0;
-export const BLOCK_FIRE_PASSES = b =>
-  b === BLOCK.FLOOR || b === BLOCK.COLUMN || b === BLOCK.SHRUB_WALK || b === BLOCK.SHRUB_SOLID;
 export const BLOCK_WALKABLE = (b, reduced) =>
   b === BLOCK.FLOOR || b === BLOCK.SHRUB_WALK || (reduced && b === BLOCK.COLUMN);
-
-// The two the renderer treats as scenery rather than as level: it draws the sea under them and
-// a rock on top. Both are indestructible, so a cached chunk never has to redraw because of one.
-export const BLOCK_IS_EDGE = b => b === BLOCK.WATER || b === BLOCK.IRON;
 
 export const REGEN_EVERY_TICKS = 20 * TICK_HZ; // 600
 export const REGEN_PER_CYCLE = 3;
@@ -409,26 +400,14 @@ export const DRUNK_SWAY_RATE_A = 0.09, DRUNK_SWAY_RATE_B = 0.041;
 export const DRUNK_STAGGER_EVERY = 79;     // ticks between stumbles, prime so it never syncs
 export const DRUNK_STAGGER_TICKS = 4;      // how long one lasts
 
-// Unused since shields stopped granting a grace period: each blast now costs one shield the tick it
-// lands, so a second hit during the first is never swallowed. See killInFire in sim/round.js.
-export const INVULN_TICKS_SHIELD = 0;
-
-// How long you sit on the death screen before SPACE will do anything.
-//
-// It started at zero, which meant anyone holding the bomb key — everyone, always — respawned on
-// the same tick they died and never saw it happen. Ten seconds is long enough that dying costs
-// something, which is what makes not dying worth playing for.
-/* Fifteen seconds, up from ten.
+/* How long you sit on the death screen before SPACE will do anything.
  *
- * Long enough that dying costs you something you feel — at ten the queue barely formed and a
- * careless rush was nearly free. Fifteen is still short enough to watch the fight you just
- * left, which is the other thing the wait is for. */
+ * It started at zero, which meant anyone holding the bomb key — everyone, always — respawned on
+ * the same tick they died and never saw it happen. Then ten, at which a careless rush was nearly
+ * free. Fifteen is long enough that dying costs you something you feel, and still short enough
+ * to watch the fight you just left, which is the other thing the wait is for. */
 export const RESPAWN_DELAY_TICKS = 15 * TICK_HZ; // 450
 
-// How many of the furthest-apart spawn points to choose between. Always taking the single
-// furthest makes every death send you to the same two corners; picking at random from the best
-// handful keeps the "nobody lands in a firefight" guarantee while making it a real shuffle.
-export const SPAWN_CANDIDATES = 5;
 export const CONTAGIOUS = STATUS.PACIFISM | STATUS.SLOWDOWN | STATUS.INVISIBLE |
                           STATUS.CHANGELING | STATUS.REDUCTION | STATUS.FAST_DET;
 export const CONTAGION_COOLDOWN_TICKS = TICK_HZ; // 1 s per pair
@@ -519,12 +498,9 @@ export const INTERP_DELAY_TICKS = 4;     // ≈133 ms behind, for remote players
 export const CLOCK_SAFETY_MS = 50;       // added to rtt/2 when computing the client's lead
 export const PING_EVERY_MS = 2000;
 export const RTT_SAMPLES = 5;            // rolling minimum, see docs/NETCODE.md §2
-export const PENDING_INPUT_PANIC = 60;   // stop predicting above this
-export const POSITION_TOLERANCE_MULT = 1.5; // server sanity check, not anti-cheat
 export const MAX_MESSAGE_BYTES = 4096;
 export const CHAT_MAX_CHARS = 140;
 export const CHAT_MIN_INTERVAL_MS = 1000;
-export const CHAT_HISTORY = 50;
 export const NAME_MAX_CHARS = 20;
 
 // A backgrounded tab stops being a player. Browsers throttle rAF in hidden tabs to about once a
@@ -536,12 +512,6 @@ export const IDLE_DISCONNECT_MS = 45_000;
 // renderer process, a tab the browser froze outright. A seat that has sent no input at all for
 // this long is not being played and is given back.
 export const IDLE_KICK_TICKS = 90 * TICK_HZ; // 90 s
-
-// An id may take its own live seat back, but not endlessly. Two clients genuinely sharing an id
-// would otherwise evict each other forever, each reconnect triggering the next — so past this
-// many takeovers inside TAKEOVER_WINDOW_TICKS, the newcomer is given a fresh id instead.
-export const TAKEOVER_LIMIT = 3;
-export const TAKEOVER_WINDOW_TICKS = 20 * TICK_HZ; // 20 s
 
 // ─── Presentation ─────────────────────────────────────────────────────────────
 // Here rather than in art.js because the sim's tracer sampling rate must match the renderer's.

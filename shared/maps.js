@@ -44,8 +44,6 @@ export const MAPS = [
     shape: 'cross', density: 0.66, reinforced: 0.07, shrubs: 0.05 },
 ];
 
-export const mapById = id => MAPS.find(m => m.id === id) || MAPS[0];
-
 /** Pack a block type and its HP into one byte, per docs/PROTOCOL.md §5. */
 export const packCell = (type, hp = BLOCK_HP[type] || 0) => (type & 0x0f) | ((hp & 0x0f) << 4);
 export const cellType = b => b & 0x0f;

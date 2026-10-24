@@ -14,16 +14,6 @@ export const CONTAGIOUS_LIST = [
   STATUS.CHANGELING, STATUS.REDUCTION, STATUS.FAST_DET,
 ];
 
-export const STATUS_NAMES = {
-  [STATUS.INVULN]: 'invulnerable',
-  [STATUS.PACIFISM]: 'pacifism',
-  [STATUS.SLOWDOWN]: 'slowdown',
-  [STATUS.INVISIBLE]: 'invisible',
-  [STATUS.CHANGELING]: 'changeling',
-  [STATUS.REDUCTION]: 'reduction',
-  [STATUS.FAST_DET]: 'fast fuse',
-};
-
 const half = p => (has(p, STATUS.REDUCTION) ? HITBOX_REDUCED_UNITS : HITBOX_UNITS) >> 1;
 
 const overlapping = (a, b) =>

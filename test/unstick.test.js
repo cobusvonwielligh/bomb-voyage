@@ -7,7 +7,7 @@ import { step, blocked, unstick, speedOf } from '../shared/sim/movement.js';
 import { place } from '../shared/sim/bombs.js';
 import { tick } from '../shared/sim/round.js';
 import {
-  BLOCK, BLOCK_HP, IN_RIGHT, IN_LEFT, IN_DOWN, IN_BOMB, FUSE_TICKS, DIR_R, DIR_D,
+  BLOCK, BLOCK_HP, IN_RIGHT, IN_DOWN, IN_BOMB, FUSE_TICKS, DIR_R, DIR_D,
 } from '../shared/constants.js';
 
 // A hand-authored empty room. The generated maps put an indestructible pillar on every even/even
