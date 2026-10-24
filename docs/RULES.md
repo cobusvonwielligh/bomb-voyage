@@ -166,17 +166,19 @@ Perks drop from destroyed blocks. A destroyed **soft wall** drops a perk with pr
 
 Drop weights, applied after the drop roll:
 
-| Perk | Weight | Effect | Cap |
-|---|---:|---|---|
-| Bomb | 26 | +1 max bombs | 8 |
-| Fire | 24 | +1 blast radius | 6 |
-| Stim | 20 | +75 maximum stamina, and tops you up | 4 |
-| Boots | 18 | +1 speed step | 4 |
-| Shield | 12 | Survive one death | 1 held |
-| Gift | **0** | Rolls again on this table, excluding Gift | — |
+| Perk | Weight | Share | Effect | Cap |
+|---|---:|---:|---|---|
+| Bomb | 108 | 26.3 % | +1 max bombs | 8 |
+| Fire | 100 | 24.3 % | +1 blast radius | 6 |
+| Stim | 72 | 17.5 % | +75 maximum stamina, and tops you up | 4 |
+| Boots | 72 | 17.5 % | +1 speed step | 4 |
+| Shield | 48 | 11.7 % | Survive one death | 1 held |
+| Rum | 11 | 2.7 % | Blast arms stop killing you for 20 s; you walk drunk | — |
 
-The Gift is **switched off**, not removed: it hands out diseases and that mechanic is
-unfinished. It is still implemented and still tested, and a single weight turns it back on.
+The weights live in `PERK_WEIGHTS` in `shared/constants.js`; this table is a copy of them.
+
+The **Gift** — Game of Bombs' random perk that sometimes hands you a disease — has been
+**removed**. Type id 5 stays retired.
 
 **The drop rate is not flat.** A fixed 35% is wrong at both ends of a round — sixteen players
 opening walls at once buries the floor in perks, and once the soft walls are gone nothing drops
@@ -228,7 +230,12 @@ type here, not implemented in v1.
 
 ## 7. Statuses
 
-Statuses are timed flags. Most are **contagious**: when two players' hitboxes overlap and one has
+Statuses are timed flags. **Only Invulnerability and Drunk (rum) occur in play today.** The
+contagious diseases below were handed out by the Gift, which has been removed, so nothing starts
+an outbreak any more. Their effects and the contagion rule are still implemented and tested — a
+new source is one call to `applyStatus` — but treat this table as dormant.
+
+Most are **contagious**: when two players' hitboxes overlap and one has
 a contagious status, the other catches it with the **remaining duration**, and the carrier keeps
 it. Contagion has a **1 s per-pair cooldown** so a scrum does not ping-pong.
 
@@ -239,11 +246,11 @@ it. Contagion has a **1 s per-pair cooldown** so a scrum does not ping-pong.
 | Slowdown | 300 t | yes | Speed × 0.5. |
 | Invisibility | 300 t | yes | Invisible to other clients. Your own tracer still shows to you. |
 | Changeling | 300 t | yes | Up/down and left/right inverted, sprite drawn upside down. |
-| Reduction | 450 t (15 s) | yes | Half-size hitbox (10 × 10), may pass **columns**, blast radius forced to 1. |
+| Reduction | 450 t (15 s) | yes | Half-size hitbox (10 × 10), may pass **columns**. |
 | Fast Detonation | 300 t | yes | Your bombs fuse in 36 ticks. |
+| Drunk | 600 t (20 s) | no | From rum. Only the bomb's own tile kills you; your walk sways. |
 
-Statuses come from Gift perks and from touching an infected player. **Invulnerability is never
-contagious and is never overwritten by a weaker status.**
+**Invulnerability is never contagious and is never overwritten by a weaker status.**
 
 *Nyan disease is reserved, not in v1 — it needs its own art and an auto-bombing behaviour.*
 

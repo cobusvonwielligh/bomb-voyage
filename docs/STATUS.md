@@ -1,6 +1,6 @@
 # Bomb Voyage — Where We Stand
 
-Last updated: **2026-10-24**. Live on `bombvoyage.online`. 230 tests passing.
+Last updated: **2026-10-24**. Live on `bombvoyage.online`. 231 tests passing.
 
 This document replaces the "⬜ The game: not started" line in the README. The game is built, the
 whole plan in [PLAN.md](PLAN.md) has been walked through, and several decisions in it have since
@@ -18,7 +18,7 @@ accurate; the parts that describe *what is not built yet* are not.
 |---|---|
 | Playable end to end | ✅ |
 | Deployed, TLS, auto-restart, rollback | ✅ |
-| Bots | ✅ 15 of them, pathfinding and fleeing |
+| Bots | ✅ 15 of them, pathfinding and fleeing; `npm run botbench` measures them |
 | Maps | ✅ 5 |
 | Art and audio | ✅ art in code; music is four produced files (see §2e) |
 | Transport | ✅ **WebTransport over QUIC, with WebSocket as the fallback** |
@@ -60,9 +60,9 @@ long time to be losing.
 
 ### (c) The perk set is smaller and there are two new ones
 
-Bomb, Fire, Boots, Shield, **Stim** (stamina capacity) and **Rum**. The **Gift** is at weight
-zero — it hands out diseases, and that mechanic is unfinished. It is still implemented and still
-tested; a single number switches it back on.
+Bomb, Fire, Boots, Shield, **Stim** (stamina capacity) and **Rum**. The **Gift** has been
+removed. It was the only thing that handed out diseases, so the contagious statuses in
+`statuses.js` are now dormant: still implemented and tested, but nothing in play starts one.
 
 Rum is the odd one. At weight 11 of 411 it is **2.7% of drops**, it glows on the floor, and it
 is the only perk you might not want: it softens damage and makes you drunk, which sways your
@@ -124,7 +124,7 @@ The assets folder is now `art.js` plus `img/`, `fonts/` and `audio/`.
 | `fire.js` | Blast shape. Pure: `(map, bomb, bombs) → cells` |
 | `blocks.js` | Damage, destruction, wall regrowth, keg placement |
 | `perks.js` | Drop table, pickup, supply-and-demand drop rate, scatter on death |
-| `statuses.js` | Contagious statuses and their spread |
+| `statuses.js` | Contagious statuses and their spread — dormant since the Gift went |
 | `round.js` | The one ordered tick: the only place that decides what happens before what |
 
 Deterministic throughout: integers only, one tile is 256 units, no wall clock, no
@@ -208,18 +208,19 @@ Ordered by how much it would change a Friday session.
 
 ### Worth doing
 
-1. **Bot suicides.** Down from about 1.9 to about 1.4 deaths per bot per minute, but still the
-   largest single source of deaths on the board. Two causes were found and fixed — unlit powder
-   kegs were missing from the danger map, and a bot that had committed to a walk would not break
-   it when the tile ahead caught fire. What is left is commitment on long routes; a bot that
-   starts a four-tile dash still finishes it.
+1. **Bots are competent at not dying; they are not yet good at killing.** `npm run botbench`
+   (15 bots, every map, headless, ~3 s for 20 simulated minutes each) measures 0.17 suicides and
+   0.45 kills per bot per minute. It was 2.3 and 0.33 — 87% of deaths self-inflicted — and the
+   biggest cause was not the reasoning at all: a bot turning into a gap from just past the corner
+   assist window pushed flat into the wall and froze there until its own fuse ran out (see
+   `steer` in `ai.js`). Next: hunting. Bots bomb walls and wander toward the nearest player;
+   nothing tries to trap anyone.
 2. **A browser-side confirmation of WebTransport.** Verified with a real QUIC client from
    outside AWS (8/8 sessions, ~50 ms to ready) and from the box, but not yet read off a Chrome
    session. The console logs `transport: webtransport` on connect; somebody needs to look.
-3. **Gift and its diseases are switched off.** Weight zero in the drop table. Everything in
-   `statuses.js` works and is tested, and the one piece that is genuinely unimplemented is
-   Reduction's "blast radius forced to 1", which RULES.md §12 still promises. Finish that line
-   before raising the weight, or delete the claim.
+3. **Diseases have no source.** The Gift is gone, so the contagious statuses never start. If they
+   come back it needs a new way in (a map hazard, a cursed drop); Reduction's old "blast radius
+   forced to 1" was never implemented and has been dropped from RULES.md.
 
 ### Known-and-fine
 

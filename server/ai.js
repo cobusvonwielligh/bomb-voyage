@@ -23,6 +23,7 @@ import {
 } from '../shared/constants.js';
 import { tileAt, walkable, toTile, has } from '../shared/sim/state.js';
 import { bombTile } from '../shared/sim/bombs.js';
+import { blocked, speedOf } from '../shared/sim/movement.js';
 
 const DIRS = [
   { mask: IN_RIGHT, dx: 1, dy: 0 },
@@ -177,12 +178,12 @@ export function dangerMap(state) {
  * the centre tile let a bot think it had already made it out while half of it was still in the
  * blast.
  */
-function threatUnderfoot(danger, p) {
+function threatUnderfoot(danger, p, x = p.x, y = p.y) {
   const half = (has(p, STATUS.REDUCTION) ? HITBOX_REDUCED_UNITS : HITBOX_UNITS) >> 1;
-  const x1 = (p.x + half - 1) >> 8, y1 = (p.y + half - 1) >> 8;
+  const x1 = (x + half - 1) >> 8, y1 = (y + half - 1) >> 8;
   let soonest = Infinity;
-  for (let ty = (p.y - half) >> 8; ty <= y1; ty++) {
-    for (let tx = (p.x - half) >> 8; tx <= x1; tx++) {
+  for (let ty = (y - half) >> 8; ty <= y1; ty++) {
+    for (let tx = (x - half) >> 8; tx <= x1; tx++) {
       const t = threatAt(danger, null, tx, ty);
       if (t < soonest) soonest = t;
     }
@@ -355,7 +356,10 @@ function chooseDir(state, p, brain, danger, tx, ty) {
   }
 
   let options = safe.length ? safe : risky;
-  if (!options.length) return brain.dir;    // boxed in; the escape branch has the job now
+  // Boxed in by danger. This only runs while our own tile is safe (the flee branch has it
+  // otherwise), so the right move is none: keeping the old heading walked a bot that was standing
+  // somewhere perfectly safe straight into the blast around it.
+  if (!options.length) return -1;
 
   // Reversing *is* the oscillation. A longer commitment only made each half of it longer, which
   // is why the old 10-30 tick hold did not help; refusing to turn back does.
@@ -384,6 +388,30 @@ function chooseDir(state, p, brain, danger, tx, ty) {
 }
 
 /**
+ * The keys to press to actually go `dir` from where this bot is standing.
+ *
+ * Everything above reasons in tiles; the body does not live in tiles. A bot that has just crossed
+ * into a tile is ~128 units off its centre line, and corner assist only helps within
+ * CORNER_ASSIST_UNITS (112) of it — so turning into a gap from there pushes the hitbox flat into
+ * the wall beside the gap and nothing moves. The bot then re-derives the same direction from the
+ * same tile on the next tick, and the next, until its own fuse runs out. Measured: that was 45% of
+ * every bot death, the single largest cause by far.
+ *
+ * A person nudges back toward the lane without thinking about it, so the bot does too: if the
+ * move is blocked and we are off the centre line across it, slide toward the centre first.
+ * Movement rules are untouched — this is only which keys are pressed.
+ */
+function steer(state, p, dir) {
+  const d = DIRS[dir];
+  const speed = speedOf(p);
+  if (!blocked(state, p, p.x + d.dx * speed, p.y + d.dy * speed)) return d.mask;
+  const off = d.dx ? (p.y & 255) - 128 : (p.x & 255) - 128;
+  if (off === 0) return d.mask;                    // squarely facing a wall; nothing to line up
+  if (d.dx) return off > 0 ? IN_UP : IN_DOWN;
+  return off > 0 ? IN_LEFT : IN_RIGHT;
+}
+
+/**
  * @returns input bitmask for this bot this tick
  */
 export function think(state, p, brain, danger) {
@@ -407,7 +435,7 @@ export function think(state, p, brain, danger) {
     if (dir >= 0) {
       brain.dir = dir;
       brain.hold = 3;
-      return DIRS[dir].mask;
+      return steer(state, p, dir);
     }
     // Nowhere to go. Fall through and keep moving rather than standing still and accepting it.
   }
@@ -454,15 +482,22 @@ export function think(state, p, brain, danger) {
    */
   const ahead = DIRS[brain.dir];
   const ax = tx + ahead.dx, ay = ty + ahead.dy;
-  const aheadThreat = threatAt(danger, null, ax, ay);
+  // The whole body one tile on, not just the tile in front of its centre. Off the centre line the
+  // hitbox spans two lanes, and the diagonal it is about to drag itself into was never checked —
+  // that was the commonest way a bot walked into fire it had been told about.
+  const aheadThreat = threatUnderfoot(danger, p, p.x + ahead.dx * 256, p.y + ahead.dy * 256);
   const blockedAhead = !walkable(map, ax, ay) ||
     danger.solid.has(ay * map.w + ax) ||
     aheadThreat <= ticksPerTile(p) * 4;
   if (brain.hold <= 0 || blockedAhead) {
-    brain.dir = chooseDir(state, p, brain, danger, tx, ty);
+    const dir = chooseDir(state, p, brain, danger, tx, ty);
+    // Boxed in on a safe tile: stay. Boxed in on a burning one — the flood found nothing — keep
+    // moving, because standing still in a blast is the one choice that is certainly fatal.
+    if (dir < 0 && here === Infinity) { brain.hold = 0; return 0; }
+    if (dir >= 0) brain.dir = dir;
     brain.hold = 5 + ((Math.random() * 6) | 0);
   }
   brain.hold--;
 
-  return DIRS[brain.dir].mask;
+  return steer(state, p, brain.dir);
 }

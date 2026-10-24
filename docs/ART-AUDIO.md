@@ -129,10 +129,11 @@ Acceptance: with 16 bots on screen, you can follow any one of them by tracer alo
 | Iron | 2 variants | |
 | Column | 1 | |
 | Shrub | 2 (walk-through / solid) | Walk-through is visibly lighter. |
-| Perks | 5 live + 9 reserved | 16 × 16 icons inside a rounded tile. |
+| Perks | 6 live + 9 reserved | 16 × 16 icons inside a rounded tile. Bomb, fire, boots, shield, stim, rum. |
 | Status icons | 7 | Shown above the player's head, small. |
 
-Status visual effects (on the player, not just icons):
+Status visual effects (on the player, not just icons). Only Invulnerability and Drunk occur in
+play now; the rest are diseases with no source since the Gift was removed (RULES.md §7):
 
 | Status | Effect |
 |---|---|
@@ -155,8 +156,10 @@ familiar.
 - Headings: UI gold, uppercase, letter-spaced.
 - Body: `#e8eef7`.
 - Buttons: gold border, transparent fill, filled gold on hover.
-- Font: a system monospace stack. **No web fonts** — they are an external request and IT may
-  block them, and `default-src 'self'` will refuse them anyway.
+- Fonts: one display face, `Shotling`, served from `/assets/fonts/` — same origin, so
+  `default-src 'self'` allows it and there is no third-party request for IT to block. It is for
+  things you read once (titles, banners); everything read while playing uses the system text
+  stack. **Never a font from a CDN.**
 
 Screens: **Menu** (name + colour preview + three map cards + PLAY), **HUD** (stat icons, round
 timer, connection dot), **TAB scoreboard**, **Q map overview**, **round-end scoreboard**.
@@ -332,13 +335,15 @@ caller has already decided when, where and how loud.
 |---|---|---|
 | `place` | a bomb is placed | square blip 220 → 180 Hz, 60 ms |
 | `fuse` | a bomb within earshot has < 1 s left | dry triangle tick, 1.2–1.9 kHz, four accelerating stages |
-| `boom` | explosion | noise burst low-passed 2 kHz → 200 Hz + sine thump 100 → 38 Hz + a 2.6 kHz crack |
+| `boom` | explosion | five layers in sequence — see **Explosions** above |
+| `kegboom` | a powder keg | the same five at size 1, a powder fizz in front, a second sub an octave down |
 | `boom {chain}` | a bomb set off by another | same, pitched up 15 %, capped at 3 per frame |
 | `blockdie` | a wall is destroyed | band-passed noise 900 → 420 Hz, quiet — several fire per blast |
 | `blocknew` | a wall grows back | low sine thud 150 → 70 Hz. Your escape route just changed |
-| `pickup` | a perk is collected | two-note triangle; **the interval says which perk** (Gift goes *down*) |
+| `pickup` | a perk is collected | two-note triangle; **the interval says which perk** |
+| `glug` / `hiccup` | rum, and being drunk on it | the one pickup that does not go up |
 | `shield` | a shield eats a blast | glassy sine pair, a fifth apart |
-| `status` | a disease is caught | detuned triangle pair with a 7 Hz wobble |
+| `status` | a disease is caught | detuned triangle pair with a 7 Hz wobble — dormant, nothing hands out diseases now |
 | `death` | someone else dies | descending saw 330 → 70 Hz, positional |
 | `ownDeath` | **you** die | two detuned saws 300 → 52 Hz, 750 ms, close up |
 | `kill` | **you** killed someone | bright two-note stab up a fourth, with a click on front |
@@ -430,20 +435,23 @@ every note in a voicing is a chord tone, no rotation can turn into a tune.
 
 #### Cycling
 
-`theme` ×4 → `drift` ×2 → `suspend` ×2 → `undertow` ×2 → repeat. That is roughly a 7-minute
-cycle, so a 16-minute round hears the theme two or three times and never the same eight bars sixty
-times over. Each track has its own fader into the music bus and track changes **crossfade over
-2.5 s** at the loop boundary: the outgoing track stops scheduling but its pad releases and delay
-tail keep sounding through its own fader, which is the overlap. `start()` always comes back to the
-theme — the track somebody turned off is the one they expect back.
+**On the dashboard:** the theme, looping, and nothing else (see "The theme plays on the
+dashboard" above).
 
-The theme leads because `main.js` starts the music on the PLAY click, so there is no menu to play
-it over; joining the game is the moment it gets.
+**In a round:** PLAY calls `exclude('theme')` and fades into one of `drift`, `suspend`,
+`undertow` **at random**, then the three beds rotate in that order. With the produced files each
+bed is one ~3-minute step, so a 10-minute round hears all three and part of a fourth. (The
+synthesised fallbacks play their 12–16 bars twice before handing over.) Leaving the round brings the theme back.
+
+Each track has its own fader into the music bus and track changes **crossfade over 2.5 s** at
+the boundary: the outgoing track stops scheduling but its release and delay tail keep sounding
+through its own fader, which is the overlap. `prev`/`next` on the dock skip within the same
+rotation and also honour `exclude`.
 
 #### Volume, ducking, and the one bug that cost a session of silence
 
 Keep it all *soft and repetitive by design*. The real acceptance test is listening for a full
-16-minute round without wanting to mute it. **If you would mute it, it is too busy.**
+10-minute round without wanting to mute it. **If you would mute it, it is too busy.**
 
 Duck to 40 % while chat is focused.
 

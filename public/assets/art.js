@@ -614,7 +614,6 @@ const PERK_SKIN = {
   2: { dark: '#5a2416', mid: '#8c3a1f', rim: '#ff9b4a' },   // fire   — ember
   3: { dark: '#123f4e', mid: '#1b6076', rim: '#5fd8f0' },   // skate  — ice
   4: { dark: '#15402f', mid: '#1d6347', rim: '#5ad1a0' },   // shield — green
-  5: { dark: '#4a1d42', mid: '#752d69', rim: '#ff8fd8' },   // gift   — magenta
   15: { dark: '#4a4212', mid: '#75671d', rim: '#ffe04a' },  // stim   — yellow
   16: { dark: '#3d2415', mid: '#64402a', rim: '#d99a55' },  // rum    — bottle brown
 };
@@ -663,16 +662,6 @@ export const PERK_ART = {
     c.strokeStyle = '#0f3326'; c.lineWidth = 1.4; c.stroke();
     px(c, 15, 8, 2, 14, 'rgba(255,255,255,0.45)');        // centre rib
     c.beginPath(); c.arc(16, 15, 2.6, 0, 7); c.fillStyle = '#0f3326'; c.fill();
-  },
-  // Gift: a wrapped box with a ribbon and a bow — a parcel, not a flag.
-  5: c => {
-    rr(c, 7, 12, 18, 13, 2, '#e05fa8');
-    rr(c, 6, 9, 20, 4, 2, '#ff8fd8');
-    px(c, 14.5, 9, 3, 16, '#ffe9a8');                     // ribbon down the front
-    px(c, 6, 10, 20, 2, '#ffe9a8');                       // and across the lid
-    c.fillStyle = '#ffe9a8';
-    c.beginPath(); c.ellipse(13, 7.5, 3, 2.4, 0, 0, 7); c.fill();
-    c.beginPath(); c.ellipse(19, 7.5, 3, 2.4, 0, 0, 7); c.fill();
   },
   // Stamina: a lightning bolt. Energy is the one idea with a universally understood glyph, and
   // the zig-zag is unmistakable at any size — which is the whole brief for these.

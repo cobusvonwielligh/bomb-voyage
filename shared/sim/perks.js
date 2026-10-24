@@ -3,14 +3,13 @@
 import {
   PERK, PERK_WEIGHTS, PERK_DROP_CHANCE_SOFT, PERK_DROP_ALWAYS, PERK_EXPIRE_TICKS,
   MAX_BOMBS_CARRIED, MAX_RADIUS, MAX_SKATES, MAX_SHIELDS, SCORE, BLOCK, HITBOX_UNITS, STATUS,
-  PERKS_DROPPED_ON_DEATH, START_BOMBS, START_RADIUS, GIFT_DISEASE_CHANCE, MAX_STAMINA_LEVELS,
+  PERKS_DROPPED_ON_DEATH, START_BOMBS, START_RADIUS, MAX_STAMINA_LEVELS,
   STATUS_TICKS,
   PERK_TARGET_PER_PLAYER, PERK_TARGET_MIN, PERK_SCARCE_BOOST, PERK_GLUT_FLOOR,
   PERK_TAKE_DECAY, PERK_DEMAND_BOOST,
 } from '../constants.js';
 import { staminaMaxFor } from '../constants.js';
 import { tileAt, toTile, applyStatus } from './state.js';
-import { infect } from './statuses.js';
 import { randInt } from '../util/rng.js';
 
 
@@ -18,11 +17,9 @@ const LIVE = Object.entries(PERK_WEIGHTS).filter(([, w]) => w > 0).map(([t, w]) 
 const TOTAL = LIVE.reduce((n, [, w]) => n + w, 0);
 
 /** Weighted pick from the live table. Reserved perks sit at weight 0 and never come up. */
-function roll(next, exclude = 0) {
-  const pool = LIVE.filter(([t]) => t !== exclude);
-  const total = pool.reduce((n, [, w]) => n + w, 0);
-  let r = randInt(next, total);
-  for (const [type, w] of pool) { if (r < w) return type; r -= w; }
+function roll(next) {
+  let r = randInt(next, TOTAL);
+  for (const [type, w] of LIVE) { if (r < w) return type; r -= w; }
   return PERK.BOMB;
 }
 
@@ -102,11 +99,6 @@ function apply(state, p, type) {
       p.stamina = staminaMaxFor(p);
       p.tired = false;
       return true;
-    // A Gift is a gamble, which is the point of it. Most of the time it is a real upgrade;
-    // sometimes you catch something, and then you hand it to whoever you run past next.
-    case PERK.GIFT:
-      if (state.next() < GIFT_DISEASE_CHANCE && infect(state, p, state.next)) return true;
-      return apply(state, p, roll(state.next, PERK.GIFT));
     default: return false;                      // reserved types: inert until given a weight
   }
 }

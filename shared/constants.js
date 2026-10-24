@@ -204,7 +204,9 @@ export const staminaMaxFor = p => STAMINA_MAX + Math.min(p?.staminaLevel ?? 0, M
 // ─── Perks ────────────────────────────────────────────────────────────────────
 
 export const PERK = {
-  BOMB: 1, FIRE: 2, SKATE: 3, SHIELD: 4, GIFT: 5,
+  BOMB: 1, FIRE: 2, SKATE: 3, SHIELD: 4,
+  // 5 was the Gift, a random perk that sometimes handed out a disease. Removed; the number stays
+  // retired so an old client never mistakes a new perk for it.
   // Reserved — designed for, not implemented in v1. Give one a weight to turn it on.
   KICK: 6, JELLY: 7, DETONATOR: 8, BAT: 9, JETPACK: 10,
   NUKE: 11, BLUE_FIRE: 12, HEART: 13, KEY: 14,
@@ -217,9 +219,8 @@ export const PERK = {
 /* What actually drops.
  *
  * Bombs and Fire are the backbone of the game — without them everybody is stuck on one bomb at
- * radius one for ten minutes, and there is no way to build a turn around anything. The Gift
- * gamble is the one that is off: it hands out diseases, which is a mechanic that is not finished.
- * Everything below it is reserved and has always been zero. A perk at zero weight costs nothing
+ * radius one for ten minutes, and there is no way to build a turn around anything. Everything
+ * below the live row is reserved and has always been zero. A perk at zero weight costs nothing
  * and switches back on with one number.
  */
 export const PERK_WEIGHTS = {
@@ -235,7 +236,7 @@ export const PERK_WEIGHTS = {
    * how the game is played rather than how well, so it should be an event you remember rather
    * than a thing you have.
    */
-  [PERK.BOMB]: 108, [PERK.FIRE]: 100, [PERK.SKATE]: 72, [PERK.SHIELD]: 48, [PERK.GIFT]: 0,
+  [PERK.BOMB]: 108, [PERK.FIRE]: 100, [PERK.SKATE]: 72, [PERK.SHIELD]: 48,
   [PERK.STAMINA]: 72, [PERK.RUM]: 11,
   [PERK.KICK]: 0, [PERK.JELLY]: 0, [PERK.DETONATOR]: 0, [PERK.BAT]: 0, [PERK.JETPACK]: 0,
   [PERK.NUKE]: 0, [PERK.BLUE_FIRE]: 0, [PERK.HEART]: 0, [PERK.KEY]: 0,
@@ -262,7 +263,6 @@ export const PERK_GLUT_FLOOR = 0.25;       // at or past target: a quarter of it
 export const PERK_TAKE_HALFLIFE_TICKS = 8 * TICK_HZ;
 export const PERK_TAKE_DECAY = Math.pow(0.5, 1 / PERK_TAKE_HALFLIFE_TICKS);
 export const PERK_DEMAND_BOOST = 0.8;      // at most +80% when the board is being stripped
-export const GIFT_DISEASE_CHANCE = 0.3;    // a Gift is a gamble; see shared/sim/perks.js
 export const PERK_DROP_ALWAYS = [BLOCK.REINFORCED, BLOCK.MONOLITH];
 export const PERK_EXPIRE_TICKS = 45 * TICK_HZ;
 /* How long a perk spends visibly dying before it is removed.
