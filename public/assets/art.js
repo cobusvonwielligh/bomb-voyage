@@ -272,55 +272,108 @@ export function drawTile(c, type, tx = 0, ty = 0, dmg = 0) {
       c.beginPath(); c.arc(22, 1.5, 1.1, 0, 7); c.fillStyle = PALETTE.fireCore; c.fill();
       break;
     }
-    /* Ice: a block of it, faceted, cold and translucent-looking.
+    /* Ice: a block of real ice, sitting on the floor and starting to melt.
      *
-     * It has to read as breakable AND as different from a crate at a glance, because it does
-     * something no other block does. Pale, desaturated cyan — still terrain, still quieter than
-     * any player — cut into three facets that catch the top-left light, with a frost rim, a
-     * couple of internal fractures and one hard specular streak. Nothing else on the map has a
-     * bright diagonal glint, so that streak is the read from across the island.
+     * The first version was three flat polygons and a cartoon glint, which read as a sticker of
+     * an ice cube rather than as ice. What makes ice read as ice at 32 px is mostly what it does
+     * with light, so this is built in that order:
+     *
+     *   translucency  the floor is drawn first and the body goes over it at partial opacity, so
+     *                 the ground shows faintly through; it gets denser and bluer toward the
+     *                 bottom, where there is more ice to look through.
+     *   a top face    frosted and brighter, at the same slight top-down angle as every other block.
+     *   inside        a cloudy core, a few fine fractures and trapped air bubbles — per tile, from
+     *                 the hash, so a row of ice is not stamped.
+     *   edges         rounded, slightly slumped corners, frost along the rim, a wet sheen down the
+     *                 lit side, and an edge line in ice-blue rather than the dark outline the
+     *                 crates use (a black outline is what made the old one look printed).
+     *   meltwater     a damp patch at its foot.
      */
     case BLOCK.ICE: {
-      px(c, 0, 0, S, S, '#6f9db3');
-      // Facets: lit top-left, mid face, shadowed bottom-right. Polygons, not a gradient, so it
-      // reads as cut ice rather than as a blue glass tile.
+      drawTile(c, BLOCK.FLOOR, tx, ty, 0);
+      const r = (a, b) => hash(tx * 37 + a * 11, ty * 53 + b * 7);
       c.save();
-      c.fillStyle = '#a9cfdf';
-      c.beginPath(); c.moveTo(0, 0); c.lineTo(S, 0); c.lineTo(S * 0.62, S * 0.38);
-      c.lineTo(S * 0.3, S * 0.52); c.lineTo(0, S * 0.7); c.closePath(); c.fill();
-      c.fillStyle = '#86b5ca';
-      c.beginPath(); c.moveTo(S * 0.62, S * 0.38); c.lineTo(S, 0); c.lineTo(S, S * 0.66);
-      c.lineTo(S * 0.58, S * 0.72); c.lineTo(S * 0.3, S * 0.52); c.closePath(); c.fill();
-      c.fillStyle = '#58859b';
-      c.beginPath(); c.moveTo(0, S * 0.7); c.lineTo(S * 0.3, S * 0.52); c.lineTo(S * 0.58, S * 0.72);
-      c.lineTo(S, S * 0.66); c.lineTo(S, S); c.lineTo(0, S); c.closePath(); c.fill();
-      // Facet edges, faintly lit.
-      c.strokeStyle = 'rgba(235,248,255,0.35)'; c.lineWidth = 1;
-      c.beginPath(); c.moveTo(S * 0.3, S * 0.52); c.lineTo(S * 0.62, S * 0.38); c.lineTo(S, 0);
-      c.moveTo(S * 0.3, S * 0.52); c.lineTo(S * 0.58, S * 0.72); c.lineTo(S, S * 0.66); c.stroke();
-      // Internal fractures, per tile, so a patch of ice is not stamped.
-      c.strokeStyle = 'rgba(255,255,255,0.28)'; c.lineWidth = 0.8;
+
+      // Meltwater darkening the floor round the base.
+      c.fillStyle = 'rgba(90,150,185,0.22)';
+      c.beginPath(); c.ellipse(S / 2 + 1, S - 3.5, S * 0.47, 3.6, 0, 0, 7); c.fill();
+
+      // The body: a slumped rounded block, translucent, denser toward the bottom.
+      const body = new Path2D();
+      body.roundRect(2.5, 2, S - 5, S - 5, [5, 5, 4, 4]);
+      const g = c.createLinearGradient(0, 2, 0, S - 3);
+      g.addColorStop(0, 'rgba(214,240,250,0.88)');
+      g.addColorStop(0.42, 'rgba(150,203,228,0.84)');
+      g.addColorStop(1, 'rgba(78,140,178,0.92)');
+      c.fillStyle = g; c.fill(body);
+
+      c.save();
+      c.clip(body);
+      // The cloudy core, offset so it is not dead centre.
+      const core = c.createRadialGradient(S * (0.45 + r(1, 1) * 0.1), S * 0.6, 1, S * 0.5, S * 0.6, S * 0.42);
+      core.addColorStop(0, 'rgba(40,96,138,0.32)');
+      core.addColorStop(1, 'rgba(40,96,138,0)');
+      c.fillStyle = core; c.fillRect(0, 0, S, S);
+
+      // The top face: brighter, frosted, with a soft lower edge where it turns into the front.
+      const top = c.createLinearGradient(0, 2, 0, 11);
+      top.addColorStop(0, 'rgba(246,252,255,0.95)');
+      top.addColorStop(1, 'rgba(206,234,246,0.55)');
+      c.fillStyle = top; c.fillRect(2, 2, S - 4, 9);
+      c.fillStyle = 'rgba(255,255,255,0.35)'; c.fillRect(3, 10.5, S - 6, 1);
+      c.fillStyle = 'rgba(70,130,165,0.25)'; c.fillRect(3, 11.5, S - 6, 1);
+
+      // Fractures inside the ice: fine, pale, a little branched.
+      c.lineCap = 'round';
       for (let i = 0; i < 2; i++) {
-        const x0 = 5 + hash(tx * 13 + i, ty * 7) * (S - 10), y0 = 5 + hash(ty * 11 + i, tx * 5) * (S - 10);
-        const a = hash(tx + i * 3, ty + 9) * Math.PI;
+        const x0 = 7 + r(i, 2) * (S - 14), y0 = 13 + r(i, 3) * (S - 20);
+        const a = r(i, 4) * Math.PI * 2;
+        c.strokeStyle = `rgba(255,255,255,${0.22 + r(i, 5) * 0.15})`; c.lineWidth = 0.7;
         c.beginPath(); c.moveTo(x0, y0);
-        c.lineTo(x0 + Math.cos(a) * 6, y0 + Math.sin(a) * 6);
-        c.lineTo(x0 + Math.cos(a + 0.7) * 9, y0 + Math.sin(a + 0.7) * 9);
+        const x1 = x0 + Math.cos(a) * (4 + r(i, 6) * 5), y1 = y0 + Math.sin(a) * (4 + r(i, 6) * 5);
+        c.lineTo(x1, y1);
+        c.lineTo(x1 + Math.cos(a + 0.9) * 3, y1 + Math.sin(a + 0.9) * 3);
         c.stroke();
       }
-      // The glint: one hard diagonal streak and a small star.
-      c.strokeStyle = 'rgba(255,255,255,0.8)'; c.lineWidth = 2; c.lineCap = 'round';
-      c.beginPath(); c.moveTo(6, 13); c.lineTo(13, 6); c.stroke();
-      c.lineWidth = 1;
-      c.beginPath(); c.moveTo(9, 18); c.lineTo(11, 16); c.stroke();
-      px(c, 23, 7, 1, 3, 'rgba(255,255,255,0.7)'); px(c, 22, 8, 3, 1, 'rgba(255,255,255,0.7)');
-      c.restore();
-      // Frost speckle along the bottom edge, where meltwater would refreeze.
-      for (let i = 0; i < 6; i++) {
-        px(c, (hash(tx * 3 + i, ty * 17) * (S - 2)) | 0, S - 3 - ((hash(i, tx + ty) * 3) | 0), 1, 1,
-          'rgba(235,248,255,0.5)');
+      // Trapped air: a few tiny bubbles, each a ring with a pinprick of light.
+      for (let i = 0; i < 3; i++) {
+        const bx = 6 + r(i, 7) * (S - 12), by = 14 + r(i, 8) * (S - 20), br = 0.6 + r(i, 9) * 1.1;
+        c.strokeStyle = 'rgba(235,250,255,0.32)'; c.lineWidth = 0.5;
+        c.beginPath(); c.arc(bx, by, br, 0, 7); c.stroke();
+        c.fillStyle = 'rgba(255,255,255,0.55)'; c.fillRect(bx - br * 0.5, by - br * 0.5, 0.7, 0.7);
       }
-      bevel(c, 0, 0, S, S, 2);
+      // A wet sheen down the lit left side, and a soft reflected highlight.
+      const sheen = c.createLinearGradient(2, 0, 9, 0);
+      sheen.addColorStop(0, 'rgba(255,255,255,0.38)');
+      sheen.addColorStop(1, 'rgba(255,255,255,0)');
+      c.fillStyle = sheen; c.fillRect(2, 11, 7, S - 15);
+      c.fillStyle = 'rgba(255,255,255,0.55)';
+      c.beginPath(); c.ellipse(9, 7, 4.2, 1.5, -0.25, 0, 7); c.fill();
+      // The shadowed right side, so it reads as a block and not a tile.
+      const shade = c.createLinearGradient(S - 9, 0, S - 2, 0);
+      shade.addColorStop(0, 'rgba(30,70,100,0)');
+      shade.addColorStop(1, 'rgba(30,70,100,0.32)');
+      c.fillStyle = shade; c.fillRect(S - 9, 2, 7, S - 5);
+      c.restore();
+
+      // Frost along the rim: a scatter of white points hugging the edge.
+      for (let i = 0; i < 16; i++) {
+        const t = r(i, 10), side = (r(i, 11) * 4) | 0, d = r(i, 12) * 1.6;
+        const fx = side === 0 ? 3 + t * (S - 6) : side === 1 ? S - 3.5 - d : side === 2 ? 3 + t * (S - 6) : 3 + d;
+        const fy = side === 0 ? 2.5 + d : side === 1 ? 3 + t * (S - 7) : side === 2 ? S - 4 - d : 3 + t * (S - 7);
+        c.fillStyle = `rgba(250,254,255,${0.35 + r(i, 13) * 0.4})`;
+        c.fillRect(fx, fy, 1, 1);
+      }
+      // The edge, in ice-blue: lit along the top, darker down the right and bottom.
+      c.lineWidth = 1;
+      c.strokeStyle = 'rgba(52,104,138,0.75)'; c.stroke(body);
+      c.strokeStyle = 'rgba(255,255,255,0.6)';
+      c.beginPath(); c.moveTo(6, 2.6); c.lineTo(S - 7, 2.6); c.stroke();
+      // A drip forming on the front face.
+      const dx = 9 + r(1, 14) * (S - 18);
+      c.fillStyle = 'rgba(200,232,246,0.85)';
+      c.beginPath(); c.ellipse(dx, S - 3.2, 1.1, 1.6, 0, 0, 7); c.fill();
+      c.restore();
       break;
     }
     /* A block this file does not recognise — never a hole.
@@ -359,7 +412,7 @@ export function drawTile(c, type, tx = 0, ty = 0, dmg = 0) {
  * turns a wall into a row of walls. Floor and water are excluded — a grid drawn on open ground
  * is a chessboard, and the floor already has its own faint seam. */
 const OUTLINED = new Set([
-  BLOCK.SOFT, BLOCK.REINFORCED, BLOCK.MONOLITH, BLOCK.POWDER, BLOCK.COLUMN, BLOCK.ICE,
+  BLOCK.SOFT, BLOCK.REINFORCED, BLOCK.MONOLITH, BLOCK.POWDER, BLOCK.COLUMN,
   BLOCK.SHRUB_SOLID, BLOCK.IRON,
 ]);
 

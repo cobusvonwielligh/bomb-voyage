@@ -129,7 +129,7 @@ Acceptance: with 16 bots on screen, you can follow any one of them by tracer alo
 | Iron | 2 variants | |
 | Column | 1 | |
 | Shrub | 2 (walk-through / solid) | Walk-through is visibly lighter. |
-| Ice | 1 | Pale cyan, three lit facets and one hard diagonal glint — nothing else on the map has one. |
+| Ice | 1 | A translucent, slightly melting block over the floor: frosted top face, bluer with depth, a cloudy core, fine fractures and trapped bubbles per tile, frost on the rim, an ice-blue edge instead of the dark outline, a drip and a damp patch at its foot. |
 | Water | per frame | Melted ice. Not a tile; see **Puddles** below. |
 | Perks | 6 live + 9 reserved | 16 × 16 icons inside a rounded tile. Bomb, fire, boots, shield, stim, rum. |
 | Status icons | 7 | Shown above the player's head, small. |
