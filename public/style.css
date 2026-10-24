@@ -168,6 +168,21 @@
 }
 @media (prefers-reduced-motion: reduce) { .medal.m1 { animation: none; } }
 
+/* Lifetime medal counts: three small medals, each with its count. A zero is dimmed, not
+ * removed, so the column keeps one shape all the way down and "no silver yet" still reads. */
+.medal.mini { width: 14px; height: 17px; vertical-align: -4px; animation: none; }
+.tally { display: inline-flex; gap: 9px; font-family: var(--nums); font-variant-numeric: tabular-nums; }
+.tally .t { display: inline-flex; align-items: center; gap: 3px; min-width: 2.6ch; }
+.tally .t.zero { opacity: .3; }
+.tally.none { color: var(--dim); }
+#cardMedals { display: flex; align-items: center; gap: 8px; margin-top: 7px; font-size: 13px; }
+#cardMedals:empty { display: none; }
+#cardMedals .k {
+  color: var(--dim); font-size: 9px; text-transform: uppercase;
+  letter-spacing: .14em; font-family: var(--text);
+}
+body.observing #cardMedals { display: none; }
+
 .p1 { background: var(--tint-1); }
 .p2 { background: var(--tint-2); }
 .p3 { background: var(--tint-3); }
@@ -1384,7 +1399,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 #scores {
   --panel-fill: #141b24f7;
   position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 9;
-  display: none; border-radius: 12px; padding: 20px 24px; min-width: 500px;
+  display: none; border-radius: 12px; padding: 20px 24px; min-width: 590px;
   max-height: 82vh; overflow-y: auto;
 }
 #scores table { width: 100%; border-collapse: collapse; font-size: 13px; }

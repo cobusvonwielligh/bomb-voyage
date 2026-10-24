@@ -281,6 +281,12 @@ it. Contagion has a **1 s per-pair cooldown** so a scrum does not ping-pong.
 
 Round score resets each round. **Lifetime score persists** per `playerId` and is your XP.
 
+**Medals.** At the end of every round the top three by score (then kills — the order the
+round-over table shows) get a gold, silver or bronze, counted for life alongside kills and
+deaths. A place only pays if somebody finished below it — gold needs two players, silver three,
+bronze four — so last is never on the podium, and a finish on **zero points** wins nothing.
+Your count is on your stats card, and everyone's is on the TAB board and the all-time table.
+
 **Levels replaced ranks.** Sixteen military titles were flavour nobody could place on a scale;
 a level with a bar under it is a number you can feel moving. The curve is anchored at one real
 quantity — **100 hours of play reaches Veteran, level 20** — and `XP_LEVEL_EXP` is derived from

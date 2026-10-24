@@ -395,6 +395,7 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     // when the round reset — fifty points that never once reached anybody's total.
     for (const p of state.players) if (p?.alive) p.score += SCORE.SURVIVE_ROUND;
     bankScores();
+    awardMedals(standings);
     leaderboard?.flush();
 
     onBroadcast({
@@ -408,6 +409,29 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     // fired against the round that had already replaced the one it was waiting for.
     roundTimer = setTimeout(startNextRound, ROUND_INTERMISSION_MS);
     roundTimer.unref?.();
+  }
+
+  /**
+   * Gold, silver and bronze for the top three, into everybody's lifetime stats.
+   *
+   * From the same `standings` the round-over table shows, so the medal you are given is the one
+   * you were looking at. Two rules stop a medal meaning nothing:
+   *
+   *   - a place only pays if somebody finished BELOW it — gold needs two players, silver three,
+   *     bronze four. Last is never on the podium, so a two-player round is a gold, not a gold
+   *     and a silver for turning up.
+   *   - a finish on zero points wins nothing. A round that nobody scored in has no podium.
+   *
+   * Ties go the way the table sorts them (score, then kills), which is also what was shown.
+   */
+  function awardMedals(standings) {
+    if (!leaderboard) return;
+    for (let place = 0; place < 3 && place < standings.length - 1; place++) {
+      const st = standings[place];
+      const seat = seats[st.i];
+      if (!seat || st.s <= 0) continue;
+      leaderboard.award(seat.playerId, place, st.name);
+    }
   }
 
   function cancelIntermission() {
@@ -516,7 +540,9 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       // bandwidth — so a client that misses the welcome, or hydrates a seat from a snapshot
       // that arrived first, is stuck calling somebody "p1" for the rest of the round. Once a
       // second it heals itself.
-      ranks.push({ i, name: p.name, bot: !!s.isBot, ...progressFor(lifetime) });
+      // Lifetime podium finishes, gold / silver / bronze, for the stats card and the TAB board.
+      const medals = [banked?.gold ?? 0, banked?.silver ?? 0, banked?.bronze ?? 0];
+      ranks.push({ i, name: p.name, bot: !!s.isBot, medals, ...progressFor(lifetime) });
     }
     onBroadcast({ t: 'scores', ranks, host: hostSeat(), top: leaderboard.top(5) });
   }

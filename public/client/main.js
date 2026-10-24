@@ -866,6 +866,7 @@ function drawHud() {
   $('who').textContent = me.name;
   setValue($('rank'), mine ? mine.tier : '');
   drawXp(mine);
+  drawCabinet(mine?.medals);
   setValue($('vKills'), me.kills);
   setValue($('vDeaths'), me.deaths, { worse: true });
   setValue($('vScore'), me.score);
@@ -1083,6 +1084,52 @@ function placeMark(n) {
   return m;
 }
 
+/**
+ * A player's lifetime medals: gold, silver and bronze, each a small medal and a count.
+ *
+ * All three are always there, in place order, with an empty one dimmed rather than left out —
+ * a column whose entries change shape row to row cannot be read down, and "no silver yet" is
+ * worth seeing. `counts` is [gold, silver, bronze]; missing means nobody has told us yet.
+ */
+function medalTally(counts) {
+  const wrap = document.createElement('span');
+  wrap.className = 'tally';
+  if (!counts) { wrap.textContent = '—'; wrap.classList.add('none'); return wrap; }
+  const total = counts.reduce((a, b) => a + (b || 0), 0);
+  wrap.setAttribute('aria-label', `${counts[0] || 0} gold, ${counts[1] || 0} silver, ${counts[2] || 0} bronze`);
+  wrap.title = total ? `${counts[0] || 0} gold · ${counts[1] || 0} silver · ${counts[2] || 0} bronze`
+    : 'no podium finishes yet';
+  for (let k = 0; k < 3; k++) {
+    const n = counts[k] || 0;
+    const t = document.createElement('span');
+    t.className = 't' + (n ? '' : ' zero');
+    const m = document.createElement('span');
+    m.className = `medal mini m${k + 1}`;
+    m.setAttribute('aria-hidden', 'true');
+    t.append(m, String(n));
+    wrap.append(t);
+  }
+  return wrap;
+}
+
+/**
+ * Your own medals, on your stats card. Rebuilt only when a count changes: the HUD redraws every
+ * frame, and these change at most once a round.
+ */
+let cabinetKey = '';
+function drawCabinet(counts) {
+  const key = counts ? counts.join(',') : '';
+  if (key === cabinetKey) return;
+  cabinetKey = key;
+  const el = $('cardMedals');
+  el.replaceChildren();
+  if (!counts) return;
+  const label = document.createElement('span');
+  label.className = 'k';
+  label.textContent = 'medals';
+  el.append(label, medalTally(counts));
+}
+
 /** The place column of a table row, and the podium tint on the row itself. */
 function placeCell(tr, n) {
   const td = document.createElement('td');
@@ -1105,6 +1152,7 @@ function renderScores() {
     // The rank ladder is the thing returning Game of Bombs players recognise first, so it gets a
     // column of its own rather than a tooltip.
     cell(tr, r ? `${r.level} \u00b7 ${r.tier}` : '\u2014', null, true);
+    cell(tr, '').append(medalTally(r?.medals));
     num(cell(tr, p.kills));
     num(cell(tr, p.deaths));
     num(cell(tr, p.score)).classList.add('score');
@@ -1120,6 +1168,7 @@ function renderScores() {
     placeCell(tr, n);
     cell(tr, e.name);
     cell(tr, `${e.level} \u00b7 ${e.tier}`, null, true);
+    cell(tr, '').append(medalTally([e.gold, e.silver, e.bronze]));
     num(cell(tr, e.score));
     best.append(tr);
   }
