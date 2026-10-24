@@ -7,14 +7,15 @@
 import {
   TILE_PX, CHUNK_TILES, UNITS_PER_TILE, TRACER_SAMPLES, FUSE_TICKS, FIRE_TICKS, STATUS,
   BLOCK, BLOCK_HP, SEA_MARGIN_TILES, SPAWN_POP_TICKS, SPAWN_POP_SCALE, MIN_ZOOM, MAX_ZOOM,
-  PERK_FADE_TICKS, STAMINA_SHOW_AT, staminaMaxFor, PUDDLE_FADE_TICKS, TICK_MS, TICK_HZ,
+  PERK_FADE_TICKS, STAMINA_SHOW_AT, STAMINA_LOW_AT, SLIDE_STAMINA_COST, staminaMaxFor,
+  PUDDLE_FADE_TICKS, TICK_MS, TICK_HZ,
   BLOCK_WALKABLE, MAX_SHIELDS,
 } from '/shared/constants.js';
 import { cellType, cellHp } from '/shared/maps.js';
 import {
   drawTile, drawFire, drawPerk, drawRock, drawShip, playerShades, PALETTE, bake, bakeSea,
   PERK_GLOWS, drawBombLive, CASTS_SHADOW, drawGull, drawFeather,
-  COAST_CORNERS, COAST_Q, carveRockCorners, drawCoastFillets, cornerCells,
+  COAST_CORNERS, COAST_Q, carveRockCorners, drawCoastFillets, cornerCells, STONE_RADIUS,
 } from '/assets/art.js';
 import { bombTile } from '/shared/sim/bombs.js';
 import { gullAt } from '/shared/sim/gulls.js';
@@ -66,6 +67,10 @@ export function createRenderer(canvas, world) {
   const CALM = {
     bass: 0, mid: 0, high: 0, level: 0, beat: 0, beats: 0,
     bpm: 0, phase: 0, lock: 0, spark: 0, sparks: 0, tone: 0.5, accent: 0, accents: 0,
+    // How loud the music is set, 0..1, and 0 when it is off or muted. Not a measurement — the
+    // analyser sits before the fader, so it cannot tell a muted track from a silent one, and the
+    // coast has to know the difference. Supplied by the caller of setSound.
+    vol: 0,
     eq: new Float32Array(24),
   };
   let soundOf = null, sound = CALM, lastSparks = 0;
@@ -117,7 +122,13 @@ export function createRenderer(canvas, world) {
   let depth = null, depthFor = '';     // the depth gradient, rebuilt only when the view changes
 
   // Sun glints on the open water. Cheap, stateless, and most of what makes a surface read wet.
-  const GLINTS = 46;
+/* More of them, now that the flow streaks are gone.
+ *
+ * The streaks were most of what made the open water look alive, and taking them out left a lot of
+ * quiet sea. Glints are the right thing to fill it with: they are points rather than shapes, so
+ * the eye reads them as light on a surface and never as an object — which is exactly why the
+ * streaks had to go and these can multiply. */
+  const GLINTS = 78;
   const TIPSY_BUBBLES = 7;
   const TIPSY_LIFE_S = 1.3;
   const GLINT_LIFE_S = 1.6;
@@ -251,7 +262,7 @@ export function createRenderer(canvas, world) {
   }
 
   const invalidateAll = () => {
-    chunks = new Map(); shore = null; splashes.length = 0; dropsFor = null;
+    chunks = new Map(); shore = null; splashes.length = 0;
     pools.clear(); ripples.length = 0; wisps.length = 0; shards.length = 0; pops.length = 0; poolFor = null;
     glow.length = 0; eqFor = null; eqLen.fill(0); smokes.length = 0;
     rollCurrent();          // a new island sits in a different sea
@@ -283,6 +294,14 @@ export function createRenderer(canvas, world) {
  * The length is deliberately short, about two thirds of a tile. Long shadows are prettier and
  * they obscure the floor, and the floor is where you walk.
  */
+  /* Rock is rounded harder than a crate: six pixels against three.
+   *
+   * A crate is a made object with real edges, so a hint is right. Rock is worn, and at the
+   * crate's radius it simply read as a square with the corners filed — the change was there in
+   * the pixels and not in the picture. Six is a fifth of a tile: visibly a boulder, and still
+   * nowhere near a circle. Only exposed corners get it (see the chunk pass), so a wall of rock is
+   * still one unbroken mass. STONE_RADIUS stays the crates' number. */
+  const ROCK_RADIUS = Math.max(STONE_RADIUS, 6);
   const SHADOW_LEN = TILE_PX * 0.62;
   const SHADOW_ALPHA = 0.3;
   let sunFor = null, sun = { dx: 0, dy: 0 };
@@ -397,11 +416,83 @@ export function createRenderer(canvas, world) {
           const dmg = maxHp ? 1 - cellHp(byte) / maxHp : 0;
           cc.save();
           cc.translate(i * TILE_PX, j * TILE_PX);
-          if (type === BLOCK.IRON) drawRock(cc, tx, ty, seaEdges(tx, ty));
-          else drawTile(cc, type, tx, ty, dmg);
+          if (type === BLOCK.IRON) {
+            /* Rock, clipped — and the shape of the clip depends on where the rock is.
+             *
+             * Two problems share one answer here. The first is SPILL: a rock tile is three hashed
+             * lumps and the hash can put one up to nine pixels past the tile edge. Inland that
+             * never showed, because the next tile is drawn after it and paints the overhang out —
+             * but a water tile is never drawn at all (the sea is the background), so on the outer
+             * border the overhang survived, and the rounded coast made it obvious: the carve
+             * clears the corner back to the sea and the lump that used to hide under the square
+             * outline is left sitting on open water.
+             *
+             * The second is CORNERS: a boulder inside the playing area is a lump of stone, and a
+             * lump of stone does not have four right angles. The breakable blocks are rounded by
+             * the same radius (see STONE_RADIUS in art.js) and a square rock standing in a row of
+             * rounded crates is the one thing left on the board reading as a grid cell.
+             *
+             * So an INLAND rock gets sand laid under it and a rounded clip, exactly like a crate.
+             * A COAST rock — anything with a side facing the sea — keeps the square clip and no
+             * sand: its corners are already shaped, in quarter-tile steps, by the coast pass
+             * below, and a rounded clip there would notch sea into the island or sand into the
+             * sea depending on which side it was on.
+             */
+            const sea = seaEdges(tx, ty);
+            cc.beginPath();
+            if (sea) cc.rect(0, 0, TILE_PX, TILE_PX);
+            else {
+              /* Rounded only where the corner is actually a corner.
+               *
+               * A flat radius on every tile turns a solid rock wall into a row of lozenges with
+               * sand showing through every join — four notches per shared corner, which is both
+               * ugly and a lie about what you can walk between. So each corner asks whether
+               * either of the two sides meeting there continues into more rock: if it does, the
+               * corner is interior and stays square, and the two tiles meet with no seam. Only
+               * the corners on the OUTSIDE of a mass of rock are rounded, which is exactly where
+               * a boulder would be worn round.
+               */
+              // Off the board counts as rock: the map's border ring is rock, so a tile on the
+              // edge of the grid has more of the same beyond it rather than open sand.
+              const rock = (x, y) => (x < 0 || y < 0 || x >= map.w || y >= map.h
+                ? true : cellType(map.cells[y * map.w + x]) === BLOCK.IRON);
+              const up = rock(tx, ty - 1), down = rock(tx, ty + 1);
+              const west = rock(tx - 1, ty), east = rock(tx + 1, ty);
+              const r = ROCK_RADIUS;
+              drawTile(cc, BLOCK.FLOOR, tx, ty, 0);
+              cc.roundRect(0, 0, TILE_PX, TILE_PX, [
+                up || west ? 0 : r,
+                up || east ? 0 : r,
+                down || east ? 0 : r,
+                down || west ? 0 : r,
+              ]);
+            }
+            cc.clip();
+            drawRock(cc, tx, ty, sea);
+          } else drawTile(cc, type, tx, ty, dmg);
           cc.restore();
         }
       }
+      /* Ambient occlusion, baked.
+       *
+       * The sun shadow says where the light comes FROM. This says where it cannot reach: the
+       * inside of every join between the floor and something standing on it. Real surfaces go
+       * darker in their creases because less of the sky can see them, and it is the single
+       * cheapest thing that stops a flat top-down board looking like a diagram — walls gain a
+       * foot, corridors gain depth, and a crate reads as sitting ON the sand rather than being a
+       * differently-coloured square of it.
+       *
+       * Deliberately light. Two soft stamps per floor tile per solid neighbour at a few percent
+       * alpha: enough that the board looks softer, far short of the smudged look that gives a
+       * cheap "AO slider" away. It is also honest about what it darkens — the floor only, never
+       * the block, because darkening the block's own top would flatten the thing it is shading.
+       *
+       * FREE in the frame loop. It lands in the chunk cache with everything else, so the cost is
+       * a few hundred drawImages when a chunk is first built or a wall changes, and nothing at
+       * all per frame. That is the whole reason it can afford to exist at this quality.
+       */
+      aoPass(cc, cx, cy, map);
+
       // The rounded coast, after every tile: a fillet paints over its neighbours' old outline.
       for (let j = 0; j < CHUNK_TILES; j++) {
         for (let i = 0; i < CHUNK_TILES; i++) {
@@ -420,6 +511,122 @@ export function createRenderer(canvas, world) {
       redrawsThisSecond++;
     }
     return c.canvas;
+  }
+
+  /* The two AO stamps, baked once: an edge and an inside corner.
+   *
+   * Gradients rather than flat rects, because a hard-edged band of shadow along a wall reads as a
+   * second wall. Both are drawn at tile scale and rotated into place, so one edge sprite serves
+   * all four sides and one corner sprite all four corners.
+   */
+  const AO_REACH = Math.round(TILE_PX * 0.34);      // how far into the floor the dark reaches
+  const AO_ALPHA = 0.3;                             // of the stamp itself; see the note on aoPass
+  let aoEdge = null, aoCorner = null;
+
+  function aoSprites() {
+    if (aoEdge) return;
+    aoEdge = document.createElement('canvas');
+    aoEdge.width = TILE_PX; aoEdge.height = AO_REACH;
+    const e = aoEdge.getContext('2d');
+    const g = e.createLinearGradient(0, 0, 0, AO_REACH);
+    // Squared falloff: dense in the first few pixels and almost gone by the end, which is how a
+    // crease actually darkens. A linear ramp looks like a painted stripe.
+    g.addColorStop(0, 'rgba(0,0,0,0.85)');
+    g.addColorStop(0.35, 'rgba(0,0,0,0.3)');
+    g.addColorStop(0.7, 'rgba(0,0,0,0.08)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    e.fillStyle = g;
+    e.fillRect(0, 0, TILE_PX, AO_REACH);
+
+    aoCorner = document.createElement('canvas');
+    aoCorner.width = aoCorner.height = AO_REACH;
+    const c = aoCorner.getContext('2d');
+    const r = c.createRadialGradient(0, 0, 0, 0, 0, AO_REACH);
+    r.addColorStop(0, 'rgba(0,0,0,0.8)');
+    r.addColorStop(0.4, 'rgba(0,0,0,0.26)');
+    r.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = r;
+    c.fillRect(0, 0, AO_REACH, AO_REACH);
+  }
+
+  /**
+   * Darken the floor where it meets anything solid, for one chunk.
+   *
+   * Edges first and corners second, each stamped once per solid neighbour, so a floor tile in an
+   * alcove gets dark on three sides and a tile in the open gets nothing. Diagonal neighbours only
+   * contribute where BOTH their shared sides are open — otherwise the corner is already covered
+   * by two edges meeting and a third stamp just makes a blob.
+   */
+  function aoPass(cc, cx, cy, map) {
+    aoSprites();
+    const solid = (x, y) => {
+      if (x < 0 || y < 0 || x >= map.w || y >= map.h) return false;      // off the board: sky
+      const t = cellType(map.cells[y * map.w + x]);
+      // Water is not an occluder: the sea is lower than the sand, not higher, and the shallows
+      // and the coast outline are already doing that job.
+      return t !== BLOCK.WATER && !BLOCK_WALKABLE(t, false);
+    };
+    cc.save();
+    cc.globalAlpha = AO_ALPHA;
+    for (let j = 0; j < CHUNK_TILES; j++) {
+      for (let i = 0; i < CHUNK_TILES; i++) {
+        const tx = cx * CHUNK_TILES + i, ty = cy * CHUNK_TILES + j;
+        if (tx < 0 || ty < 0 || tx >= map.w || ty >= map.h) continue;
+        const here = cellType(map.cells[ty * map.w + tx]);
+        /* Walkable ground only, and water is not ground.
+         *
+         * A water tile is never painted into the chunk at all — it is left transparent so the
+         * animated sea shows through (see the clearRect above) — so a stamp there would be a dark
+         * smear floating on the sea rather than a crease in anything. The coast gets its depth
+         * from the shallows and the island's own shadow instead.
+         */
+        if (!BLOCK_WALKABLE(here, false) || here === BLOCK.WATER) continue;
+        const x = i * TILE_PX, y = j * TILE_PX;
+        const up = solid(tx, ty - 1), down = solid(tx, ty + 1);
+        const left = solid(tx - 1, ty), right = solid(tx + 1, ty);
+
+        // One rotation per side, drawing the same strip each time.
+        if (up) cc.drawImage(aoEdge, x, y);
+        if (down) {
+          cc.save();
+          cc.translate(x + TILE_PX, y + TILE_PX);
+          cc.rotate(Math.PI);
+          cc.drawImage(aoEdge, 0, 0);
+          cc.restore();
+        }
+        if (left) {
+          cc.save();
+          cc.translate(x, y + TILE_PX);
+          cc.rotate(-Math.PI / 2);
+          cc.drawImage(aoEdge, 0, 0);
+          cc.restore();
+        }
+        if (right) {
+          cc.save();
+          cc.translate(x + TILE_PX, y);
+          cc.rotate(Math.PI / 2);
+          cc.drawImage(aoEdge, 0, 0);
+          cc.restore();
+        }
+
+        // Inside corners, from the diagonals, and only where neither shared side is already dark.
+        const corners = [
+          [-1, -1, !up && !left, x, y, 0],
+          [1, -1, !up && !right, x + TILE_PX, y, Math.PI / 2],
+          [1, 1, !down && !right, x + TILE_PX, y + TILE_PX, Math.PI],
+          [-1, 1, !down && !left, x, y + TILE_PX, -Math.PI / 2],
+        ];
+        for (const [dx, dy, open, ax, ay, rot] of corners) {
+          if (!open || !solid(tx + dx, ty + dy)) continue;
+          cc.save();
+          cc.translate(ax, ay);
+          cc.rotate(rot);
+          cc.drawImage(aoCorner, 0, 0);
+          cc.restore();
+        }
+      }
+    }
+    cc.restore();
   }
 
   /** Which sides of this tile face open water, as a DIR_* bitmask. */
@@ -529,28 +736,12 @@ export function createRenderer(canvas, world) {
    * collision, and all of it against a budget that is actually spent on sixteen players and a
    * chain reaction. If this ever needs to come back down, it is one number.
    */
-  // A third fewer than the 880 it was: at that density, on a fitted board, the open water read
-  // as white noise more than as a current.
-  const DROPS = 590;
-  const drops = [];
-  let dropsFor = null;              // the map they were seeded for
-
-  function seedDrops() {
-    drops.length = 0;
-    const W = world.map.w * TILE_PX, H = world.map.h * TILE_PX;
-    const M = SEA_MARGIN_TILES * TILE_PX * 2;
-    for (let i = 0; i < DROPS; i++) {
-      drops.push({
-        x: -M + Math.random() * (W + M * 2),
-        y: -M + Math.random() * (H + M * 2),
-        len: 3 + Math.random() * 9,          // drawn as a short streak along its own velocity
-        a: 0.12 + Math.random() * 0.3,
-        vx: 0, vy: 0,
-      });
-    }
-    dropsFor = world.map;
-  }
-
+  /* The particle current is gone — see the note where it used to be drawn.
+   *
+   * What is left of it is the FIELD, `flowAt` below, which is now a service rather than a
+   * picture: the dust off a slide, the bioluminescence and the drying puddles all drift on it, so
+   * everything in the world that floats agrees about which way the water is going.
+   */
   /**
    * The current: a prevailing drift with two wave trains riding on it, all rolled per map.
    *
@@ -705,90 +896,6 @@ export function createRenderer(canvas, world) {
     }
     out.x = vx; out.y = vy;
     return out;
-  }
-
-  // The particles' strokes, batched: one path per (alpha, width) bucket instead of a stroke call
-  // per particle. Six alphas across the 0.12-0.42 range the particles are seeded with is finer
-  // than anyone can tell apart on a moving streak.
-  const DROP_ALPHAS = 6;
-  const DROP_OPACITY = 0.6;
-
-  /** Is this world point on the moored ship's hull or on a sea boulder? */
-  function onSolidWater(x, y) {
-    for (const k of seaRocks) {
-      const dx = x - k.x, dy = y - k.y;
-      if (dx * dx + dy * dy < k.r * k.r * 1.3) return true;
-    }
-    const m = moored;
-    if (!m) return false;
-    // Into the ship's own frame, then an ellipse round the hull, bowsprit and rails included.
-    const c = Math.cos(-m.angle), s = Math.sin(-m.angle);
-    const lx = (x - m.x) * c - (y - m.y) * s, ly = (x - m.x) * s + (y - m.y) * c;
-    const ax = 80 * SHIP_SCALE, ay = 34 * SHIP_SCALE;
-    return (lx * lx) / (ax * ax) + (ly * ly) / (ay * ay) < 1;
-  }
-  const dropPaths = Array.from({ length: DROP_ALPHAS * 2 }, () => []);
-
-  function drawDrops(vw, vh, ox, oy, dt) {
-    if (dropsFor !== world.map) seedDrops();
-    const W = world.map.w * TILE_PX, H = world.map.h * TILE_PX;
-    const M = SEA_MARGIN_TILES * TILE_PX * 2;
-    const map = world.map;
-
-    ctx.save();
-    ctx.translate(ox, oy);
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = PALETTE.foam;
-    /* The flow lines do NOT listen to the music.
-     *
-     * They are the one thing in the sea that says which way the water is going, and they used to
-     * stretch with the mids, brighten with the highs, surge on every beat and run on the music's
-     * clock — so in a busy passage the whole ocean flickered with them. Now they follow the plain
-     * current on the plain clock, and the music lives in the coast and the bioluminescence. */
-    for (const b of dropPaths) b.length = 0;
-    for (const d of drops) {
-      flowAt(d.x, d.y, seaT, flow);
-      // Ease toward the current rather than snapping to it, so particles have momentum and the
-      // field reads as water being pushed rather than as dots teleporting along a curve.
-      d.vx += (flow.x - d.vx) * 0.08;
-      d.vy += (flow.y - d.vy) * 0.08;
-      d.x += d.vx * dt;
-      d.y += d.vy * dt;
-
-      // Wrap round the visible sea. Cheaper than respawning and keeps the density even.
-      if (d.x < -M) d.x += W + M * 2; else if (d.x > W + M) d.x -= W + M * 2;
-      if (d.y < -M) d.y += H + M * 2; else if (d.y > H + M) d.y -= H + M * 2;
-
-      // Hidden behind the island: skip it rather than drawing a wave on top of the level.
-      const tx = (d.x / TILE_PX) | 0, ty = (d.y / TILE_PX) | 0;
-      if (tx >= 0 && ty >= 0 && tx < map.w && ty < map.h
-          && cellType(map.cells[ty * map.w + tx]) !== BLOCK.WATER) continue;
-      // Nor across the ship's deck or a boulder: they are drawn first and the current runs
-      // round them, not over them. Both ends of the streak are checked, so none pokes in.
-      const sp = Math.hypot(d.vx, d.vy) || 1;
-      const tailX = d.x - (d.vx / sp) * d.len, tailY = d.y - (d.vy / sp) * d.len;
-      if (onSolidWater(d.x, d.y) || onSolidWater(tailX, tailY)) continue;
-
-      const bucket = Math.min(DROP_ALPHAS - 1, ((d.a - 0.12) / 0.3 * DROP_ALPHAS) | 0)
-        + (sp > 18 ? DROP_ALPHAS : 0);
-      dropPaths[bucket].push(d.x, d.y, tailX, tailY);
-    }
-    for (let b = 0; b < dropPaths.length; b++) {
-      const seg = dropPaths[b];
-      if (!seg.length) continue;
-      const k = b % DROP_ALPHAS;
-      // Two fifths fainter than they were, on request: present, never the thing you look at.
-      ctx.globalAlpha = (0.12 + (k + 0.5) * (0.3 / DROP_ALPHAS)) * DROP_OPACITY;
-      ctx.lineWidth = b >= DROP_ALPHAS ? 1.6 : 1;
-      ctx.beginPath();
-      for (let i = 0; i < seg.length; i += 4) {
-        ctx.moveTo(seg[i], seg[i + 1]);
-        ctx.lineTo(seg[i + 2], seg[i + 3]);
-      }
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-    ctx.restore();
   }
 
   // Fewer, bigger, slower. Small frequent splashes read as static along the whole coast; a
@@ -1146,44 +1253,32 @@ export function createRenderer(canvas, world) {
        *
        * Out here it reads less as shade and more as the dark of deep water beside something
        * solid — which is right either way, and it is the thing that stops the boulders looking
-       * like decals laid on the surface. Half the strength of the shadows on land, because
-       * water scatters light and a hard shadow on it looks like a hole. */
+       * like decals laid on the surface.
+       *
+       * A soft gradient blob rather than a stack of hard ellipses. The old version threw one
+       * black ellipse per lump at 62% of the land shadow alpha, and four overlapping hard-edged
+       * ellipses on water is the one thing that reads as a hole in the sea rather than as shade
+       * in it: real light on water scatters, so the edge of a shadow out here has no edge. One
+       * radial fill, stretched along the light and thrown clear of the rock, does the whole job
+       * for a quarter of the draws.
+       */
       const sv = sunVec();
       // The light's direction as a unit vector. `sunVec` is an offset in pixels; what the
       // shading below wants is which way is away from the sun, at whatever distance it likes.
       const ux = sv.dx / SHADOW_LEN, uy = sv.dy / SHADOW_LEN;
+      const shx = x + ux * (k.r * 0.55 + SHADOW_LEN), shy = y + uy * (k.r * 0.45 + SHADOW_LEN * 0.8);
       ctx.save();
-      ctx.globalAlpha = SHADOW_ALPHA * 0.62;
-      ctx.fillStyle = '#000';
-      for (const l of k.lumps) {
-        // Thrown a good way clear of the rock rather than tucked under it: a boulder stands
-        // well out of the water, and a shadow directly beneath a tall thing reads as noon.
-        ctx.beginPath();
-        ctx.ellipse(x + l.dx + ux * (l.r * 0.5 + SHADOW_LEN), y + l.dy + uy * (l.r * 0.4 + SHADOW_LEN * 0.8),
-          l.r * 1.02, l.r * l.squash * 0.78, l.turn, 0, 7);
-        ctx.fill();
-      }
+      ctx.globalAlpha = SHADOW_ALPHA * 0.8;
+      ctx.translate(shx, shy);
+      ctx.rotate(Math.atan2(uy, ux));
+      ctx.scale(1.25, 0.66);                       // long in the light's direction, flat across it
+      const shade = ctx.createRadialGradient(0, 0, k.r * 0.18, 0, 0, k.r * 1.08);
+      shade.addColorStop(0, 'rgba(0,0,0,0.9)');
+      shade.addColorStop(0.55, 'rgba(0,0,0,0.5)');
+      shade.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = shade;
+      ctx.beginPath(); ctx.arc(0, 0, k.r * 1.08, 0, 7); ctx.fill();
       ctx.restore();
-
-      /* The water piling up around it, and one of the three places the music still shows.
-       *
-       * SLIGHT, deliberately. A rock is the only fixed thing in a moving current, so it is
-       * where a swell actually reads — but it is also out on the open water where nothing is
-       * being played, which is exactly why it can afford to move at all. The whole range is
-       * about four hundredths of alpha and a pixel of line width: visible if you watch it,
-       * invisible if you are not. */
-      const lap = mood.beat * 0.55 + mood.bass * 0.3;
-      ctx.globalAlpha = 0.12 + 0.04 * Math.sin(seaT * 1.1 + k.phase) + 0.045 * lap;
-      ctx.strokeStyle = PALETTE.foam;
-      ctx.lineWidth = 3 + lap * 1.1;
-      ctx.beginPath();
-      ctx.ellipse(x, y, k.r * (1.25 + lap * 0.04), k.r * (1.05 + lap * 0.04), 0, 0, 7);
-      ctx.stroke();
-      ctx.globalAlpha = 0.06 + 0.03 * lap;
-      ctx.lineWidth = 9;
-      ctx.beginPath();
-      ctx.ellipse(x, y, k.r * 1.6, k.r * 1.35, 0, 0, 7);
-      ctx.stroke();
 
       // The mass itself. Every tone is mixed well down toward the deep sea, so the rock is a
       // shape you notice rather than an object that announces itself.
@@ -1221,15 +1316,75 @@ export function createRenderer(canvas, world) {
         0.6, '#3c424c', 0.78);                                        // the lit shoulder
       for (const l of k.lumps) lump({ ...l, dx: l.dx - ux * l.r * 0.46, dy: l.dy - uy * l.r * 0.46 },
         0.26, '#565d6a', 0.55);                                       // the dry cap, sunward
+
+      /* Stone, not pebbles: facets, grain and a rim of light along the sunward edge.
+       *
+       * Four smooth ellipses with a highlight read as a heap of eggs, and no amount of tone work
+       * fixes that — what makes stone look like stone is STRAIGHT lines in it. So each lump gets
+       * a couple of facet creases, struck across it at a fixed angle from the lump's own hash,
+       * and a scatter of grain. All of it is deterministic in the lump, so a rock is the same
+       * rock every frame; none of it listens to anything.
+       */
+      ctx.globalAlpha = ROCK_ALPHA * 0.5;
+      ctx.lineCap = 'round';
+      for (let n = 0; n < k.lumps.length; n++) {
+        const l = k.lumps[n];
+        const lx = x + l.dx, ly = y + l.dy;
+        for (let f = 0; f < 2; f++) {
+          const a = l.turn + f * 1.9 + n * 0.7;
+          const len = l.r * (0.5 + 0.3 * hash01(n * 31 + f));
+          const off = (hash01(n * 17 + f * 5) - 0.5) * l.r * 0.5;
+          const px0 = lx + Math.cos(a + 1.57) * off, py0 = ly + Math.sin(a + 1.57) * off;
+          const ex = Math.cos(a) * len, ey = Math.sin(a) * len;
+          /* A crease is two strokes, and that is what makes it a crease rather than a scratch:
+           * the dark of the groove, and the lit lip on the sunward side of it. One line alone
+           * reads as a crack drawn ON the rock; two read as the rock having a shape. */
+          ctx.strokeStyle = '#141a22';
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          ctx.moveTo(px0 - ex, py0 - ey);
+          ctx.lineTo(px0 + ex, py0 + ey);
+          ctx.stroke();
+          ctx.strokeStyle = '#5a616e';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(px0 - ex - ux * 1.3, py0 - ey - uy * 1.3);
+          ctx.lineTo(px0 + ex - ux * 1.3, py0 + ey - uy * 1.3);
+          ctx.stroke();
+        }
+        // Grain: a few specks of lit stone, so the surface is not glass.
+        ctx.fillStyle = '#6a717f';
+        for (let s = 0; s < 3; s++) {
+          const a = hash01(n * 97 + s * 13) * 6.28, d = hash01(n * 53 + s) * l.r * 0.7;
+          ctx.beginPath();
+          ctx.arc(lx + Math.cos(a) * d, ly + Math.sin(a) * d, 0.8, 0, 7);
+          ctx.fill();
+        }
+      }
       ctx.restore();
 
-      // A wet line where it goes into the water, which is what sells "half submerged".
-      ctx.globalAlpha = ROCK_ALPHA * 0.7;
-      ctx.strokeStyle = PALETTE.seaLight;
-      ctx.lineWidth = 2;
+      /* Where it meets the water: ONE layer, and not a line among them.
+       *
+       * There were four — a dashed foam collar, a second fainter collar, a bright arc on the
+       * upstream face and two wake smears trailing downstream — and every one of them was a
+       * STROKE. On open water a stroke is the one thing the eye will not forgive: however it is
+       * dashed, phased or faded, a curve following the outline of a rock reads as a line drawn
+       * round the rock. Removed completely, on request, and the sea is quieter for it.
+       *
+       * What is left is the wet band, which is a FILL and therefore not an outline: the stone just
+       * above the waterline is dark and shiny because it is wet, and that single tone is what
+       * plants the boulder IN the water rather than on top of it.
+       */
+      ctx.save();
       ctx.beginPath();
       ctx.ellipse(wlx, wly, wrx, wry, 0, 0, 7);
-      ctx.stroke();
+      ctx.clip();
+      ctx.globalAlpha = ROCK_ALPHA * 0.5;
+      ctx.fillStyle = '#0d1a22';
+      ctx.beginPath();
+      ctx.ellipse(wlx, wly + wry * 0.42, wrx * 0.98, wry * 0.7, 0, 0, 7);
+      ctx.fill();
+      ctx.restore();
 
       ctx.restore();
       ctx.globalAlpha = 1;
@@ -1258,15 +1413,32 @@ export function createRenderer(canvas, world) {
    * reaching into a bay is simply covered by the land. */
   // Twice the blocks of the last pass, spread over twice the reach, each at half the light: the
   // same glow over a larger area, so it reads as a tint on the water rather than as a bar.
-  const EQ_MAX = 5;                                     // tiles of reach, at full scale
+  /* Seven tiles of reach rather than five, at four blocks a tile.
+   *
+   * The whole visualiser moved outward and got stronger when the flow streaks were removed: the
+   * sea around the island is now the only place anything is happening, so the thing that is
+   * SUPPOSED to be happening there can afford to spread. Seven tiles puts the tip of a loud band
+   * out past the shallows and into open water, which is also where there is room for it. */
+  const EQ_MAX = 7;                                     // tiles of reach, at full scale
   const EQ_SUB = 4;                                     // blocks per tile, outward
   // Half of what it was again — 0.15 and a 0.3 cap — at the user's request after a real round.
-  const EQ_ALPHA = 0.038, EQ_CAP_ALPHA = 0.07;
+  // Half again on both, with the reach: at the old alpha a bar seven tiles long faded to nothing
+  // before it got there, which is a longer bar that reads as a shorter one.
+  const EQ_ALPHA = 0.058, EQ_CAP_ALPHA = 0.105;
   // One band per shade, so a colour never spans two bands.
   const EQ_BANDS = 24;
   const EQ_SHADES = 24;
   const EQ_COLOURS = Array.from({ length: EQ_SHADES }, (_, k) =>
     `hsl(${(205 - k * 2.3) | 0} 55% ${(54 + k * 0.7) | 0}%)`);  // deep blue bass to aqua treble
+  /* Well over half again what the standing wave asks for, at every volume. See paintCoastEq.
+   *
+   * This started at 1.33 — "a third more intense" — and went up with the rest of the sea when the
+   * flow streaks came out. The coast is now the loudest thing in the water, which is the right
+   * thing for it to be: it is the only part of the sea that is actually listening. */
+  const EQ_VU_BOOST = 1.75;
+  // Below this the coast is dark. Five percent on the slider is "effectively off", and a coast
+  // glowing for music nobody can hear reads as a fault rather than as atmosphere.
+  const EQ_MIN_VOL = 0.05;
 
   /* Bioluminescence.
    *
@@ -1279,7 +1451,7 @@ export function createRenderer(canvas, world) {
    *
    * Subtle on purpose. The first version was bright dots that flared and vanished in under a
    * second, a dozen at a time; it read as sparks, and it fought the game for attention. */
-  const GLOW_MAX = 70;
+  const GLOW_MAX = 130;
   function glowSprite(core, mid, edge) {
     const el = document.createElement('canvas');
     el.width = el.height = 32;
@@ -1320,7 +1492,10 @@ export function createRenderer(canvas, world) {
   function feedGlow(dtMs) {
     if (!world.map || !soundOf) return;
     const dt = dtMs / 1000;
-    const rate = 0.3 + mood.high * 2 + mood.mid * 0.6;                         // per second
+    // Twice the spawn rate it had, and a floor under it so there is always something lighting the
+    // shallows. The bioluminescence is now carrying the part of "the sea is alive" that six
+    // hundred white streaks used to carry.
+    const rate = 0.8 + mood.high * 4 + mood.mid * 1.3;                         // per second
     const n = Math.floor(rate * dt) + (Math.random() < (rate * dt) % 1 ? 1 : 0);
     for (let i = 0; i < n; i++) { const p = shallowsPoint(); if (p) spawnGlow(p[0], p[1]); }
     if (sound.sparks !== lastSparks) {
@@ -1371,7 +1546,13 @@ export function createRenderer(canvas, world) {
    * slide sideways along the shore, and the coast looked like it was flowing. Now nothing moves
    * along the coast at all: every bar only grows and shrinks perpendicular to its wall.
    */
-  const EQ_RUN = 4;
+  /* Shorter runs: three tiles of coast rather than four.
+   *
+   * The run is the unit that rises and falls as one, so it sets how finely the spectrum is spread
+   * around the island. Shorter runs mean more of them, which means more of the twenty-four bands
+   * are visible at once and neighbouring stretches of coast differ more — a better SPREAD, which
+   * is the thing that makes it read as a spectrum rather than as a coastline breathing. */
+  const EQ_RUN = 3;
   function coastEq() {
     if (eqFor === world.map && eqCoast.length) return eqCoast;
     eqFor = world.map;
@@ -1483,12 +1664,28 @@ export function createRenderer(canvas, world) {
     const n = EQ_BANDS;
     if (eqLen.length !== n) { eqLen = new Float32Array(n); eqBlur = new Float32Array(n); }
     eqT += dtMs / 1000;
+    /* On or off first, then how big.
+     *
+     * OFF below EQ_MIN_VOL. The coast lighting up for music nobody can hear is the one state that
+     * reads as a bug rather than as weather, and the analyser cannot tell you about it: it is
+     * tapped BEFORE the volume fader, so a muted track and a loud one look identical to it. The
+     * volume comes from the caller of setSound for exactly this. The layer is already cleared
+     * above, so returning here leaves the coast dark.
+     *
+     * Then the size. Half the height is a floor and the other half is the music: nothing playing
+     * is half height, a loud mix is full height, and it never drops below half whatever the mix
+     * does — the standing wave is scenery, and scenery should not stop when the track does.
+     * EQ_VU_BOOST lifts the whole range by a third, volume-independent, because at the old
+     * amplitude the bars were lost in the shallows they rise out of.
+     */
+    if ((sound.vol ?? 0) < EQ_MIN_VOL) return;
+    const loud = (0.5 + 0.5 * Math.max(0, Math.min(1, mood.level))) * EQ_VU_BOOST;
     for (let b = 0; b < n; b++) {
       const p = b / n;
       const w = Math.sin(eqT * 0.21 + p * 6.1)
         + Math.sin(eqT * 0.13 - p * 9.7) * 0.7
         + Math.sin(eqT * 0.072 + p * 3.3) * 0.5;
-      eqLen[b] = Math.max(0, w / 2.2 + 0.52) * EQ_MAX;
+      eqLen[b] = Math.max(0, w / 2.2 + 0.52) * EQ_MAX * loud;
     }
     // One gentle blur across neighbouring bands, so no band stands up on its own like a post.
     let prev = eqLen[0];
@@ -2160,6 +2357,7 @@ export function createRenderer(canvas, world) {
   const falls = [];                // gulls on their way down
   const feathers = [];             // what came off them
   const coinGlints = [];           // the coin landing
+  const coinFlights = [];          // coins on their way to whoever shot the bird down
   let gullT = 0;                   // the smoothed tick the birds were last drawn at
 
   /** Everything needed to draw one gull at a fractional tick. */
@@ -2261,6 +2459,101 @@ export function createRenderer(canvas, world) {
     if (!def) return;
     gullSeen.set(e.id, { ...(seen || {}), def, gone: true });
     gullDown(def, e.x, e.y, e.cx !== undefined ? { cx: e.cx, cy: e.cy } : null);
+    if (e.coins && e.by >= 0) throwCoins(e.x, e.y, e.by, e.coins);
+  }
+
+  /* The payout, thrown out of the sky and into the shooter's pocket.
+   *
+   * The coins are already theirs — the server paid them on the tick the bird fell — so this is
+   * pure presentation, and it has one job: connect the blast you set to the number that moved in
+   * the corner of the screen. A coin on the floor did that connecting badly; a coin that flies to
+   * YOU and lands on you cannot be misread.
+   *
+   * Thrown up and out first, then homing, each one a little later than the last, so three coins
+   * read as a handful rather than as one coin drawn three times. The target is read every frame
+   * from the rendered position, which means it follows a player who is still running.
+   */
+  function throwCoins(x, y, seat, n) {
+    const px = (x / UNITS_PER_TILE) * TILE_PX, py = (y / UNITS_PER_TILE) * TILE_PX;
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI / 2 + (i - (n - 1) / 2) * 0.5;
+      coinFlights.push({
+        x: px, y: py, vx: Math.cos(a) * 70, vy: Math.sin(a) * 70,
+        seat, age: -i * 0.09, lift: 0, spin: Math.random() * 6, done: false,
+      });
+    }
+  }
+
+  /** A gold coin seen three-quarters on, at `r` pixels. The rim is what makes it metal. */
+  function drawCoinFace(c, r, turn) {
+    // Turning edge-on and back: the face narrows to a sliver and the thickness behind it shows.
+    const squash = Math.abs(Math.cos(turn));
+    c.fillStyle = '#7d5c0f';
+    c.beginPath(); c.ellipse(0.6, 0.9, Math.max(0.7, r * squash), r, 0, 0, 7); c.fill();
+    c.fillStyle = '#edc24e';
+    c.beginPath(); c.ellipse(0, 0, Math.max(0.5, r * squash), r, 0, 0, 7); c.fill();
+    if (squash < 0.35) return;                       // edge-on: no face to decorate
+    c.strokeStyle = '#4a3608';
+    c.lineWidth = 1;
+    c.stroke();
+    c.globalAlpha *= 0.85;
+    c.fillStyle = '#f6e7a9';
+    c.beginPath();
+    c.ellipse(-r * 0.3 * squash, -r * 0.3, r * 0.32 * squash, r * 0.34, -0.5, 0, 7);
+    c.fill();
+  }
+
+  function drawCoinFlights(ox, oy, dtMs) {
+    if (!coinFlights.length) return;
+    const dt = dtMs / 1000;
+    for (let i = coinFlights.length - 1; i >= 0; i--) {
+      const f = coinFlights[i];
+      f.age += dt;
+      if (f.age < 0) continue;
+      const p = world.players[f.seat];
+      if (!p) { coinFlights.splice(i, 1); continue; }
+      const tx = ((p.rx ?? p.x) / UNITS_PER_TILE) * TILE_PX;
+      const ty = ((p.ry ?? p.y) / UNITS_PER_TILE) * TILE_PX - TILE_PX * 0.35;
+
+      /* Thrown, then pulled.
+       *
+       * The throw is a real velocity with drag on it, so the first moment is the coin coming off
+       * the blast. The pull is an acceleration toward the target that grows with time — which is
+       * what makes the end of the flight certain without the beginning looking magnetic. Capped,
+       * or a coin chasing a sprinting player would orbit them.
+       */
+      const dx = tx - f.x, dy = ty - f.y;
+      const d = Math.hypot(dx, dy) || 1;
+      const pull = Math.min(2600, 420 + f.age * 2600);
+      f.vx = f.vx * Math.exp(-dt * 2.2) + (dx / d) * pull * dt;
+      f.vy = f.vy * Math.exp(-dt * 2.2) + (dy / d) * pull * dt;
+      f.x += f.vx * dt; f.y += f.vy * dt;
+      f.spin += dt * 11;
+      // A hop in the air on the way, so it arcs over the board rather than sliding across it.
+      f.lift = Math.sin(Math.min(1, f.age / 0.5) * Math.PI) * 9;
+
+      if (d < 7 || f.age > 1.8) {
+        coinFlights.splice(i, 1);
+        // Landing in the pocket: the same glint the floor coin gets, on the player.
+        coinGlints.push({ x: tx, y: ty, life: 1, rot: Math.random() * 6 });
+        continue;
+      }
+
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, f.age * 6) * Math.min(1, d / 10);
+      // The shadow it throws while it is up, which is the only cue that it is above the board.
+      ctx.save();
+      ctx.globalAlpha *= 0.22;
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.ellipse(ox + f.x + 2, oy + f.y + 3, 3.4, 1.6, 0, 0, 7);
+      ctx.fill();
+      ctx.restore();
+      ctx.translate(ox + f.x, oy + f.y - f.lift);
+      drawCoinFace(ctx, 4.2, f.spin);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
   }
 
   /**
@@ -2483,7 +2776,15 @@ export function createRenderer(canvas, world) {
     // thing, which is the one spatial relationship that cannot be true here.
     drawWaterRocks(ox, oy);
     drawMoored(ox, oy);
-    drawDrops(vw, vh, ox, oy, Math.min(0.05, dtMs / 1000));
+    /* No flow indicators.
+     *
+     * There were six hundred short white streaks drifting on the flow field here, and they were
+     * the clearest thing in the sea — which is the problem: the only moving thing on screen that
+     * nobody needs to look at was also the most legible. What the current does to the water is
+     * already said by the two scrolling surface layers, the depth gradient and the glints, and
+     * none of those draw a shape the eye can name. The field itself (`flowAt`) stays: the dust,
+     * the bioluminescence and the coast all drift on it.
+     */
 
     const cx0 = Math.floor(cam.x / CHUNK_PX), cx1 = Math.floor((cam.x + vw) / CHUNK_PX);
     const cy0 = Math.floor(cam.y / CHUNK_PX), cy1 = Math.floor((cam.y + vh) / CHUNK_PX);
@@ -2557,6 +2858,8 @@ export function createRenderer(canvas, world) {
         leftS: Math.max(0, b.at - tickNow) / TICK_HZ,
         fullS: FUSE_TICKS / TICK_HZ,
         colorIndex: owner,
+        // Reach, for the pips under it. `r` on the wire; `radius` when it came from a welcome.
+        radius: b.r ?? b.radius ?? 0,
         t: seaT + b.id * 0.37,
       });
       ctx.restore();
@@ -2582,6 +2885,10 @@ export function createRenderer(canvas, world) {
      * other's shadow — and a shadow that disappears when somebody walks past it is worse than
      * no shadow. All the shadows belong to the floor; all the players stand on top of them. */
     drawSunShadows(alive, ox, oy);
+    // Dust is in the air but below the people: slide trails and whatever is left of whoever
+    // died. Before the sprites, so a pirate is never drawn behind their own dust.
+    trackSlides(ox, oy, dtMs);
+    drawDust(ox, oy, dtMs);
     // Gulls on the same clock the bombs count down on, which is the clock the fire is drawn on:
     // the bird is drawn exactly where a blast would have to catch it.
     gullT = tickNow;
@@ -2591,6 +2898,7 @@ export function createRenderer(canvas, world) {
 
     drawAim(ox, oy, dtMs);
     for (const p of alive) drawTipsy(ctx, p, ox, oy);
+    for (const p of alive) drawConfused(ctx, p, ox, oy);
     for (const p of alive) drawStamina(ctx, p, ox, oy);
     // Smoke drifts over the players — it is in the air — but under the pickup labels and the
     // gulls, which have to stay readable.
@@ -2599,6 +2907,8 @@ export function createRenderer(canvas, world) {
     // Over everything on the island: they are in the air. Under the speech bubbles, which are
     // interface rather than world.
     drawGulls(ox, oy, tickNow, dtMs);
+    // The payout, over the gull that just dropped it and over the player it is flying to.
+    drawCoinFlights(ox, oy, dtMs);
     // Last of the things that live over a player, and the only one in screen space — it resets
     // the transform itself and puts it back. Without this call the bubbles are built and then
     // never painted, which is exactly how they went missing.
@@ -3017,7 +3327,8 @@ export function createRenderer(canvas, world) {
     if (pop < 1.5) drawShields(c, p, px + TILE_PX / 2, py + TILE_PX / 2);
     drawStatusPips(c, p, px, py);
 
-    const label = nameLabel(p.name, isMe ? PALETTE.gold : playerShades(p.i).light, !!p.isBot);
+    const label = nameLabel(p.name, isMe ? PALETTE.gold : playerShades(p.i).light,
+      !!p.isBot, p.i === world.host);
     c.drawImage(label.el, px + TILE_PX / 2 - label.w / 2, py - 3 - LABEL_BASE, label.w, LABEL_H);
   }
 
@@ -3030,6 +3341,13 @@ export function createRenderer(canvas, world) {
    * rather than blurring; cleared wholesale if it ever grows past what a room could need. */
   const LABEL_H = 16, LABEL_BASE = 12;
   const labels = new Map();
+  /* The host's crown, as canvas paths, on the same 16-unit grid the scoreboard's mask uses — and
+   * it is the SAME path data as `--crown` in style.css. One shape, three places it appears: the
+   * live list, the TAB table, and here over the pirate's head. Copied rather than imported
+   * because a CSS custom property holding a data: URL is not something canvas can draw. */
+  const CROWN = typeof Path2D === 'function'
+    ? new Path2D('M2 12h12l1-7-3.5 2.5L8 3 4.5 7.5 1 5zM2 13h12v2H2z') : null;
+  const CROWN_PX = 9;
   // The scoreboard's robot head (--robot in style.css), as canvas paths, on a 16-unit grid.
   const ROBOT = typeof Path2D === 'function' ? new Path2D(
     'M7.2 0h1.6v2.4H7.2zM2.6 4h10.8a1 1 0 011 1v7a1 1 0 01-1 1H2.6a1 1 0 01-1-1V5a1 1 0 011-1z'
@@ -3037,9 +3355,9 @@ export function createRenderer(canvas, world) {
     + 'M9.3 1.1a1.3 1.3 0 10-2.6 0 1.3 1.3 0 002.6 0zM0 6.6h1.3v3.8H0zM14.7 6.6H16v3.8h-1.3z') : null;
   const ROBOT_PX = 9;
 
-  function nameLabel(text, colour, bot = false) {
+  function nameLabel(text, colour, bot = false, host = false) {
     const k = view.zoom * view.dpr;
-    const key = `${text}|${colour}|${k}|${bot ? 1 : 0}`;
+    const key = `${text}|${colour}|${k}|${bot ? 1 : 0}|${host ? 1 : 0}`;
     let l = labels.get(key);
     if (l) return l;
     if (labels.size > 96) labels.clear();
@@ -3049,7 +3367,10 @@ export function createRenderer(canvas, world) {
     probe.font = font;
     const tw = Math.ceil(probe.measureText(text).width);
     const icon = bot && ROBOT ? ROBOT_PX + 3 : 0;
-    const w = tw + 6 + icon;
+    // The crown goes AFTER the name, matching the scoreboard; the robot goes before it. So the
+    // text is centred in what is left between the two rather than in the whole label.
+    const crown = host && CROWN ? CROWN_PX + 3 : 0;
+    const w = tw + 6 + icon + crown;
     el.width = Math.ceil(w * k);
     el.height = Math.ceil(LABEL_H * k);
     const c = el.getContext('2d');
@@ -3057,7 +3378,20 @@ export function createRenderer(canvas, world) {
     c.font = font;
     c.textAlign = 'center';
     c.lineJoin = 'round';
-    const tx = icon + (w - icon) / 2;
+    const tx = icon + (w - icon - crown) / 2;
+    if (crown) {
+      // Outlined like the text, in the interface gold rather than the player's colour: the crown
+      // means "this one is in charge", which is not a fact about which pirate they are.
+      c.save();
+      c.translate(w - CROWN_PX - 1, LABEL_BASE - CROWN_PX + 1);
+      c.scale(CROWN_PX / 16, CROWN_PX / 16);
+      c.lineWidth = 3 * 16 / CROWN_PX;
+      c.strokeStyle = 'rgba(0,0,0,0.75)';
+      c.stroke(CROWN);
+      c.fillStyle = PALETTE.gold;
+      c.fill(CROWN);
+      c.restore();
+    }
     if (icon) {
       // The robot, outlined like the text so it reads on any floor.
       c.save();
@@ -3218,16 +3552,32 @@ export function createRenderer(canvas, world) {
     ctx.globalAlpha = 1;
   }
 
-  /**
-   * Stamina, beside the player, and only when it matters.
+  /* Stamina: a wind gauge under the boots.
    *
-   * Nothing is drawn above half: a meter that is always on screen is a meter nobody looks at,
-   * and sixteen permanent gauges would bury the thing they are drawn on top of. Below half a
-   * small bolt appears and drains; at empty it pulses, because that is the moment the number
-   * stops being informative and becomes "you are slow now".
+   * It used to be a vertical sliver beside the right shoulder, and the two things wrong with it
+   * were its shape and its place. Vertical, at three and a half pixels wide, it could show you
+   * roughly how much was left and nothing more precise than that; and sitting where it did it
+   * fought the name label and the shield rings for the same few pixels. Under the feet is empty
+   * space on every map, and horizontal is the orientation a quantity belongs in.
    *
-   * Drawn for everyone, not just you. Knowing the pirate chasing you is out of breath is at
-   * least as useful as knowing you are.
+   * The hard part is that a horizontal bar under a character IS a health bar in every game
+   * anybody has played, and this game has no health — you die to one blast whatever the gauge
+   * says. Reading it as health would be actively dangerous information. Four things stop it:
+   *
+   *   THE BOLT   a small lightning glyph in front of it. One glyph does most of this work. It
+   *              used to be a row of six segments instead, and the segments were the wrong answer
+   *              twice over: six gaps across twenty-five pixels is a stack of vertical lines
+   *              rather than a gauge, and they quantised a continuous reading into sixths — the
+   *              one thing the bar must not do, because the question it answers ("can I still
+   *              slide?") is about a threshold a segment boundary knows nothing about.
+   *   THE NOTCH  a tick mark at what a slide costs, so the bar answers "can I slide?" — a
+   *              question no health bar has ever been asked.
+   *   THE COLOUR normal is the interface's own amber, not green. Nothing in this game is ever
+   *              green-to-red, which is the colour grammar of health specifically.
+   *
+   * Low is a red GRADIENT along the bar and a flash, because the thing that matters at the bottom
+   * of the gauge is not the number, it is "you are about to be slow". Still drawn for everyone:
+   * seeing that the pirate chasing you is blown is as useful as knowing you are.
    */
   function drawStamina(c, p, ox, oy) {
     if (!p.alive || p.stamina === undefined) return;
@@ -3235,34 +3585,322 @@ export function createRenderer(canvas, world) {
     const frac = Math.max(0, Math.min(1, p.stamina / max));
     if (frac >= STAMINA_SHOW_AT && !p.tired) return;
 
-    const x = ox + (p.rx / UNITS_PER_TILE) * TILE_PX + TILE_PX * 0.42;
-    const y = oy + (p.ry / UNITS_PER_TILE) * TILE_PX - TILE_PX * 0.1;
+    // Under the feet, centred. The sprite's own shadow is at 0.72 of a tile, so this sits just
+    // below it and never on top of the figure.
+    const cx = ox + (p.rx / UNITS_PER_TILE) * TILE_PX;
+    // Just under the boots, not a gap below them: at 0.62 of a tile the bar floated clear of the
+    // figure and read as belonging to the floor rather than to the pirate standing on it.
+    const cy = oy + (p.ry / UNITS_PER_TILE) * TILE_PX + TILE_PX * 0.5;
+    const w = TILE_PX * 0.78, h = 4.5;
+    const x = cx - w / 2 + 2.5, y = cy;          // +2.5: room for the bolt on the left
 
     // Fades in over the top quarter of the visible range rather than appearing at a hard edge,
     // which would read as a glitch on the frame it crossed the threshold.
-    const appear = Math.min(1, (STAMINA_SHOW_AT - frac) / (STAMINA_SHOW_AT * 0.25));
-    const pulse = p.tired ? 0.65 + 0.35 * Math.sin(world.tick / 2.6) : 1;
+    const appear = Math.max(0, Math.min(1, (STAMINA_SHOW_AT - frac) / (STAMINA_SHOW_AT * 0.25)));
+    /* The flash, and it is a flash of the FILL, not of the whole gauge.
+     *
+     * Blinking the entire thing — track, border and all — is what a health bar does when you are
+     * about to die, and it also hides the reading at exactly the moment you want it. Here the
+     * frame stays solid and only the light inside it pulses, faster the emptier it gets, so the
+     * bar is still legible while it is shouting.
+     */
+    const low = frac <= STAMINA_LOW_AT || p.tired;
+    const urgency = p.tired ? 1 : Math.max(0, Math.min(1, (STAMINA_LOW_AT - frac) / STAMINA_LOW_AT));
+    // Gentler than it was (0.72 + 0.28 of a swing): a bar pulsing through nearly a third of its
+    // brightness at eight hertz is an alarm, and the thing it is reporting — you are nearly out of
+    // wind — is not an emergency, it is information you want to read while being chased.
+    const flash = low ? 0.84 + 0.16 * Math.sin(seaT * (5.5 + 6 * urgency)) : 1;
 
     c.save();
-    c.globalAlpha = Math.max(0, appear) * pulse;
+    c.globalAlpha = appear;
 
-    // A vertical sliver that empties downwards, with the bolt sitting in it.
-    const h = TILE_PX * 0.5, w = 3.5;
-    c.fillStyle = 'rgba(0,0,0,0.55)';
-    c.beginPath(); c.roundRect(x - w / 2, y - h, w, h, w / 2); c.fill();
-    c.fillStyle = p.tired ? '#ff7a5c' : '#ffe04a';
-    const fh = Math.max(1.5, h * frac);
-    c.beginPath(); c.roundRect(x - w / 2, y - fh, w, fh, w / 2); c.fill();
+    // The track, with the thin black border round it. One stroke, inside the shape, so the
+    // border is exactly a pixel at every zoom rather than straddling the edge.
+    c.beginPath();
+    c.roundRect(x, y, w, h, 2);
+    c.fillStyle = 'rgba(8,11,16,0.72)';
+    c.fill();
+    c.lineWidth = 1;
+    c.strokeStyle = 'rgba(0,0,0,0.95)';
+    c.stroke();
 
-    // The bolt, so the sliver is identifiable as energy rather than as another health bar.
-    c.translate(x + 4.5, y - h - 1.5);
-    c.scale(0.42, 0.42);
+    /* The fill, segmented and clipped to the track.
+     *
+     * The gradient runs along the BAR rather than along the filled part, so a colour at a given
+     * position means the same thing however full it is — the left end is always the colour of
+     * "nearly out". That is what makes the red read as a zone you are entering rather than as a
+     * bar that has changed colour.
+     */
+    c.save();
+    c.beginPath();
+    c.roundRect(x + 0.5, y + 0.5, w - 1, h - 1, 1.5);
+    c.clip();
+    const g = c.createLinearGradient(x, 0, x + w, 0);
+    if (low) {
+      g.addColorStop(0, '#ff3b2f');
+      g.addColorStop(0.45, '#ff7a3c');
+      g.addColorStop(1, '#ffc65a');
+    } else {
+      g.addColorStop(0, '#ffb13c');
+      g.addColorStop(1, '#ffe877');
+    }
+    c.globalAlpha = appear * flash;
+    c.fillStyle = g;
+    // One continuous bar. The reading is continuous, so the bar is.
+    c.fillRect(x + 0.5, y + 0.5, (w - 1) * frac, h - 1);
+    c.restore();
+
+    /* What a slide costs, as a notch on the track.
+     *
+     * This is the line between "I can still get out of here" and "I am walking out of here", and
+     * it is the single most useful mark on the gauge. Drawn over the fill, in black, so it reads
+     * whether that part of the bar is lit or not.
+     */
+    const notch = x + 0.5 + (w - 1) * Math.min(1, SLIDE_STAMINA_COST / max);
+    c.globalAlpha = appear * 0.85;
+    c.fillStyle = 'rgba(0,0,0,0.9)';
+    c.fillRect(notch - 0.5, y - 1, 1, h + 2);
+
+    // The bolt, so a horizontal bar under a character is not mistaken for health. Small, and in
+    // the fill's own colour, so it dims and flashes with the gauge.
+    c.globalAlpha = appear * flash;
+    c.fillStyle = low ? '#ff5a3c' : '#ffe04a';
+    c.translate(x - 4.4, y - 1.6);
+    c.scale(0.4, 0.4);
     c.beginPath();
     c.moveTo(9.5, 0); c.lineTo(3, 9); c.lineTo(7.5, 9);
     c.lineTo(5.5, 17); c.lineTo(12, 7); c.lineTo(7.5, 7);
     c.closePath();
-    c.fillStyle = p.tired ? '#ff7a5c' : '#ffe04a';
     c.fill();
+    c.restore();
+    c.globalAlpha = 1;
+  }
+
+  /* ─── the slide ──────────────────────────────────────────────────────────────
+   *
+   * Drawn entirely from `slideV`, which is on the wire for everybody — so a remote pirate's slide
+   * looks like yours, and your own looks right the instant you double-tap rather than one
+   * round trip later. No event, no bookkeeping that can get out of step with the simulation:
+   * while the velocity is above zero there is a slide, and when it is zero there is not.
+   *
+   * Three things, and they are doing different jobs:
+   *
+   *   the kick-off   one ring and a shove of dust at the moment of launch. This is the frame that
+   *                  tells you the input registered, and it has to be unmissable.
+   *   the dust       thrown off the heels, backwards and sideways, growing and fading. Dust is
+   *                  what makes speed legible on a flat top-down board — the sprite itself is
+   *                  the same eight frames it always was.
+   *   the streaks    two short lines trailing the shoulders, at an alpha that follows the
+   *                  velocity, so the effect thins out as the slide runs down rather than
+   *                  switching off. That taper is the part that reads as physics.
+   */
+  const dust = [];                 // slide dust and death dust share one pool and one draw
+  const DUST_MAX = 220;
+  const slideSeen = new Map();     // seat -> last velocity, for spotting the launch frame
+
+  function addDust(x, y, vx, vy, { r = 2.4, life = 0.5, tone = '#c9b89c', rise = 0 } = {}) {
+    if (dust.length >= DUST_MAX) return;
+    dust.push({ x, y, vx, vy, r, life: 1, span: life, tone, rise, spin: Math.random() * 6 });
+  }
+
+  /* Dust off the heels of anybody actually walking, and more of it the faster they are.
+   *
+   * Boots are the perk with the least to show for themselves: a booted pirate is simply somewhere
+   * sooner, which you can only perceive by comparison with how long you expected it to take. A
+   * puff of sand at the feet makes the speed itself visible — on your own player it is the
+   * feedback the pickup never had, and on somebody else's it is a warning.
+   *
+   * Scaled rather than switched on, so every boot reads: a fresh pirate kicks up the occasional
+   * speck and a fully booted one leaves a trail. Nothing at all while standing still — the dust
+   * is the movement, not the pirate.
+   */
+  function footDust(p, ox, oy, dt) {
+    if (!p.alive || !p.moving) return;
+    // A couple a second at base pace, a dozen fully booted. Below that it is invisible; above it,
+    // sixteen players turn the board into a sandstorm.
+    const rate = 2 + (p.speed || 0) * 2.6;
+    const n = Math.floor(rate * dt) + (Math.random() < (rate * dt) % 1 ? 1 : 0);
+    if (!n) return;
+    const px = ox + (p.rx / UNITS_PER_TILE) * TILE_PX;
+    const py = oy + (p.ry / UNITS_PER_TILE) * TILE_PX + TILE_PX * 0.3;
+    // Thrown BACKWARD from the way they are going, which is what makes it read as being kicked
+    // up rather than as a cloud the player is standing in.
+    const v = [[1, 0], [0, -1], [-1, 0], [0, 1]][p.dir] ?? [0, 1];
+    for (let i = 0; i < n; i++) {
+      const a = Math.atan2(-v[1], -v[0]) + (Math.random() - 0.5) * 1.3;
+      const s = 8 + Math.random() * (10 + (p.speed || 0) * 8);
+      addDust(px + (Math.random() - 0.5) * 8, py + (Math.random() - 0.5) * 3,
+        Math.cos(a) * s, Math.sin(a) * s,
+        { r: 1 + Math.random() * 1.5, life: 0.3 + Math.random() * 0.22 });
+    }
+  }
+
+  function trackSlides(ox, oy, dtMs) {
+    const dt = dtMs / 1000;
+    for (const p of world.players) {
+      if (!p) continue;
+      const was = slideSeen.get(p.i) || 0;
+      const now = p.alive ? (p.slideV || 0) : 0;
+      slideSeen.set(p.i, now);
+      if (!now) { footDust(p, ox, oy, dt); continue; }
+      const px = ox + (p.rx / UNITS_PER_TILE) * TILE_PX;
+      const py = oy + (p.ry / UNITS_PER_TILE) * TILE_PX;
+      // Which way the slide is going, in screen pixels.
+      const v = [[1, 0], [0, -1], [-1, 0], [0, 1]][p.slideDir] ?? [0, 1];
+
+      if (!was) {
+        // The launch. A ring on the floor where the push came from, and a fan of dust behind.
+        pops.push({ x: px, y: py + TILE_PX * 0.3, life: 1 });
+        for (let i = 0; i < 10; i++) {
+          const a = Math.atan2(-v[1], -v[0]) + (Math.random() - 0.5) * 1.5;
+          const s = 40 + Math.random() * 70;
+          addDust(px + (Math.random() - 0.5) * 6, py + TILE_PX * 0.28 + (Math.random() - 0.5) * 4,
+            Math.cos(a) * s, Math.sin(a) * s, { r: 2.2 + Math.random() * 2.6, life: 0.5 });
+        }
+      }
+
+      // The trail, while it runs. Rate follows the velocity, so the dust thins as it slows.
+      const rate = 26 * Math.min(1, now / 50);
+      const n = Math.floor(rate * dt) + (Math.random() < (rate * dt) % 1 ? 1 : 0);
+      for (let i = 0; i < n; i++) {
+        const a = Math.atan2(-v[1], -v[0]) + (Math.random() - 0.5) * 1.1;
+        const s = 20 + Math.random() * 45;
+        addDust(px - v[0] * 5 + (Math.random() - 0.5) * 7,
+          py + TILE_PX * 0.3 - v[1] * 3 + (Math.random() - 0.5) * 4,
+          Math.cos(a) * s, Math.sin(a) * s, { r: 1.6 + Math.random() * 2.2, life: 0.42 });
+      }
+
+      // Two streaks off the shoulders, across the direction of travel.
+      ctx.save();
+      ctx.globalAlpha = 0.3 * Math.min(1, now / 45);
+      ctx.strokeStyle = '#eaf4ff';
+      ctx.lineWidth = 1.6;
+      ctx.lineCap = 'round';
+      for (const s of [-1, 1]) {
+        const offx = -v[1] * s * TILE_PX * 0.22, offy = v[0] * s * TILE_PX * 0.22;
+        const len = TILE_PX * (0.5 + 0.5 * Math.min(1, now / 60));
+        ctx.beginPath();
+        ctx.moveTo(px + offx, py + offy);
+        ctx.lineTo(px + offx - v[0] * len, py + offy - v[1] * len);
+        ctx.stroke();
+      }
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  /* ─── dust, and dying in it ──────────────────────────────────────────────────
+   *
+   * A death used to be the sprite simply ceasing to exist: `drawOne` returns early for anybody
+   * not alive, so one frame they are there and the next they are not, and in a sixteen-player
+   * scrum you cannot tell whether somebody died or walked behind a wall.
+   *
+   * So: the figure comes apart. A grid of motes is sampled over the sprite's footprint, each
+   * given the upward kick and outward drift of something collapsing, and the pile then blows
+   * away on the sea breeze over DEATH_DUST_S. The motes are coloured from the player's own
+   * shades, so you can still tell WHOSE death you are watching while it happens — which is the
+   * only information a death animation owes anybody.
+   */
+  const DEATH_DUST_S = 3;
+
+  function addDeathDust(seat, x, y) {
+    const px = (x / UNITS_PER_TILE) * TILE_PX, py = (y / UNITS_PER_TILE) * TILE_PX;
+    const k = playerShades(seat % 16);
+    const tones = [k.dark, k.base, k.light, '#b9a98f', '#7d7362'];
+    /* Sampled over the body rather than sprayed from its centre: the first half second is
+     * recognisably a pirate coming apart, because the motes start where the pirate was. */
+    for (let i = 0; i < 46; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const rr = Math.sqrt(Math.random());
+      const ox2 = Math.cos(a) * rr * TILE_PX * 0.34;
+      const oy2 = Math.sin(a) * rr * TILE_PX * 0.42 - TILE_PX * 0.1;
+      addDust(px + ox2, py + oy2,
+        ox2 * 2.1 + (Math.random() - 0.5) * 18,
+        oy2 * 1.2 - 14 - Math.random() * 26, {
+          r: 1.4 + Math.random() * 2.8,
+          // Spread over the whole window so the pile keeps letting go of motes for three
+          // seconds instead of all of it fading at once.
+          life: DEATH_DUST_S * (0.45 + Math.random() * 0.55),
+          tone: tones[(Math.random() * tones.length) | 0],
+          rise: 6 + Math.random() * 14,
+        });
+    }
+    // The puff at the moment it goes, so the collapse has a beat to it.
+    pops.push({ x: px, y: py + TILE_PX * 0.25, life: 1 });
+  }
+
+  /**
+   * One pool, one pass: slide dust, death dust, everything.
+   *
+   * Carried on the real current like the bioluminescence is — dust over an island in a sea breeze
+   * does not fall straight — plus its own slow rise, drag, and a shrink as it thins out. Drawn
+   * under the players and over the floor, which is where airborne dust belongs.
+   */
+  function drawDust(ox, oy, dtMs) {
+    if (!dust.length) return;
+    const dt = dtMs / 1000;
+    ctx.save();
+    for (let i = dust.length - 1; i >= 0; i--) {
+      const d = dust[i];
+      d.life -= dt / d.span;
+      if (d.life <= 0) { dust.splice(i, 1); continue; }
+      const drag = Math.exp(-dt * 3.4);
+      d.vx *= drag; d.vy *= drag;
+      if (d.rise) {
+        // The breeze, from the same flow field the sea uses, so dust and water agree.
+        flowAt(d.x, d.y, seaT, flow);
+        d.vx += flow.x * 0.12 * dt * d.rise;
+        d.vy += (flow.y * 0.12 * d.rise - d.rise * 2.2) * dt;
+      }
+      d.x += d.vx * dt; d.y += d.vy * dt;
+      // Fades out early and grows as it goes: a mote of dust disperses, it does not land.
+      ctx.globalAlpha = Math.min(1, d.life * 1.6) * 0.55;
+      ctx.fillStyle = d.tone;
+      const r = d.r * (1 + (1 - d.life) * 0.9);
+      ctx.beginPath();
+      ctx.ellipse(ox + d.x, oy + d.y, r, r * 0.82, d.spin, 0, 7);
+      ctx.fill();
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  /**
+   * Seeing stars: a question mark over the head of anybody a slide went through.
+   *
+   * A status with no picture is a status nobody learns. This one has to say three things at once
+   * — that pirate is confused, cannot bomb, and it is about to wear off — so the mark bobs,
+   * tilts, and shrinks away over the last third of the status rather than vanishing.
+   */
+  function drawConfused(c, p, ox, oy) {
+    if (!(p.status & STATUS.CONFUSED) || !p.alive) return;
+    const x = ox + (p.rx / UNITS_PER_TILE) * TILE_PX;
+    const y = oy + (p.ry / UNITS_PER_TILE) * TILE_PX - TILE_PX * 0.95;
+    const t = seaT * 2.4 + p.i;
+    const bob = Math.sin(t) * 2.2;
+
+    c.save();
+    c.translate(x, y + bob);
+    c.rotate(Math.sin(t * 0.8) * 0.22);
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.font = 'bold 15px ui-monospace, monospace';
+    c.lineJoin = 'round';
+    c.lineWidth = 3.5;
+    c.strokeStyle = 'rgba(0,0,0,0.8)';
+    c.strokeText('?', 0, 0);
+    c.fillStyle = '#ffe04a';
+    c.fillText('?', 0, 0);
+    // Two little stars going round it, because one glyph alone reads as a HUD hint rather than
+    // as something that happened to the pirate.
+    c.fillStyle = '#fff6c8';
+    for (const s of [0, Math.PI]) {
+      const a = t * 1.6 + s;
+      c.globalAlpha = 0.55 + 0.45 * Math.sin(a * 2);
+      c.beginPath();
+      c.arc(Math.cos(a) * 8, Math.sin(a) * 4, 1.5, 0, 7);
+      c.fill();
+    }
     c.restore();
     c.globalAlpha = 1;
   }
@@ -3300,6 +3938,8 @@ export function createRenderer(canvas, world) {
   resize();
   const api = {
     frame, resize, invalidateAll, invalidateTile, mapChanged, addMelt, gullHit, addSmoke,
+    /** Somebody died here: the figure comes apart and blows away. See addDeathDust. */
+    addDeathDust,
     /** Hooks for the gulls' sounds, in tiles: `onGullCry(tx, ty)` and `onGullDown(tx, ty)`. */
     onGullCry: null, onGullDown: null,
 

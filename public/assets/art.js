@@ -10,7 +10,7 @@
 //   3. Terrain is muted; players are the only saturated things on screen.
 
 // `/shared` is mounted by the dev server alongside `public/` — see docs/ARCHITECTURE.md §7.
-import { BLOCK, TILE_PX, playerHueSlot } from '/shared/constants.js';
+import { BLOCK, TILE_PX, MAX_RADIUS, playerHueSlot } from '/shared/constants.js';
 
 export const PALETTE = {
   void: '#0d1117',
@@ -100,8 +100,51 @@ const bevel = (c, x, y, w, h, t = 2) => {
 
 // ─── terrain ──────────────────────────────────────────────────────────────────
 
-/** @param dmg 0..1, fraction of HP lost — drives the crack overlay. */
+/* Blocks have rounded corners now, and the radius is deliberately small.
+ *
+ * Square blocks on a square grid make a map read as graph paper: every corner in the picture is
+ * the same corner, so the eye gets no help telling the opening between two walls from the walls
+ * themselves. Taking three pixels off each corner breaks that up — a corridor gains a visible
+ * mouth, and a lone block reads as an object standing on the sand rather than as a filled cell.
+ *
+ * Three, not eight. At a large radius the blocks stop meeting each other and a solid wall turns
+ * into a row of lozenges with sand showing through the joins, which is both uglier and a lie
+ * about what you can walk through. At three the corner is softened and the edges still touch.
+ *
+ * It is drawing only: the simulation is whole tiles and the hitbox arithmetic in movement.js is
+ * untouched. What it buys in play is honesty at the corners — the corner-assist slide
+ * (CORNER_ASSIST_UNITS) has always let you round a corner you are nearly lined up with, and a
+ * rounded corner is what that behaviour has always looked like from the inside.
+ */
+export const STONE_RADIUS = 3;
+/* Which types get it: everything solid that sits ON the sand. Not FLOOR (it IS the sand), and
+ * not the types that already draw their own shape on a floor of their own — a column, a keg and
+ * a block of ice are objects, not cells, and they were never square to begin with. */
+const ROUNDED_BLOCKS = new Set([BLOCK.SOFT, BLOCK.HARD, BLOCK.REINFORCED, BLOCK.MONOLITH, BLOCK.IRON]);
+
+/**
+ * One tile.
+ *
+ * A rounded block needs something behind it, or its corners would be transparent and the sea
+ * would show through four little notches in the middle of the island — the chunk canvas is
+ * cleared, not filled (see chunkAt in client/render.js). So the sand is laid down first and the
+ * block is clipped to its rounded shape on top of it, which is exactly what a block sitting on a
+ * beach looks like.
+ *
+ * @param dmg 0..1, fraction of HP lost — drives the crack overlay.
+ */
 export function drawTile(c, type, tx = 0, ty = 0, dmg = 0) {
+  if (!ROUNDED_BLOCKS.has(type)) return drawTileBody(c, type, tx, ty, dmg);
+  drawTileBody(c, BLOCK.FLOOR, tx, ty, 0);
+  c.save();
+  c.beginPath();
+  c.roundRect(0, 0, TILE_PX, TILE_PX, STONE_RADIUS);
+  c.clip();
+  drawTileBody(c, type, tx, ty, dmg);
+  c.restore();
+}
+
+function drawTileBody(c, type, tx = 0, ty = 0, dmg = 0) {
   const S = TILE_PX;
   switch (type) {
     /* Packed sand over buried stone.
@@ -710,6 +753,13 @@ export const DIRS = { R: 0, U: 1, L: 2, D: 3 };
  * The old one was a dark circle with a fixed stub of fuse, eight frames of a gentle pulse, and no
  * way to tell a bomb with two seconds left from one with a quarter of a second — which is the
  * only thing about a bomb anybody standing next to it wants to know. */
+/* A bomb is drawn at 85% of the size it was designed at. See the scale block in drawBombLive.
+ *
+ * The board got busier than the art was drawn for — eight bombs in one pair of hands, a gauge
+ * under each one, dust coming off sixteen pairs of boots — and at full size a cluster of bombs
+ * crowded out the players standing between them. Everything about the bomb keeps its proportions;
+ * there is simply less of it. */
+const BOMB_SCALE = 0.85;
 const BOMB_R = 10.5;
 const BOMB_CY = 19;                  // centre, in tile pixels: low, so the fuse fits above it
 const BOMB_RING_R = 14.2;
@@ -785,21 +835,94 @@ const fuseAt = t => {
   ];
 };
 
+/* How strong it is: six flames under the bomb, as many of them lit as it has reach.
+ *
+ * The one thing you cannot read off a bomb is how far it goes, and it is the thing that decides
+ * whether the tile you are standing on is safe. The ring already says WHEN and the owner's band
+ * already says WHOSE, so this says HOW BIG, and it has to do it without becoming the loudest
+ * thing on a tile that is already busy.
+ *
+ * Which is the whole design: six pips of three pixels at the very bottom of the tile, under the
+ * body and clear of the countdown ring's arc. Lit ones are a flame with the fire palette's own
+ * colours and a slow flicker; spent ones are a dark socket, present enough that the row still
+ * reads as "two of six" rather than as "two". No outline, no plate, nothing that draws a box on
+ * the floor — at this size the dark sockets are the frame.
+ */
+// One pip per step of reach a bomb can have, so the row always shows "two of the five you could
+// have" rather than two of some number nobody knows. Imported rather than a literal six: the cap
+// came down to five, and a gauge whose length disagrees with the rules is worse than no gauge.
+function drawBombPips(c, radius, t) {
+  const S = TILE_PX, n = MAX_RADIUS, gap = 4.2;
+  const lit = Math.max(0, Math.min(n, radius | 0));
+  const y = S - 2.6;
+  const x0 = S / 2 - ((n - 1) * gap) / 2;
+  for (let i = 0; i < n; i++) {
+    const x = x0 + i * gap;
+    if (i >= lit) {
+      // Spent: a socket. Two tones, because one flat dot at two pixels reads as dirt.
+      c.beginPath(); c.ellipse(x, y, 1.25, 1.45, 0, 0, 7);
+      c.fillStyle = 'rgba(6,9,14,0.62)'; c.fill();
+      c.beginPath(); c.ellipse(x, y - 0.2, 0.55, 0.7, 0, 0, 7);
+      c.fillStyle = 'rgba(150,164,186,0.22)'; c.fill();
+      continue;
+    }
+    /* A flame, and the flicker is per pip: the phase is offset by the pip's index, so the row
+     * shimmers along rather than pumping as one block — which is what stops six identical shapes
+     * reading as a progress bar. */
+    const fl = 0.84 + 0.16 * Math.sin(t * 7.3 + i * 1.9);
+    const h = 3.4 * fl;
+    c.save();
+    c.translate(x, y + 1.4);
+    // Teardrop: a round base pulled up into a tip, drawn as two quadratics.
+    const flame = (w, top, colour) => {
+      c.beginPath();
+      c.moveTo(0, 0);
+      c.bezierCurveTo(w, -0.2, w * 0.85, -top * 0.55, 0, -top);
+      c.bezierCurveTo(-w * 0.85, -top * 0.55, -w, -0.2, 0, 0);
+      c.fillStyle = colour; c.fill();
+    };
+    flame(1.5, h, PALETTE.fireEdge);
+    flame(1.05, h * 0.78, PALETTE.fireMid);
+    flame(0.5, h * 0.45, PALETTE.fireCore);
+    c.restore();
+  }
+}
+
 /**
  * Everything that says when. `c` is at the tile's top-left corner.
  *
  * @param body   this owner's baked body, or null to draw it fresh (the preview harness)
  * @param leftS  seconds until it goes off, as a float — the caller interpolates between ticks
  * @param fullS  what a full ring means: the normal fuse. A fast fuse starts part-way round.
+ * @param radius blast reach in tiles, drawn as pips under the bomb. 0 to leave them off.
  * @param t      seconds, for the flicker and the warning pulse
  */
-export function drawBombLive(c, body, { leftS, fullS, colorIndex = 0, t = 0 }) {
+export function drawBombLive(c, body, { leftS, fullS, colorIndex = 0, radius = 0, t = 0 }) {
   const S = TILE_PX, k = playerShades(colorIndex);
   const f = Math.max(0, Math.min(1, leftS / fullS));
   const cx = S / 2, cy = BOMB_CY;
   const warn = Math.max(0, Math.min(1, 1 - leftS / BOMB_WARN_S));       // 0 until the last 0.8 s
   // The warning pulse gets FASTER, not just stronger: 3 Hz rising to 16 Hz at the end.
   const wob = Math.sin(t * Math.PI * 2 * (3 + 13 * warn * warn));
+
+  /* 15% off the whole bomb, ring and fuse included.
+   *
+   * Scaled rather than redrawn at new numbers, because every part of it is positioned against
+   * every other part — the fuse curve starts at the collar, the ring is sized to clear the
+   * sphere, the spark rides the end of the rope. Changing BOMB_R alone would have left the ring
+   * standing off it and the fuse hanging in the air.
+   *
+   * About the bomb's own centre, not the tile's: BOMB_CY sits low in the tile so the fuse has
+   * room above it, and scaling about the tile centre would have slid the whole thing downward.
+   *
+   * The pips at the bottom of the tile (step 5) are deliberately OUTSIDE this: they are a gauge
+   * rather than part of the object, they are already as small as they can be read at, and they
+   * want to stay lined up with the tile's edge rather than with the bomb's.
+   */
+  c.save();
+  c.translate(cx, cy);
+  c.scale(BOMB_SCALE, BOMB_SCALE);
+  c.translate(-cx, -cy);
 
   // 1. The countdown ring, on the floor, under the bomb.
   c.save();
@@ -899,6 +1022,11 @@ export function drawBombLive(c, body, { leftS, fullS, colorIndex = 0, t = 0 }) {
   c.globalCompositeOperation = 'source-over';
   c.beginPath(); c.arc(sx, sy, 1.3, 0, 7); c.fillStyle = '#fffbe8'; c.fill();
   c.restore();
+  c.restore();                                 // out of BOMB_SCALE
+
+  // 5. How strong it is, last — over the bottom of the iron and outside the warning swell, so the
+  // gauge stays still while the bomb shakes. A bomb with no radius given draws none.
+  if (radius > 0) drawBombPips(c, radius, t);
 }
 
 /** The whole bomb at a point in its fuse, 0..1 — for the preview harness. */
@@ -1172,11 +1300,22 @@ export const PERK_ART = {
  * because a coin that does not catch the light is a disc. */
 export const PERK_GLOWS = new Set([16, 17]);
 
+// Everything that lies on the floor waiting to be walked over, at 85% — the same trim the bombs
+// got, so a tile with a bomb on it and a tile with a perk on it still read as the same scale.
+const PERK_SCALE = 0.85;
+
 /** Perk icon on its tile plinth. Unknown/reserved types draw a question mark. */
 export function drawPerk(c, { type = 1, bob = 0 }) {
   const S = TILE_PX;
   const k = PERK_SKIN[type] || { dark: '#1a2029', mid: '#2a3444', rim: '#6b7585' };
   c.save(); c.translate(0, -bob);
+  /* 15% smaller, with the bombs, and for the same reason: a pickup used to fill its tile edge to
+   * edge, so a floor with four of them on it read as four more walls. Scaled about the middle of
+   * the tile so the plinth stays centred under the bob, and applied to the glow as well — a halo
+   * at the old radius around a smaller icon is a smudge rather than a highlight. */
+  c.translate(S / 2, S / 2);
+  c.scale(PERK_SCALE, PERK_SCALE);
+  c.translate(-S / 2, -S / 2);
 
   // A soft glow in the perk's own colour, so the tile is findable before the icon is readable.
   c.globalAlpha = 0.25;
