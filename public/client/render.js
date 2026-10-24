@@ -8,6 +8,7 @@ import {
   TILE_PX, CHUNK_TILES, UNITS_PER_TILE, TRACER_SAMPLES, FUSE_TICKS, FIRE_TICKS, STATUS,
   BLOCK, BLOCK_HP, SEA_MARGIN_TILES, SPAWN_POP_TICKS, SPAWN_POP_SCALE, MIN_ZOOM, MAX_ZOOM,
   PERK_FADE_TICKS, STAMINA_SHOW_AT, staminaMaxFor, PUDDLE_FADE_TICKS, TICK_MS, TICK_HZ,
+  BLOCK_WALKABLE,
 } from '/shared/constants.js';
 import { cellType, cellHp } from '/shared/maps.js';
 import {
@@ -1243,6 +1244,7 @@ export function createRenderer(canvas, world) {
   const shards = [];               // ice flying off a melt
   const pops = [];                 // the bright burst at the moment of melting
   let poolLayer = null, poolCtx = null, poolFor = null;
+  let wetFloor = null;             // Path2D of walkable tiles round the puddles; see drawPuddles
 
   const POOL_RIM = '#9fcfe6', POOL_BODY = '#2a6c9e', POOL_SHEEN = '#3580b6';
 
@@ -1337,8 +1339,27 @@ export function createRenderer(canvas, world) {
       }
       const bx = Math.max(0, (x0 - 1) * S), by = Math.max(0, (y0 - 1) * S);
       const bw = Math.min(poolLayer.width, (x1 + 2) * S) - bx, bh = Math.min(poolLayer.height, (y1 + 2) * S) - by;
+
+      /* Water stays on the floor.
+       *
+       * Each wet tile's blobs reach a few pixels past its edges — that bulge is what fuses
+       * neighbours into one pool with an organic outline — but drawn unclipped it also spilled
+       * across every wall beside the puddle, so a puddle in a corridor painted water over the
+       * rock on both sides of it. So the pool, its glints and its ripples are clipped to the
+       * walkable tiles round it: water can spread onto open floor and stops dead at anything
+       * solid, the way it would. */
+      wetFloor = new Path2D();
+      for (let ty = y0 - 1; ty <= y1 + 1; ty++) {
+        for (let tx = x0 - 1; tx <= x1 + 1; tx++) {
+          if (tx < 0 || ty < 0 || tx >= map.w || ty >= map.h) continue;
+          if (BLOCK_WALKABLE(cellType(map.cells[ty * map.w + tx]), false)) wetFloor.rect(tx * S, ty * S, S, S);
+        }
+      }
+
       const pc = poolCtx;
       pc.clearRect(bx, by, bw, bh);
+      pc.save();
+      pc.clip(wetFloor);
       // Rim, body, then a sheen lifted toward the top-left light.
       for (const [scale, colour, sx, sy] of [[1, POOL_RIM, 0, 0], [0.9, POOL_BODY, 0, 0], [0.62, POOL_SHEEN, -2, -2]]) {
         pc.fillStyle = colour;
@@ -1346,22 +1367,27 @@ export function createRenderer(canvas, world) {
         for (const fx of pools.values()) poolBlobs(pc, fx, scale, sx, sy, seaT);
         pc.fill();
       }
+      pc.restore();
       ctx.globalAlpha = 0.64;
       ctx.drawImage(poolLayer, bx, by, bw, bh, ox + bx, oy + by, bw, bh);
 
       // Light on the water: two small glints per puddle, circling slowly and breathing.
+      ctx.save();
+      ctx.translate(ox, oy);
+      ctx.clip(wetFloor);
       ctx.fillStyle = '#ffffff';
       for (const fx of pools.values()) {
         if (fx.vis < 0.25) continue;
         for (let k = 0; k < 2; k++) {
           const a = seaT * 0.7 + fx.seed * 10 + k * 3.1;
-          const gx = ox + fx.tx * S + S / 2 - 3 + Math.cos(a) * 6 * fx.vis;
-          const gy = oy + fx.ty * S + S / 2 - 3 + Math.sin(a) * 4 * fx.vis;
+          const gx = fx.tx * S + S / 2 - 3 + Math.cos(a) * 6 * fx.vis;
+          const gy = fx.ty * S + S / 2 - 3 + Math.sin(a) * 4 * fx.vis;
           ctx.globalAlpha = 0.4 * fx.vis * (0.45 + 0.55 * Math.sin(seaT * 2.6 + fx.seed * 20 + k * 2));
           if (ctx.globalAlpha <= 0.01) continue;
           ctx.beginPath(); ctx.ellipse(gx, gy, 2.6, 1.1, -0.5, 0, Math.PI * 2); ctx.fill();
         }
       }
+      ctx.restore();
       ctx.globalAlpha = 1;
     }
 
@@ -1377,6 +1403,9 @@ export function createRenderer(canvas, world) {
       ctx.beginPath(); ctx.arc(b.x, b.y, TILE_PX * (0.45 + (1 - b.life) * 0.5), 0, Math.PI * 2); ctx.fill();
     }
 
+    // Rings on the water stay on the water too (see wetFloor above) — while there is any.
+    ctx.save();
+    if (pools.size && wetFloor) ctx.clip(wetFloor);
     ctx.strokeStyle = '#d8f1ff';
     for (let i = ripples.length - 1; i >= 0; i--) {
       const r = ripples[i];
@@ -1387,6 +1416,7 @@ export function createRenderer(canvas, world) {
       ctx.beginPath(); ctx.ellipse(r.x, r.y, 1.5 + (1 - r.life) * r.max, (1.5 + (1 - r.life) * r.max) * 0.7, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
+    ctx.restore();
 
     ctx.fillStyle = '#e6f4fb';
     for (let i = wisps.length - 1; i >= 0; i--) {

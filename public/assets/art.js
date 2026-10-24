@@ -323,6 +323,17 @@ export function drawTile(c, type, tx = 0, ty = 0, dmg = 0) {
       bevel(c, 0, 0, S, S, 2);
       break;
     }
+    /* A block this file does not recognise — never a hole.
+     *
+     * Chunks are cleared to transparent so the sea shows where there is sea, which means a type
+     * with no case here draws as a window onto the animated water in the middle of the island.
+     * That is exactly what a browser running a stale cached copy of this file next to a newer
+     * server looks like: ice arrived, nothing knew how to draw it, and players saw flickering
+     * holes. A wall it cannot name is drawn as a crate, so it is at least a wall. The sea itself
+     * is the one type that must stay empty. */
+    default:
+      if (type !== BLOCK.WATER && type !== BLOCK.FLOOR) return drawTile(c, BLOCK.SOFT, tx, ty, dmg);
+      break;
     case BLOCK.SHRUB_WALK:
     case BLOCK.SHRUB_SOLID: {
       px(c, 0, 0, S, S, PALETTE.floor);
