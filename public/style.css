@@ -1610,7 +1610,9 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 
 #menu {
   position: fixed; inset: 0; display: grid; place-items: center; z-index: 10;
-  background: radial-gradient(120% 90% at 50% 0%, #1b1430 0%, #0d1117 60%);
+  /* Deep maroon at the top, not violet: the landing page reads in the mascot's gold and bandana
+     red rather than purple. Dark enough to stay a backdrop. */
+  background: radial-gradient(120% 90% at 50% 0%, #2a1018 0%, #0d1117 60%);
 }
 
 /* The visualiser, behind everything on the menu and out of the centring grid.

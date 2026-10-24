@@ -69,22 +69,26 @@ const MOTES = 70;
 const MOUSE_R = 75;
 const MOUSE_FORCE = 0.275;
 
-/* The same six hues the animated panel borders run through, in the same order and turning at
- * the same rate — see `.edge` in style.css.
+/* The visualiser's colours, turning at the same rate as the animated panel borders — see
+ * `.edge` in style.css.
  *
- * The borders already sweep this spectrum round every panel on the page. Having the bars sweep
- * it too means the visualiser is not a separate decoration that happens to share a corner; the
- * whole screen is running one light, and the bars are where it lands on the water. Matching the
- * 28-second period matters more than matching the stops: two things cycling the same colours at
- * different speeds read as two things.
+ * Gold and maroon, not the borders' rainbow. The bars used to borrow the borders' six stops, and
+ * on a dark page the lavender and the two blue-greens dominated — the landing page read as
+ * purple. The mascot's world is gold and a deep bandana red, so the bars run between them: bright
+ * gold, old gold, amber, a lit maroon, the deep maroon, and a warm rose on the way back.
+ *
+ * The PERIOD still matches the borders' 28 seconds, and that is the part that matters: two
+ * things cycling at different speeds read as two things, whatever their colours.
  *
  * Hard-coded rather than read from CSS, because this runs per frame on a canvas and a
- * getComputedStyle call per bar is a layout read inside an animation loop. Keep in step by hand.
+ * getComputedStyle call per bar is a layout read inside an animation loop.
  */
 const EDGE_HUES = [
-  [199, 176, 87], [206, 140, 110], [196, 131, 126],
-  [180, 144, 218], [123, 173, 211], [120, 179, 155],
+  [237, 194, 78], [204, 148, 52], [196, 104, 58],
+  [168, 52, 66], [128, 30, 50], [184, 92, 84],
 ];
+// How bright the bars, caps, bloom and embers are, overall. 0.8: a fifth down, on request.
+const VU_INTENSITY = 0.8;
 // Seconds for one full turn, matching `animation: spin 28s` on .edge.
 const EDGE_PERIOD_S = 28;
 
@@ -244,9 +248,9 @@ export function createMenuViz({ canvas, music }) {
        * The shape comes from the bands that are doing something. */
       // Brighter than before, and with a white-hot core at the edge where the bar meets the
       // frame: the old version was legible and polite, and a VU meter should be neither.
-      grad.addColorStop(0, `rgba(255, 255, 255, ${0.22 * v * v})`);
-      grad.addColorStop(0.12, `rgba(${hue}, ${0.72 * v * v + 0.1 * v})`);
-      grad.addColorStop(0.5, `rgba(${hue}, ${0.4 * v * v})`);
+      grad.addColorStop(0, `rgba(255, 255, 255, ${0.22 * v * v * VU_INTENSITY})`);
+      grad.addColorStop(0.12, `rgba(${hue}, ${(0.72 * v * v + 0.1 * v) * VU_INTENSITY})`);
+      grad.addColorStop(0.5, `rgba(${hue}, ${0.4 * v * v * VU_INTENSITY})`);
       grad.addColorStop(1, `rgba(${hue}, 0)`);
       ctx.fillStyle = grad;
       ctx.beginPath();
@@ -257,7 +261,7 @@ export function createMenuViz({ canvas, music }) {
       const p = spectrum.peak[i] * presence;
       if (p > v + 0.02) {
         const px = x0 + dir * (p * reach);
-        ctx.fillStyle = `rgba(255, 255, 255, ${0.6 * p * p})`;
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.6 * p * p * VU_INTENSITY})`;
         ctx.beginPath();
         ctx.roundRect(dir > 0 ? px - 2 : px, y, 2, bh, 1);
         ctx.fill();
@@ -275,8 +279,8 @@ export function createMenuViz({ canvas, music }) {
     // The bloom takes the hue at the bottom of the stack, so the light under the bars is the
     // same light that is in them.
     const hue = edgeHue(spin);
-    g.addColorStop(0, `rgba(${hue}, ${0.17 * bass * bass})`);
-    g.addColorStop(0.5, `rgba(${hue}, ${0.06 * bass * bass})`);
+    g.addColorStop(0, `rgba(${hue}, ${0.17 * bass * bass * VU_INTENSITY})`);
+    g.addColorStop(0.5, `rgba(${hue}, ${0.06 * bass * bass * VU_INTENSITY})`);
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     ctx.fillRect(dir > 0 ? 0 : w - r, cy - r, r, r * 2);
@@ -309,7 +313,7 @@ export function createMenuViz({ canvas, music }) {
       // Updraft: they accelerate as they rise, the way anything hot does.
       e.vy -= 0.000004 * dtMs;
       if (e.life <= 0) continue;
-      const a = Math.min(1, e.life * 1.6) * presence * 0.45;
+      const a = Math.min(1, e.life * 1.6) * presence * 0.45 * VU_INTENSITY;
       ctx.fillStyle = `rgba(${edgeHue(spin + e.life * 0.2)}, ${a})`;
       ctx.beginPath();
       ctx.arc(e.x, e.y, e.r * (0.4 + e.life * 0.6), 0, 7);
