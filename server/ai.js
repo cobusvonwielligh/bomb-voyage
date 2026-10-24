@@ -44,7 +44,7 @@ const BORED_TICKS = 45;         // how long a noticed cycle suppresses the hunt 
 /* How good the bots are, 0..1. Everything that makes them sharp is scaled by it: how often they
  * head for a player, how soon they bomb again, and how reliably they move the instant a blast
  * is coming. 0.9 is ten percent dumber than they were, on request. */
-export const BOT_SKILL = 0.9;
+export const BOT_SKILL = 0.7;
 const BOMB_COOLDOWN = Math.round(45 / BOT_SKILL);
 const HUNT_CHANCE = 0.7 * BOT_SKILL;
 // A lapse: on noticing the floor is about to burn, sometimes they freeze for a moment first.
@@ -62,8 +62,8 @@ const LAPSE_TICKS = 4;
  * Measured (a "human" bomb dropped beside a bot every four seconds, plus botbench): caught 17% →
  * 24% of the time, bot kills 0.37 → 0.60 a minute, suicides slightly down. Its own bombs keep
  * the short lapse: a bot knows where it just put one, and carelessness there buys suicides. */
-const SURPRISE_CHANCE = 0.3;
-const SURPRISE_NOTICE_TICKS = 12;    // 0.4 s: barely more than a tile at base speed
+const SURPRISE_CHANCE = 0.4;
+const SURPRISE_NOTICE_TICKS = 14;    // 0.4 s: barely more than a tile at base speed
 
 const DESTRUCTIBLE = new Set([BLOCK.SOFT, BLOCK.REINFORCED, BLOCK.MONOLITH, BLOCK.ICE]);
 const SHRUB = new Set([BLOCK.SHRUB_WALK, BLOCK.SHRUB_SOLID]);
