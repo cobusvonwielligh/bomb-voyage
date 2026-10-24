@@ -3091,14 +3091,27 @@ body.dead #rank { color: #8a5a5a; }
     display: none;
   }
 }
+/* The dashboard mascot's size, in ONE place and on the box, not the artwork.
+ *
+ * `#mascot::before` is a second copy of the same PNG masked over the whole box and painted in
+ * the moving gradient — that is what gives him a rim that follows his silhouette instead of a
+ * circle around him. So the box and the artwork have to be the same size: shrink only the
+ * <img> and the rim keeps painting at the old size, which is the purple ghost standing behind
+ * and to the right of him. Change this one number; everything else follows. */
+.mascot-dash {
+  /* 255px: his normal size, the one he had from the supply-and-demand release until an inline
+     override shrank him. Back on request. */
+  --mascot-size: 255px;
+}
+
 #mascot {
   position: absolute;
   /* Pinned a third of the way down the card, so he sits beside the name field rather than over
    * the title, however tall the card gets. */
   top: 26%;
   right: -150px;
-  width: 255px;
-  height: 255px;
+  width: var(--mascot-size);
+  height: var(--mascot-size);
   z-index: 2;
   pointer-events: none;
   animation: bob 5.5s ease-in-out infinite;

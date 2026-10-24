@@ -2207,8 +2207,14 @@ export function createRenderer(canvas, world) {
     for (const p of alive) drawTipsy(ctx, p, ox, oy);
     for (const p of alive) drawStamina(ctx, p, ox, oy);
     drawFloaters(ox, oy, dtMs);
-    // Over everything on the island: they are in the air.
+    // Over everything on the island: they are in the air. Under the speech bubbles, which are
+    // interface rather than world.
     drawGulls(ox, oy, tickNow, dtMs);
+    // Last of the things that live over a player, and the only one in screen space — it resets
+    // the transform itself and puts it back. Without this call the bubbles are built and then
+    // never painted, which is exactly how they went missing.
+    // It saves and restores around its own transform, so the board transform survives the call.
+    drawSays(ox, oy, zoom);
 
     /* A vignette that breathes with the music, drawn last so it sits over everything.
      *
@@ -2366,10 +2372,10 @@ export function createRenderer(canvas, world) {
       // like a mistake. Measured rather than guessed, so a long name or a short word both fit.
       const emoji = s.emoji;
       ctx.font = emoji
-        ? '22px system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif'
+        ? '26px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", system-ui, sans-serif'
         : '600 12px ui-sans-serif, system-ui, sans-serif';
       const w = Math.min(190, ctx.measureText(s.text).width + (emoji ? 18 : 20));
-      const h = emoji ? 32 : 22;
+      const h = emoji ? 38 : 22;
       const x = bx, y = by - rise;
 
       ctx.globalAlpha = a;

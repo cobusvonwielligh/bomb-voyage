@@ -64,6 +64,32 @@ test('EMOTES is declared before the code that fills the legend from it', () => {
     'the legend is filled before EMOTES is declared, which throws at module evaluation');
 });
 
+test('the bubbles are actually painted', () => {
+  /* drawSays existed, was correct, and was never called from frame() — so every bubble was
+   * built, aged and expired without a single pixel reaching the screen. A renderer function
+   * nothing calls is the one bug reading the function will never show you. */
+  const body = render.slice(render.indexOf('function frame('), render.indexOf('function drawSays'));
+  assert.match(body, /drawSays\(ox, oy, zoom\)/, 'frame() does not call drawSays');
+});
+
+test('emotes are rate-limited on the client, and never faster than the server allows', () => {
+  /* The server drops chat sent inside CHAT_MIN_INTERVAL_MS without a word back, so a client
+   * that let you fire faster would be firing emotes that silently never happened. */
+  assert.match(main, /EMOTE_COOLDOWN_MS = CHAT_MIN_INTERVAL_MS \+ \d+/,
+    'the emote cooldown is not derived from the server-side chat interval');
+  assert.match(main, /now - emoteAt < EMOTE_COOLDOWN_MS\) return/,
+    'the cooldown is not actually checked before sending');
+});
+
+test('picking an emote closes the wheel until the modifier is released', () => {
+  // Holding Shift is the question and picking is the answer; a legend left over the board after
+  // it has been answered is in the way of seeing what you walked into.
+  assert.match(main, /pickerSpent = true;/, 'the wheel is not marked spent when you pick');
+  assert.match(main, /if \(!on\) pickerSpent = false;/,
+    'releasing the modifier does not re-arm the wheel');
+  assert.match(main, /on && !pickerSpent/, 'a spent wheel can still be shown');
+});
+
 test('commands and server lines never appear over somebody’s head', () => {
   /* `/kick bob` is addressed to the server and the reply comes back as a SERVER line. Putting
    * the command itself over a player's head broadcasts something they typed privately. */
