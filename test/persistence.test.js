@@ -1,4 +1,4 @@
-﻿// Medals and XP survive. Every way the board on disk can be lost or damaged that we know of,
+// Medals and XP survive. Every way the board on disk can be lost or damaged that we know of,
 // pinned â€” because the rule is that nobody ever loses either, and a rule like that only holds if
 // something fails the build the day it stops being true.
 
@@ -101,7 +101,7 @@ test('a round won is a gold medal and XP that are still there after a restart', 
     await lb.stop();
   }
   await board(dir, async b => {
-    const e = b.get('cobus-id');
+    const e = b.get('n:cobus');
     assert.equal(e?.gold, 1, 'the winner has no gold medal after a restart');
     assert.ok(e.score >= 500, `XP ${e?.score} is less than the round earned`);
   });
@@ -115,7 +115,7 @@ test('progress is banked during a round, not only at its end', async () => {
     const { seat } = room.join('mid-id', 'mid');
     room.state.players[seat].score = SCORE.KILL;
     for (let i = 0; i < 10 * 30 + 1; i++) room.tick();
-    assert.ok(lb.get('mid-id')?.score >= SCORE.KILL, 'ten seconds in and nothing banked');
+    assert.ok(lb.get('n:mid')?.score >= SCORE.KILL, 'ten seconds in and nothing banked');
   } finally {
     room.stop();
     await lb.stop();

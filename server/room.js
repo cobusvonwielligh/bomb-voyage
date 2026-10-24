@@ -16,6 +16,7 @@ import { createState, createPlayer, expireStatuses, applyStatus, tileCentre } fr
 import { blocked, unstick } from '../shared/sim/movement.js';
 import { tick as simTick } from '../shared/sim/round.js';
 import { gullWire } from '../shared/sim/gulls.js';
+import { careerKey } from './leaderboard.js';
 import { createBrain, think, dangerMap } from './ai.js';
 
 // How long a seat is held for someone who vanished. A closed laptop lid, a wifi roam or a tunnel
@@ -465,7 +466,7 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       const st = standings[place];
       const seat = seats[st.i];
       if (!seat || st.s <= 0) continue;
-      leaderboard.award(seat.playerId, place, st.name);
+      leaderboard.award(careerKey(seat.playerId, seat.name, seat.isBot), place, st.name);
     }
   }
 
@@ -573,7 +574,7 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     for (let i = 0; i < maxPlayers; i++) {
       const s = seats[i], p = state.players[i];
       if (!s || !p) continue;
-      const banked = leaderboard.get(s.playerId);
+      const banked = leaderboard.get(careerKey(s.playerId, s.name, s.isBot));
       // Only the part of this round that has NOT been written yet, or a mid-round bank would
       // count the same points twice and the bar would jump.
       const unbanked = Math.max(0, p.score) - (s.banked?.score ?? 0);
@@ -821,7 +822,7 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       };
       if (now.score === was.score && now.kills === was.kills
           && now.deaths === was.deaths && now.coins === was.coins) continue;
-      leaderboard.record(s.playerId, {
+      leaderboard.record(careerKey(s.playerId, s.name, s.isBot), {
         name: p.name,
         score: now.score - was.score,
         kills: now.kills - was.kills,

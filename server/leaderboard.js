@@ -20,6 +20,23 @@ const positive = v => (Number.isFinite(v) && v >= 0 ? v : 0);
 /** Podium finishes, in place order. Index is the place: 0 is first. */
 export const MEDALS = ['gold', 'silver', 'bronze'];
 
+/**
+ * The key a career is stored under: the player's NAME, case-insensitively — except for bots,
+ * which keep their seat id, because their names are picked at random each time.
+ *
+ * It used to be the identity the browser keeps in localStorage. That made a career belong to a
+ * browser rather than to a person: signing out, a second browser, cleared site data, or being
+ * turned away as "already playing" all minted a new identity, and the player arrived to an empty
+ * profile while their real one sat on disk untouched. On the live board one person had eleven.
+ * In an office of colleagues who know each other's names, the name is the identity — and keyed
+ * by name, the worst anyone can do by borrowing yours is ADD to it.
+ */
+export const careerKey = (id, name, isBot = false) =>
+  (isBot ? id : `n:${sanitizeName(name).toLowerCase()}`);
+
+/** Keys written by the old per-browser scheme, which load() folds into their name's career. */
+const isBrowserIdentity = id => typeof id === 'string' && id.startsWith('p_');
+
 /* Nobody loses XP or a medal to a bad disk day. The rules that make that true:
  *
  *   1. A board that cannot be read is NEVER written over. It used to be: any parse error or
@@ -78,11 +95,19 @@ export function createLeaderboard({ dataDir }) {
       }
     }
 
+    /* Careers are keyed by NAME now, and a board keyed the old way is merged on the way in.
+     *
+     * Every identity that shares a name becomes one career, with everything summed: XP, kills,
+     * deaths, coins and every medal. Nothing is dropped and nothing is overwritten — the merge
+     * can only ever add. The old per-browser keys are what split one person into eleven, see
+     * careerKey. */
     const out = new Map();
     for (const [id, e] of Object.entries(data.players ?? {})) {
       if (!id || !e || typeof e !== 'object') continue;
-      out.set(id, {
-        name: sanitizeName(e.name),
+      const name = sanitizeName(e.name);
+      const key = isBrowserIdentity(id) ? careerKey(id, name) : id;
+      const into = out.get(key);
+      const fields = {
         score: positive(e.score),
         kills: positive(e.kills),
         deaths: positive(e.deaths),
@@ -94,7 +119,12 @@ export function createLeaderboard({ dataDir }) {
         // Gold COINS, which are a different thing entirely from a gold medal — see the note
         // on `coins` in shared/sim/state.js for how nearly those two became one field.
         coins: positive(e.coins),
-      });
+      };
+      if (!into) { out.set(key, { name, ...fields }); continue; }
+      // The display name is the one from the identity that had played most.
+      if (fields.score > into.score) into.name = name;
+      for (const k of Object.keys(fields)) into[k] = (into[k] || 0) + fields[k];
+      dirty = true;      // write the merged board back on the next save
     }
     return out;
   }
