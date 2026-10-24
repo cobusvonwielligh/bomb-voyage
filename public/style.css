@@ -322,15 +322,11 @@ canvas#game {
 
 #topbar .sep { width: 1px; height: 18px; background: #ffffff1f; }
 
-#who {
-  font-family: var(--text); font-weight: 700;
-  font-size: 15px;
-  color: var(--gold);
-  text-shadow: var(--rim), 0 2px 0 #0008;
-  letter-spacing: .03em;
-}
-
-#rank { color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: .14em; }
+/* `#who` and `#rank` used to live up here, when the name was in the top bar. It moved to the
+   side card and these two rules stayed behind — same id, same element, both still applying.
+   That was invisible until the name became cast gold: the orphan's `text-shadow` beat the
+   `.castSm` one on id specificity, and a shadow under transparent glyphs paints straight
+   through the inside of every letter. The name came out as a dark smudge. */
 
 /* Nothing in the top bar may move when a number changes.
  *
@@ -365,14 +361,15 @@ canvas#game {
 /* The round clock. The single most-glanced-at number on screen, so it is the biggest one. */
 #clock { display: flex; align-items: baseline; gap: 6px; }
 #clock .v {
-  /* Monospace, not the display face: Clegan has no tabular figures, so 07:05 and 08:88 are
-     different widths and the whole bar jumps once a second. The clock is a number you read, not
-     a title, and it is the one place where legibility beats character. */
-  font-family: var(--nums); font-weight: 700;
-  font-size: 24px; line-height: 1;
-  color: var(--gold); letter-spacing: .02em;
-  font-variant-numeric: tabular-nums;
-  display: inline-block; min-width: 5.2ch; text-align: left;
+  /* The display face. It is the biggest number on screen and the one you take in at a glance
+     rather than compare digit by digit, which is exactly what a display face is for.
+     Clegan has no tabular figures, so `min-width` in ch does the job `font-variant-numeric`
+     used to: the box is reserved at its widest and the bar cannot jump as the digits change.
+     Centred inside that box, or a narrow "1:05" would drift left of where "10:05" sat. */
+  font-family: var(--display); font-weight: 400;
+  font-size: 28px; line-height: 1;
+  color: var(--gold); letter-spacing: .04em;
+  display: inline-block; min-width: 4.8ch; text-align: center;
 }
 #clock .k { color: #aab6c8; font-size: 10px; text-transform: uppercase; letter-spacing: .14em; }
 /* The last minute. Now that the accent is itself a red, `--bad` no longer reads as an alarm
@@ -805,11 +802,14 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 }
 /* The text face, not the display one. This is a name read at a glance beside the mascot, and
    A display face turns anything with a lowercase 'rn' or a '1' in it into a puzzle at 17px. */
-/* Your name, beside the mascot's face. Cast, at the small end — it is the one piece of text on
-   screen that is about YOU, and the only reason it was ever the accent colour. */
+/* Your name, beside the mascot's face. The display face, cast in gold: it is the one piece of
+   text on screen that is about YOU, and the only reason it was ever the accent colour.
+   `text-shadow: none` explicitly, because an id beats a class and `.castSm` cannot be trusted
+   to win it — see the note where the orphan rule used to be. */
 #who {
-  font-family: var(--text); font-weight: 700; font-size: 17px;
-  letter-spacing: .03em; display: block;
+  font-family: var(--display); font-weight: 400; font-size: 23px;
+  letter-spacing: .04em; display: block;
+  text-shadow: none;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 #rank {
@@ -1304,9 +1304,9 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 /* The one thing you came here to press, so it gets the same treatment as PLAY: filled, gold,
    with the countdown in it. The two ghosts under it are alternatives, not peers. */
 #respawn {
-  width: 100%; margin: 0; padding: 14px;
-  font-family: var(--nums); font-size: 15px; font-weight: 700;
-  letter-spacing: .1em; text-transform: uppercase;
+  width: 100%; margin: 0; padding: 12px 14px;
+  font-family: var(--display); font-size: 23px; font-weight: 400;
+  letter-spacing: .08em; text-transform: uppercase;
   color: var(--on-gold);
   background: linear-gradient(180deg, var(--gold-lit), var(--gold) 55%, var(--gold-deep));
   border: none; border-radius: 10px;
