@@ -395,6 +395,7 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     // when the round reset — fifty points that never once reached anybody's total.
     for (const p of state.players) if (p?.alive) p.score += SCORE.SURVIVE_ROUND;
     bankScores();
+    awardMedals(standings);
     leaderboard?.flush();
 
     onBroadcast({
@@ -408,6 +409,29 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     // fired against the round that had already replaced the one it was waiting for.
     roundTimer = setTimeout(startNextRound, ROUND_INTERMISSION_MS);
     roundTimer.unref?.();
+  }
+
+  /**
+   * Gold, silver and bronze for the top three, into everybody's lifetime stats.
+   *
+   * From the same `standings` the round-over table shows, so the medal you are given is the one
+   * you were looking at. Two rules stop a medal meaning nothing:
+   *
+   *   - a place only pays if somebody finished BELOW it — gold needs two players, silver three,
+   *     bronze four. Last is never on the podium, so a two-player round is a gold, not a gold
+   *     and a silver for turning up.
+   *   - a finish on zero points wins nothing. A round that nobody scored in has no podium.
+   *
+   * Ties go the way the table sorts them (score, then kills), which is also what was shown.
+   */
+  function awardMedals(standings) {
+    if (!leaderboard) return;
+    for (let place = 0; place < 3 && place < standings.length - 1; place++) {
+      const st = standings[place];
+      const seat = seats[st.i];
+      if (!seat || st.s <= 0) continue;
+      leaderboard.award(seat.playerId, place, st.name);
+    }
   }
 
   function cancelIntermission() {
@@ -463,12 +487,15 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     i: p.i, x: p.x, y: p.y, d: p.dir, st: p.alive ? 1 : 0,
     b: p.bombs, f: p.radius, sp: p.speed, sh: p.shields,
     s: p.score, k: p.kills, dd: p.deaths, stat: p.status,
-    // Gold. One small integer that only ever goes up, and the only stat on the wire that is
-    // not about this round — it is what the HUD counter reads.
-    g: p.gold || 0,
+    // Coins. One small integer that only ever goes up, and the only stat on the wire that is
+    // not about this round — it is what the HUD counter reads. `c`, not `g`: `gold` on the
+    // leaderboard means a first-place finish.
+    c: p.coins || 0,
     // Stamina rides along because the indicator is drawn beside EVERY player, not just you:
     // seeing that the pirate chasing you is limping is the whole point of showing it at all.
     sta: p.stamina, stl: p.staminaLevel, tr: p.tired ? 1 : 0,
+    // Only while sliding on water, which is almost never — absent means zero.
+    ...(p.slide ? { sl: p.slide } : null),
   });
 
   function emitSnapshot() {
@@ -482,6 +509,9 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       players,
       bombs: state.bombs,
       perks: state.perks,
+      // In the snapshot rather than derived from `melt` events: movement prediction reads them,
+      // and a client that joined mid-puddle or missed a snapshot must still agree with us.
+      puddles: state.puddles,
       ev,
     }));
   }
@@ -514,7 +544,9 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       // bandwidth — so a client that misses the welcome, or hydrates a seat from a snapshot
       // that arrived first, is stuck calling somebody "p1" for the rest of the round. Once a
       // second it heals itself.
-      ranks.push({ i, name: p.name, bot: !!s.isBot, ...progressFor(lifetime) });
+      // Lifetime podium finishes, gold / silver / bronze, for the stats card and the TAB board.
+      const medals = [banked?.gold ?? 0, banked?.silver ?? 0, banked?.bronze ?? 0];
+      ranks.push({ i, name: p.name, bot: !!s.isBot, medals, ...progressFor(lifetime) });
     }
     onBroadcast({ t: 'scores', ranks, host: hostSeat(), top: leaderboard.top(5) });
   }
@@ -545,6 +577,7 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       players,
       bombs: state.bombs,
       perks: state.perks,
+      puddles: state.puddles,
       // Every rule constant the client needs, so a server tuning change needs no client deploy.
       config: {
         tickHz: TICK_HZ, snapEvery: SNAP_EVERY_TICKS, tileSize: TILE_PX,
@@ -694,18 +727,18 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     for (let i = 0; i < maxPlayers; i++) {
       const s = seats[i], p = state.players[i];
       if (!s || !p) continue;
-      const was = s.banked ?? { score: 0, kills: 0, deaths: 0, gold: 0 };
+      const was = s.banked ?? { score: 0, kills: 0, deaths: 0, coins: 0 };
       const now = {
-        score: Math.max(0, p.score), kills: p.kills, deaths: p.deaths, gold: p.gold || 0,
+        score: Math.max(0, p.score), kills: p.kills, deaths: p.deaths, coins: p.coins || 0,
       };
       if (now.score === was.score && now.kills === was.kills
-          && now.deaths === was.deaths && now.gold === was.gold) continue;
+          && now.deaths === was.deaths && now.coins === was.coins) continue;
       leaderboard.record(s.playerId, {
         name: p.name,
         score: now.score - was.score,
         kills: now.kills - was.kills,
         deaths: now.deaths - was.deaths,
-        gold: now.gold - (was.gold || 0),
+        coins: now.coins - (was.coins || 0),
       });
       s.banked = now;
     }

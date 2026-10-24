@@ -151,8 +151,10 @@
       <div id="cardStats">
         <span><span class="k">kills</span><span id="vKills">0</span></span>
         <span><span class="k">deaths</span><span id="vDeaths">0</span></span>
-        <span class="goldStat"><svg class="coin"><use href="#i-coin"/></svg><span id="vGold">0</span></span>
+        <span class="coinStat"><svg class="coin"><use href="#i-coin"/></svg><span id="vCoins">0</span></span>
       </div>
+      <!-- Lifetime podium finishes: the trophy cabinet. Filled from the scores broadcast. -->
+      <div id="cardMedals" aria-label="medals"></div>
 
       <div id="xp">
         <div class="xpHead">
@@ -165,6 +167,7 @@
 
     <div>
       <h2 class="panelHead castSm">scoreboard</h2>
+      <div class="liveHead"><span></span><span>pirate</span><span>k / d</span><span>score</span></div>
       <ul id="liveRows"></ul>
     </div>
 
@@ -189,7 +192,7 @@
     <h1 id="deadTitle">round over</h1>
     <div id="roundTable">
       <table>
-        <thead><tr><th>#</th><th>name</th><th>k</th><th>d</th><th>score</th></tr></thead>
+        <thead><tr><th>#</th><th>name</th><th class="num">kills</th><th class="num">deaths</th><th class="num">score</th></tr></thead>
         <tbody id="roundRows"></tbody>
       </table>
       <p class="sub" id="roundEmpty">no scores</p>
@@ -212,14 +215,15 @@
      and one element cannot be both. -->
 <div id="scores">
   <div id="scoresCard" class="edge">
+    <h2 class="boardHead castSm">this round</h2>
     <table>
-      <thead><tr><th>#</th><th>name</th><th>level</th><th>k</th><th>d</th><th>gold</th><th>xp</th></tr></thead>
+      <thead><tr><th>#</th><th>name</th><th>level</th><th>medals</th><th class="num">kills</th><th class="num">deaths</th><th class="num">coins</th><th class="num">round</th><th class="num">xp</th></tr></thead>
       <tbody id="scoreRows"></tbody>
     </table>
     <div id="allTime">
       <h2 class="castSm">all time</h2>
       <table>
-        <thead><tr><th>#</th><th>name</th><th>level</th><th>gold</th><th>xp</th></tr></thead>
+        <thead><tr><th>#</th><th>name</th><th>level</th><th>medals</th><th class="num">coins</th><th class="num">xp</th></tr></thead>
         <tbody id="allTimeRows"></tbody>
       </table>
     </div>

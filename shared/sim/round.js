@@ -13,7 +13,7 @@ import { expireStatuses, applyStatus, has, toTile } from './state.js';
 import { stepAll } from './movement.js';
 import { place, detonate, expireFires } from './bombs.js';
 import { collect, scatterOnDeath } from './perks.js';
-import { regenerate } from './blocks.js';
+import { regenerate, expirePuddles } from './blocks.js';
 import { burns } from './fire.js';
 import { spread as spreadStatuses } from './statuses.js';
 
@@ -51,6 +51,7 @@ export function tick(state, inputs, { onRespawn } = {}) {
     if (p && !p.alive && (inputs[i] & IN_BOMB) && state.tick >= p.respawnAt) onRespawn?.(p);
   }
   expireFires(state);
+  expirePuddles(state);
 
   state.tick++;
 }

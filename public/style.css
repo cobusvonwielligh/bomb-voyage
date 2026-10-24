@@ -131,7 +131,61 @@
     radial-gradient(120% 90% at 12% 0%, #ffffff0a, #ffffff00 58%);
 
   --crown: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 12h12l1-7-3.5 2.5L8 3 4.5 7.5 1 5z'/%3E%3Crect x='2' y='13' width='12' height='2'/%3E%3C/svg%3E");
+
+  /* Podium medals: a struck disc on a ribbon, gold / silver / bronze.
+   *
+   * Full-colour SVG backgrounds rather than masks — a medal is three materials, not one colour.
+   * Each has the same parts: a two-tone ribbon, a disc with a diagonal metal ramp, a darker rim, a
+   * faint inner ring, the place number struck into it, and one soft highlight top-left (the
+   * interface's light comes from there, like everything on the board). The RIBBONS differ in hue
+   * too — red, blue, green — so the three are told apart by more than how shiny they are, which
+   * matters for anyone who cannot easily tell gold from bronze. */
+  --medal-1: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 24'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23fff3b0'/%3E%3Cstop offset='.5' stop-color='%23edc24e'/%3E%3Cstop offset='1' stop-color='%239c6a0c'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M4.5 0h4.2l3 9.5H7.5z' fill='%23c0392b'/%3E%3Cpath d='M15.5 0h-4.2l-3 9.5h4.2z' fill='%238f2a20'/%3E%3Ccircle cx='10' cy='15' r='8' fill='url(%23g)' stroke='%236d4709' stroke-width='1.2'/%3E%3Ccircle cx='10' cy='15' r='5.7' fill='none' stroke='%23fff6c8' stroke-opacity='.6' stroke-width='.8'/%3E%3Cellipse cx='7' cy='11.8' rx='2.6' ry='1.3' fill='%23fff' fill-opacity='.55' transform='rotate(-35 7 11.8)'/%3E%3Ctext x='10' y='18.4' font-family='Arial,Helvetica,sans-serif' font-weight='700' font-size='9' text-anchor='middle' fill='%234a2f05'%3E1%3C/text%3E%3C/svg%3E");
+  --medal-2: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 24'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23ffffff'/%3E%3Cstop offset='.5' stop-color='%23c9d1db'/%3E%3Cstop offset='1' stop-color='%23737d8a'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M4.5 0h4.2l3 9.5H7.5z' fill='%232f6db5'/%3E%3Cpath d='M15.5 0h-4.2l-3 9.5h4.2z' fill='%23234f85'/%3E%3Ccircle cx='10' cy='15' r='8' fill='url(%23g)' stroke='%2346505e' stroke-width='1.2'/%3E%3Ccircle cx='10' cy='15' r='5.7' fill='none' stroke='%23ffffff' stroke-opacity='.6' stroke-width='.8'/%3E%3Cellipse cx='7' cy='11.8' rx='2.6' ry='1.3' fill='%23fff' fill-opacity='.6' transform='rotate(-35 7 11.8)'/%3E%3Ctext x='10' y='18.4' font-family='Arial,Helvetica,sans-serif' font-weight='700' font-size='9' text-anchor='middle' fill='%23262c35'%3E2%3C/text%3E%3C/svg%3E");
+  --medal-3: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 24'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f9cfa6'/%3E%3Cstop offset='.5' stop-color='%23c8814a'/%3E%3Cstop offset='1' stop-color='%23744020'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M4.5 0h4.2l3 9.5H7.5z' fill='%232e8b57'/%3E%3Cpath d='M15.5 0h-4.2l-3 9.5h4.2z' fill='%231f6140'/%3E%3Ccircle cx='10' cy='15' r='8' fill='url(%23g)' stroke='%234d2a12' stroke-width='1.2'/%3E%3Ccircle cx='10' cy='15' r='5.7' fill='none' stroke='%23ffe2c4' stroke-opacity='.55' stroke-width='.8'/%3E%3Cellipse cx='7' cy='11.8' rx='2.6' ry='1.3' fill='%23fff' fill-opacity='.45' transform='rotate(-35 7 11.8)'/%3E%3Ctext x='10' y='18.4' font-family='Arial,Helvetica,sans-serif' font-weight='700' font-size='9' text-anchor='middle' fill='%23361c0a'%3E3%3C/text%3E%3C/svg%3E");
+  /* The podium tints behind those rows. Faint, and fading out to the right, so a row reads as
+   * "placed" without the colour competing with the player's own name colour. */
+  --tint-1: linear-gradient(90deg, #edc24e2e, #edc24e00 75%);
+  --tint-2: linear-gradient(90deg, #c9d1db24, #c9d1db00 75%);
+  --tint-3: linear-gradient(90deg, #c8814a29, #c8814a00 75%);
 }
+
+/* ─── medals and podium rows, shared by every board ──────────────────────────── */
+
+.medal {
+  display: inline-block; width: 19px; height: 22px; vertical-align: -6px;
+  background: center / contain no-repeat;
+  filter: drop-shadow(0 1px 1px #000b);
+}
+.medal.m1 { background-image: var(--medal-1); }
+.medal.m2 { background-image: var(--medal-2); }
+.medal.m3 { background-image: var(--medal-3); }
+/* Gold catches the light now and then: one slow glint every few seconds, not a strobe. */
+.medal.m1 { animation: medalGlint 4.5s ease-in-out infinite; }
+@keyframes medalGlint {
+  0%, 82%, 100% { filter: drop-shadow(0 1px 1px #000b); }
+  88% { filter: drop-shadow(0 1px 1px #000b) drop-shadow(0 0 5px #fff1a8cc) brightness(1.18); }
+}
+@media (prefers-reduced-motion: reduce) { .medal.m1 { animation: none; } }
+
+/* Lifetime medal counts: three small medals, each with its count. A zero is dimmed, not
+ * removed, so the column keeps one shape all the way down and "no silver yet" still reads. */
+.medal.mini { width: 14px; height: 17px; vertical-align: -4px; animation: none; }
+.tally { display: inline-flex; gap: 9px; font-family: var(--nums); font-variant-numeric: tabular-nums; }
+.tally .t { display: inline-flex; align-items: center; gap: 3px; min-width: 2.6ch; }
+.tally .t.zero { opacity: .3; }
+.tally.none { color: var(--dim); }
+#cardMedals { display: flex; align-items: center; gap: 8px; margin-top: 7px; font-size: 13px; }
+#cardMedals:empty { display: none; }
+#cardMedals .k {
+  color: var(--dim); font-size: 9px; text-transform: uppercase;
+  letter-spacing: .14em; font-family: var(--text);
+}
+body.observing #cardMedals { display: none; }
+
+.p1 { background: var(--tint-1); }
+.p2 { background: var(--tint-2); }
+.p3 { background: var(--tint-3); }
 
 * { box-sizing: border-box; }
 
@@ -914,8 +968,8 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 /* Gold. The only stat with a picture instead of a word, because it is the only one that is a
    THING rather than a count of events — and because a coin is faster to recognise than the
    four letters it would take to spell it. */
-.goldStat { display: inline-flex; align-items: center; gap: 5px; color: var(--gold); }
-.goldStat .coin {
+.coinStat { display: inline-flex; align-items: center; gap: 5px; color: var(--gold); }
+.coinStat .coin {
   width: 13px; height: 13px; display: block;
   color: var(--gold);
   filter: drop-shadow(0 1px 0 #0008) drop-shadow(0 0 5px #edc24e4d);
@@ -1003,15 +1057,31 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   text-transform: uppercase; letter-spacing: .18em;
 }
 
-#liveRows { list-style: none; margin: 0; padding: 0; font-size: 12.5px; }
+/* The live board. Rows are a fixed height with the place in a fixed-width slot, so a medal and a
+ * plain "7" line up and the names start on one edge. Column heads say what the two numbers are —
+ * "3/5" next to a name was a riddle for anyone who had not asked. */
+.liveHead, #liveRows li {
+  display: grid; grid-template-columns: 24px 1fr 46px 46px; align-items: center; column-gap: 6px;
+  padding: 0 8px 0 4px;
+}
+.liveHead {
+  color: var(--dim); font-size: 9px; letter-spacing: .16em; text-transform: uppercase;
+  padding-bottom: 4px; margin-bottom: 3px; border-bottom: 1px solid #edc24e2b;
+}
+.liveHead span:nth-child(n+3) { text-align: right; }
+#liveRows { list-style: none; margin: 0; padding: 0; font-size: 13px; }
 #liveRows li {
-  display: flex; align-items: baseline; gap: 7px; padding: 2px 0;
+  height: 25px; border-radius: 5px; margin-bottom: 1px;
   font-variant-numeric: tabular-nums;
 }
-#liveRows .pos { color: var(--dim); width: 1.2em; font-family: var(--nums); font-size: 11px; }
-#liveRows .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#liveRows .kd { color: var(--dim); font-family: var(--nums); font-size: 11px; }
-#liveRows .sc { font-family: var(--nums); color: var(--ink); }
+#liveRows li:nth-child(even):not(.p1):not(.p2):not(.p3) { background: #ffffff06; }
+#liveRows .pos {
+  color: var(--dim); font-family: var(--nums); font-size: 11px; text-align: center;
+}
+#liveRows .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#liveRows .kd { color: var(--dim); font-family: var(--nums); font-size: 11px; text-align: right; }
+#liveRows .sc { font-family: var(--nums); color: var(--ink); text-align: right; font-weight: 700; }
+#liveRows li.p1 .sc { color: var(--gold-hi); }
 
 /* A little robot in front of anything that is not a person.
  *
@@ -1031,7 +1101,10 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   -webkit-mask-size: contain; mask-size: contain;
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
 }
-#liveRows li.me { font-weight: 700; }
+/* You. The same gold edge as your row on the round-over table, so "that is me" looks the same
+ * everywhere it is asked. Inset so it never shifts the row. */
+#liveRows li.me { font-weight: 700; box-shadow: inset 3px 0 0 var(--gold); }
+#liveRows li.me:not(.p1):not(.p2):not(.p3) { background: #edc24e12; }
 
 /* The host. Small enough to be a mark rather than an ornament: it says who can restart the
  * round, and nothing more. Drawn as a mask so one SVG symbol can be tinted gold here. */
@@ -1420,7 +1493,13 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 #roundTable td { padding: 4px 10px 4px 0; white-space: nowrap; }
 #roundTable td.dimcell { color: var(--dim); }
 #roundTable td.num { font-family: var(--nums); font-variant-numeric: tabular-nums; }
-#roundTable tbody { display: block; max-height: 44vh; overflow-y: auto; }
+/* Tall enough for sixteen rows on an ordinary window, so the scrollbar — which narrows the body
+ * and pulls its columns out of line with the header — only appears when it has to, and is thin
+ * and gold when it does. */
+#roundTable tbody {
+  display: block; max-height: 60vh; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: #edc24e55 transparent;
+}
 #roundTable thead, #roundTable tbody tr { display: table; width: 100%; table-layout: fixed; }
 /* Your row. Gold rule down the left and a lift off the background — on a sixteen-row table the
    only question anyone is asking is "where am I". */
@@ -1428,7 +1507,6 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   background: #edc24e14; font-weight: 700;
   box-shadow: inset 3px 0 0 var(--gold);
 }
-#roundTable tr.me td:first-child { padding-left: 8px; }
 #roundNext { margin: 12px 0 0; text-align: center; color: var(--dim); font-size: 11px; }
 
 /* Centred on the BOARD, not the window — the same correction the kill-streak banner got.
@@ -1460,7 +1538,9 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
    a positioning frame and nothing else. */
 #scoresCard {
   --panel-fill: #141b24f7;
-  border-radius: 12px; padding: 20px 24px; min-width: 500px; max-width: 100%;
+  /* 590px, matching the width the table was designed against once it grew a medals column and
+     a coins column. Narrower and the headings wrap, which turns a glance into a read. */
+  border-radius: 12px; padding: 20px 24px; min-width: 590px; max-width: 100%;
   max-height: 100%; overflow-y: auto;
 }
 
@@ -1472,10 +1552,35 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   text-transform: uppercase; letter-spacing: .14em;
 }
 #scores td { padding: 4px 12px 4px 0; white-space: nowrap; }
+#scores td:last-child, #scores th:last-child,
+#roundTable td:last-child, #roundTable th:last-child { padding-right: 10px; }
 #scores td.dimcell { color: var(--dim); }
 #scores td.num { font-family: var(--nums); font-variant-numeric: tabular-nums; }
 #scores .sub { margin: 14px 0 0; text-align: center; }
 #allTime { display: none; margin-top: 18px; padding-top: 14px; border-top: 1px solid #edc24e33; }
+#scores h2.boardHead {
+  margin: 0 0 8px; font-size: 11px; font-weight: normal; color: var(--gold);
+  letter-spacing: .2em; text-transform: uppercase; font-family: var(--display);
+  text-shadow: var(--rim);
+}
+
+/* Every table board: taller rows, zebra stripes, the place column centred and wide enough for a
+ * medal, podium tints on the top three, and your row edged in gold. The stripes are barely there
+ * — on a dark panel a sixteen-row table without them is a wall, with strong ones it is a barcode. */
+#scores td, #roundTable td { padding-top: 6px; padding-bottom: 6px; }
+#scores tbody tr:nth-child(even):not(.p1):not(.p2):not(.p3),
+#roundTable tbody tr:nth-child(even):not(.p1):not(.p2):not(.p3) { background: #ffffff06; }
+#scores td.place, #roundTable td.place {
+  width: 34px; padding-left: 4px; padding-right: 6px; text-align: center;
+  color: var(--dim); font-family: var(--nums);
+}
+#scores th:first-child, #roundTable th:first-child { width: 34px; text-align: center; padding-left: 4px; }
+#scores tr.me { box-shadow: inset 3px 0 0 var(--gold); font-weight: 700; }
+#scores tr.me:not(.p1):not(.p2):not(.p3) { background: #edc24e12; }
+#scores tr.p1 td.score, #roundTable tr.p1 td.score { color: var(--gold-hi); }
+#scores td.score, #roundTable td.score { font-weight: 700; }
+#scores td.num, #roundTable td.num { text-align: right; }
+#scores th.num, #roundTable th.num { text-align: right; }
 #allTime h2 {
   margin: 0 0 8px; font-size: 13px; font-weight: normal;
   letter-spacing: .2em; text-transform: uppercase; font-family: var(--display);

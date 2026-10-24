@@ -20,6 +20,9 @@ export function createState(mapDef, seed = mapDef.seed) {
     bombs: [],
     fires: [],
     perks: [],
+    // Melted ice: { tx, ty, at, until }. Not a tile type — the map stays the map, and a puddle is
+    // just somewhere slow and slippery for a few seconds. See melt() in sim/blocks.js.
+    puddles: [],
     nextBombId: 1,
     nextPerkId: 1,
     // Gold coins dropped so far this round. See GOLD_MAX_PER_ROUND — counted on the drop, so a
@@ -50,14 +53,21 @@ export function createPlayer(i, name) {
     status: 0,         // bitmask
     statusUntil: {},   // STATUS bit -> tick
     score: 0, kills: 0, deaths: 0,
-    // Gold coins collected this life. Banked to the leaderboard like score and kills, and the
-    // only one of the three that is a count of a THING rather than of an event.
-    gold: 0,
+    /* Gold coins collected this life. Banked to the leaderboard like score and kills.
+     *
+     * `coins`, not `gold`. The leaderboard already had a `gold` — first-place finishes, one of
+     * gold/silver/bronze — and the two features landed in the same field from opposite
+     * branches: a coin pickup incremented the medal count and winning a round incremented the
+     * coin counter. Both read perfectly and both were wrong. The trio is a coherent set, so the
+     * one that renames is this one, and "coins" is what it actually is. */
+    coins: 0,
     // Was the bomb key down last tick? Edge detection for placement — see bombs.place.
     bombHeld: false,
     stamina: STAMINA_MAX,
     staminaLevel: 0,   // Lung perks collected; raises the ceiling, see staminaMaxFor
     tired: false,
+    // Ticks of slide left after letting go of the keys on water. See PUDDLE_SLIDE_TICKS.
+    slide: 0,
     respawnAt: 0,
   };
 }

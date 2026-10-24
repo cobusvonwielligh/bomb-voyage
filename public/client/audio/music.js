@@ -492,6 +492,7 @@ async function createFileTrack({ bus, name, loop = false }) {
 
 export function createMusic() {
   let ctx = null, timer = null, tracks = null, musicGain = null, sidechain = null, analyser = null;
+  let seaAnalyser = null;
   let step = 0, loops = 0, current = 0, nextTime = 0;
   /* Which track you can actually HEAR, as opposed to which one is being scheduled.
    *
@@ -551,6 +552,21 @@ export function createMusic() {
     sidechain = ctx.createGain();
     sidechain.gain.value = 1;
     sidechain.connect(musicGain);
+
+    /* The ear the sea listens with — a second tap, separate from the visualisers' below. See
+     * audio/listen.js.
+     *
+     * Two analysers because they want opposite things. A bar display wants heavy smoothing
+     * (0.72) and post-volume levels; beat detection wants transients, which smoothing that heavy
+     * blurs into mush, so this one runs at 0.2. And it sits after the duck but BEFORE the volume
+     * fader: the water should move the same at 10% as at 100% — the slider is how loud, not how
+     * much — while an explosion that ducks the music still ducks the sea on the same beat. The
+     * renderer is told separately whether anyone can hear it (`audible`), so at zero the sea
+     * still goes calm. A dangling analyser is a pure observer; the audio path is untouched. */
+    seaAnalyser = ctx.createAnalyser();
+    seaAnalyser.fftSize = 2048;
+    seaAnalyser.smoothingTimeConstant = 0.2;
+    sidechain.connect(seaAnalyser);
 
     /* The tap the visualisers read, hung off the bus in PARALLEL.
      *
@@ -768,6 +784,12 @@ export function createMusic() {
      * `playing` is not. That window is exactly what the autostart in main.js is closing.
      */
     get wanted() { return wanted; },
+
+    /** The sea's ear: before the volume fader, lightly smoothed. Null until the music is built. */
+    get seaAnalyser() { return seaAnalyser; },
+
+    /** Is anybody hearing it? Paused or faded to zero, the sea should be still. */
+    get audible() { return playing && volume > 0; },
 
     /**
      * The frequency tap, or null before the first gesture has built the graph.

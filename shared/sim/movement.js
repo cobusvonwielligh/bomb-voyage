@@ -10,6 +10,7 @@ import {
   STAMINA_RECOVER_UNITS, STAMINA_TIRED_NUM, STAMINA_TIRED_DEN, staminaMaxFor,
   DRUNK_SWAY_UNITS, DRUNK_SWAY_RATE_A, DRUNK_SWAY_RATE_B,
   DRUNK_STAGGER_EVERY, DRUNK_STAGGER_TICKS,
+  PUDDLE_SPEED_NUM, PUDDLE_SPEED_DEN, PUDDLE_SLIDE_TICKS,
   IN_RIGHT, IN_UP, IN_LEFT, IN_DOWN, DIR_R, DIR_U, DIR_L, DIR_D, STATUS,
 } from '../constants.js';
 import { walkable, has, tileCentre } from './state.js';
@@ -100,6 +101,21 @@ export function stamina(p, moving) {
   p.stamina = Math.min(max, p.stamina + (moving ? STAMINA_REGEN_MOVING : STAMINA_REGEN_IDLE));
   if (p.tired && p.stamina >= STAMINA_RECOVER_UNITS) p.tired = false;
 }
+
+/**
+ * Is this player standing in a puddle? By the tile their centre is in — the same test fire,
+ * pickups and every other per-tile rule use. `state` is the server's state or the client's
+ * world; both carry the puddle list, which is what lets prediction agree.
+ */
+export function inPuddle(state, p) {
+  const ps = state.puddles;
+  if (!ps || !ps.length) return false;
+  const tx = p.x >> 8, ty = p.y >> 8;
+  for (const q of ps) if (q.tx === tx && q.ty === ty && q.until > state.tick) return true;
+  return false;
+}
+
+const DIR_VEC = { [DIR_R]: [1, 0], [DIR_U]: [0, -1], [DIR_L]: [-1, 0], [DIR_D]: [0, 1] };
 
 const halfBox = p => (has(p, STATUS.REDUCTION) ? HITBOX_REDUCED_UNITS : HITBOX_UNITS) >> 1;
 
@@ -358,10 +374,29 @@ export function step(state, p, mask) {
 
   if (has(p, STATUS.CHANGELING)) { dx = -dx; dy = -dy; }
 
+  /* Water: half pace, and you slide.
+   *
+   * Every tick you walk in a puddle tops the slide up; let go and you keep going the way you are
+   * facing until it runs out. Facing, not "the keys you last held", because facing is already on
+   * the wire and is always the axis you actually travelled — so the client replays the slide
+   * from nothing but `slide` and `dir`. Leaving the water ends it at once: the floor is not wet.
+   */
+  const wet = inPuddle(state, p);
+  let coasting = false;
+  if (!wet) p.slide = 0;
+  else if (dx || dy) p.slide = PUDDLE_SLIDE_TICKS;
+  else if (p.slide > 0) {
+    p.slide--;
+    [dx, dy] = DIR_VEC[p.dir] ?? DIR_VEC[DIR_D];
+    coasting = true;
+  }
+
   if (!dx && !dy) { p.moving = false; stamina(p, false); return; }
 
-  const speed = speedOf(p);
-  stamina(p, true);
+  let speed = speedOf(p);
+  if (wet) speed = Math.max(1, ((speed * PUDDLE_SPEED_NUM) / PUDDLE_SPEED_DEN) | 0);
+  // Sliding is not running: it costs no stamina.
+  stamina(p, !coasting);
   p.moving = true;
 
   /* Drunk: you wander across the line you are walking along.

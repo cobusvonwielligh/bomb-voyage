@@ -230,7 +230,7 @@ test('a coin pays XP and changes nothing else about you', () => {
   drop(s, 3, 3, PERK.GOLD);
   collect(s);
 
-  assert.equal(p.gold, 1, 'the coin was not collected');
+  assert.equal(p.coins, 1, 'the coin was not collected');
   assert.equal(p.score, SCORE.GOLD, `a coin paid ${p.score}, wanted ${SCORE.GOLD}`);
   for (const [k, v] of Object.entries(before)) {
     assert.equal(p[k], v, `collecting gold changed ${k}, which it must not`);

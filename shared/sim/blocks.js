@@ -4,6 +4,7 @@ import {
   BLOCK, BLOCK_HP, BLOCK_DESTRUCTIBLE, BLOCK_WALKABLE, REGEN_EVERY_TICKS, REGEN_PER_CYCLE,
   REGEN_CLEAR_RADIUS_TILES, REGEN_MAX_FILL, SCORE,
   POWDER_MAX_PER_ROUND, POWDER_CHANCE_PER_CYCLE, POWDER_GUARANTEE_TICK,
+  ICE_CHANCE, PUDDLE_TICKS,
 } from '../constants.js';
 import { tileAt, hpAt, setTile } from './state.js';
 import { randInt } from '../util/rng.js';
@@ -25,6 +26,34 @@ export function damage(state, tx, ty, owner) {
   const p = state.players[owner];
   if (p) p.score += SCORE.BLOCK;
   return { destroyed: true, type };
+}
+
+const FLOOD = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]];
+
+/**
+ * Melted ice: a puddle on the ice's own tile and the four beside it, wherever you could stand.
+ *
+ * Called by detonate() once damage() has already turned the ice to floor, so the centre always
+ * floods. A neighbour that is a wall, the sea or rock stays dry — five tiles is the most, never
+ * the promise. Two melts that overlap extend each other rather than stacking: a puddle is a
+ * place, and there is only ever one per tile.
+ */
+export function melt(state, tx, ty) {
+  const until = state.tick + PUDDLE_TICKS;
+  state.puddles ??= [];
+  for (const [dx, dy] of FLOOD) {
+    const x = tx + dx, y = ty + dy;
+    if (!BLOCK_WALKABLE(tileAt(state.map, x, y), false)) continue;
+    const wet = state.puddles.find(q => q.tx === x && q.ty === y);
+    if (wet) wet.until = Math.max(wet.until, until);
+    else state.puddles.push({ tx: x, ty: y, at: state.tick, until });
+  }
+  state.events.push({ e: 'melt', tick: state.tick, x: tx, y: ty });
+}
+
+/** Puddles that have dried up. End of the tick, beside the fires, for the same reason. */
+export function expirePuddles(state) {
+  if (state.puddles?.length) state.puddles = state.puddles.filter(q => q.until > state.tick);
 }
 
 /**
@@ -117,8 +146,10 @@ export function regenerate(state) {
   for (let attempt = 0; attempt < want * 25 && placed < want; attempt++) {
     const at = quietTile(1);
     if (!at) continue;
-    setTile(state.map, at[0], at[1], BLOCK.SOFT, BLOCK_HP[BLOCK.SOFT]);
-    state.events.push({ e: 'blocknew', tick: state.tick, x: at[0], y: at[1], b: BLOCK.SOFT });
+    // Ice grows back at the same rate it was generated, so it does not die out as a round runs.
+    const type = state.next() < ICE_CHANCE ? BLOCK.ICE : BLOCK.SOFT;
+    setTile(state.map, at[0], at[1], type, BLOCK_HP[type]);
+    state.events.push({ e: 'blocknew', tick: state.tick, x: at[0], y: at[1], b: type });
     placed++;
   }
 }

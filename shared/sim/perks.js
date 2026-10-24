@@ -121,7 +121,7 @@ function apply(state, p, type) {
      * SCORE.GOLD rather than SCORE.PERK_CAPPED — it is always "gained", it can never be capped,
      * and there is no ceiling to walk past. */
     case PERK.GOLD:
-      p.gold = (p.gold || 0) + 1;
+      p.coins = (p.coins || 0) + 1;
       return true;
 
     case PERK.STAMINA:

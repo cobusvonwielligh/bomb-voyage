@@ -23,7 +23,7 @@ import { audioContext, createBus, noiseSource, hz, unlock } from './engine.js';
 // Per rendered frame. `boom` and `blockdie` are the ones that genuinely need a cap; the rest are
 // belt and braces against a pathological snapshot.
 const MAX_PER_FRAME = {
-  boom: 3, blockdie: 4, blocknew: 2, status: 2, death: 3, fuse: 2,
+  boom: 3, blockdie: 4, blocknew: 2, status: 2, death: 3, fuse: 2, melt: 2,
   // A keg is loud enough that two at once is already a wall. Chat and pickups are one a frame
   // because more than one is never information.
   kegboom: 2, chat: 1, mention: 1, glug: 1, hiccup: 1, ready: 1,
@@ -583,6 +583,41 @@ export function createSfx({ listener }) {
       f.Q.value = 0.7;
       s.connect(f); f.connect(g);
       s.start(t); s.stop(t + 0.25);
+    },
+
+    /**
+     * Ice giving way. Three parts, in order: a glassy crack, a scatter of high tinkles as it
+     * shatters, and the wet slap of the water hitting the floor. The tinkles are what make it
+     * ice rather than any other block — nothing else in the game rings.
+     */
+    melt(c, out, t, level) {
+      const cg = voiceGain(c, out, t, { a: 0.001, d: 0.05, peak: 0.2 * level, send: 0.2 });
+      const cs = noiseSource();
+      const hp = c.createBiquadFilter();
+      hp.type = 'highpass'; hp.frequency.value = 3200;
+      cs.connect(hp); hp.connect(cg);
+      cs.start(t); cs.stop(t + 0.07);
+
+      for (let i = 0; i < 5; i++) {
+        const at = t + 0.015 + i * jit(0.032, 0.4);
+        const g = voiceGain(c, out, at, { a: 0.001, d: jit(0.09, 0.3), peak: 0.07 * level, send: 0.35 });
+        const o = c.createOscillator();
+        o.type = 'sine';
+        o.frequency.value = hz(jit(96 - i * 2, 0.03));
+        o.connect(g);
+        o.start(at); o.stop(at + 0.14);
+      }
+
+      const st = t + 0.05;
+      const sg = voiceGain(c, out, st, { a: 0.012, d: jit(0.22), peak: 0.17 * level });
+      const ss = noiseSource();
+      ss.playbackRate.value = jit(0.8, 0.1);
+      const lp = c.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(1600, st);
+      lp.frequency.exponentialRampToValueAtTime(260, st + 0.25);
+      ss.connect(lp); lp.connect(sg);
+      ss.start(st); ss.stop(st + 0.32);
     },
 
     /** A wall growing back. You need to notice this: your escape route just changed. */

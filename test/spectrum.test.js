@@ -163,14 +163,19 @@ test('reading nothing is safe, and the sea has something to fall back to', () =>
 test('render.js couples the sea to the music as multipliers, never as the value itself', () => {
   /* The test for whether a reactive effect is tasteful: set the gain to zero and the thing you
    * are driving must be exactly what it was. Every coupling in the sea is `x * (1 + audio)`,
-   * so silence is the sea as it always was and there is no branch for the quiet case. */
+   * so silence is the sea as it always was and there is no branch for the quiet case.
+   *
+   * The sea is driven by audio/listen.js now (beats and tempo, which this spectrum's smoothing
+   * blurs away) rather than by this spectrum, but the promise is the same one. */
   const src = readFileSync(new URL('../public/client/render.js', import.meta.url), 'utf8');
-  assert.match(src, /AUDIO_REST/, 'there is no resting state for the sea');
-  assert.match(src, /setAudio\(a\)/, 'the renderer no longer takes a spectrum');
-  for (const term of ['swell', 'flowPush', 'sparkle']) {
-    assert.ok(src.includes(term), `the sea no longer uses ${term}`);
+  assert.match(src, /const CALM = \{/, 'there is no resting state for the sea');
+  assert.match(src, /setSound\(fn\)/, 'the renderer no longer takes the music');
+  // The multipliers start from 1, so silence leaves the water exactly as it was.
+  for (const name of ['swell', 'surge']) {
+    const assigns = [...src.matchAll(new RegExp(`\\b${name}\\s*=\\s*([^;]+);`, 'g'))].map(m => m[1].trim());
+    assert.ok(assigns.length > 0, `the sea no longer uses ${name}`);
+    for (const a of assigns) assert.match(a, /^1\b/, `${name} = ${a} is not a multiplier from 1`);
   }
-  // Every use must be a multiplier on something, i.e. appear inside a `1 + ...` or `* (1 + ...`.
-  const bare = [...src.matchAll(/=\s*(swell|flowPush|sparkle)\s*[;*]/g)].map(m => m[0]);
-  assert.deepEqual(bare, [], `a coupling is assigned directly rather than multiplied: ${bare}`);
+  // The metronome's push is zero until a tempo is trusted, and scaled by how much it is.
+  assert.match(src, /tempoA = sound\.lock \*/, 'the tempo wave no longer waits for a lock');
 });

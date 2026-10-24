@@ -203,6 +203,83 @@ test('the round in progress survives a restart', async () => {
   }
 });
 
+test('medals', async t => {
+  await t.test('an award counts, persists, and an old board loads with none', async t => {
+    const dir = await tempDir(t);
+    // A board written before medals existed: the fields are simply absent.
+    await fs.writeFile(path.join(dir, 'leaderboard.json'),
+      JSON.stringify({ version: 1, players: { a: { name: 'ann', score: 50, kills: 1, deaths: 2 } } }));
+    const lb = createLeaderboard({ dataDir: dir });
+    const before = lb.get('a');
+    assert.deepEqual([before.gold, before.silver, before.bronze], [0, 0, 0]);
+
+    lb.award('a', 0); lb.award('a', 0); lb.award('a', 2);
+    lb.award('a', 3);                       // fourth is not a medal
+    lb.award('b', 1, 'bob');                // a medal can be somebody's first entry
+    await lb.flush();
+
+    const again = createLeaderboard({ dataDir: dir });
+    const a = again.get('a'), b = again.get('b');
+    assert.deepEqual([a.gold, a.silver, a.bronze], [2, 0, 1]);
+    assert.equal(a.score, 50, 'medals touched the score');
+    assert.deepEqual([b.gold, b.silver, b.bronze, b.name], [0, 1, 0, 'bob']);
+    assert.deepEqual(again.top(5).map(e => e.gold), [2, 0], 'top() does not carry medals');
+    await lb.stop(); await again.stop();
+  });
+
+  /** Play a room to the end of a round with these scores, return the medals banked per seat. */
+  async function finishRound(scores) {
+    const dataDir = fss.mkdtempSync(path.join(os.tmpdir(), 'bv-medal-'));
+    try {
+      const board = createLeaderboard({ dataDir });
+      const room = createRoom({ onBroadcast: () => {}, leaderboard: board });
+      room.setBots(scores.length);
+      room.setRoundTime(0.1);
+      // Freeze everyone in place for the round so the bots cannot score on their own.
+      const ticks = Math.round(0.1 * 60 * 30);
+      for (let n = 0; n < ticks - 1; n++) room.tick();
+      scores.forEach((s, i) => { const p = room.state.players[i]; p.score = s; p.kills = 0; p.alive = false; });
+      // And nothing still burning: a bomb going off on the final tick pays its owner for the
+      // blocks it breaks, dead or not, which turned a zero-point round into a two-point one about
+      // one run in three.
+      room.state.bombs.length = 0;
+      room.state.fires.length = 0;
+      room.tick();                          // the round ends on this one
+      const got = scores.map((_, i) => {
+        const e = board.get(`bot_${i}`);
+        return e ? [e.gold, e.silver, e.bronze] : [0, 0, 0];
+      });
+      room.restartRound();
+      room.stop();
+      await board.stop();
+      return got;
+    } finally {
+      fss.rmSync(dataDir, { recursive: true, force: true });
+    }
+  }
+
+  await t.test('the top three of a full round get gold, silver and bronze', async () => {
+    const got = await finishRound([300, 900, 100, 500, 50]);
+    assert.deepEqual(got[1], [1, 0, 0], 'first did not get gold');
+    assert.deepEqual(got[3], [0, 1, 0], 'second did not get silver');
+    assert.deepEqual(got[0], [0, 0, 1], 'third did not get bronze');
+    assert.deepEqual(got[2], [0, 0, 0], 'fourth got a medal');
+    assert.deepEqual(got[4], [0, 0, 0], 'last got a medal');
+  });
+
+  await t.test('last place is never on the podium', async () => {
+    const two = await finishRound([200, 100]);
+    assert.deepEqual(two, [[1, 0, 0], [0, 0, 0]], 'a two-player round paid more than a gold');
+    const three = await finishRound([300, 200, 100]);
+    assert.deepEqual(three[2], [0, 0, 0], 'third of three got bronze');
+  });
+
+  await t.test('a finish on zero points wins nothing', async () => {
+    const got = await finishRound([0, 0, 0, 0]);
+    assert.deepEqual(got, [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]]);
+  });
+});
+
 test('banking twice does not pay twice', async () => {
   // It has to be safe to call on every shutdown AND at every round end, so it writes deltas.
   // A running total written twice would double somebody's whole afternoon.

@@ -16,6 +16,7 @@ import { createWorld } from './world.js';
 import { createRenderer } from './render.js';
 import { createMusic } from './audio/music.js';
 import { createSfx } from './audio/sfx.js';
+import { createListener } from './audio/listen.js';
 import { createQuips, MENU_QUIPS } from './quips.js';
 import { createMenuViz } from './menuviz.js';
 import { bombTile } from '/shared/sim/bombs.js';
@@ -142,8 +143,8 @@ function syncMeter(dtMs) {
   else menuViz.spectrum.rest(dtMs);
 
   const s = menuViz.spectrum;
-  // The sea, set to music. The renderer gets four numbers and no idea where they came from.
-  renderer?.setAudio(live ? s : null);
+  // The sea is NOT driven from here: it has its own ear (audio/listen.js, via renderer.setSound),
+  // because it wants beats and tempo, which these smoothed bars blur away.
   const v = [s.bass, s.mid, s.treble];
   for (let i = 0; i < eqBars.length; i++) {
     // 3px floor so a silent bar is still a bar. Zero-height is a missing element, not a quiet one.
@@ -299,6 +300,13 @@ const net = createNet({
           world.applyBlockEvent(e);
           renderer?.invalidateTile(e.x, e.y);
           if (e.e !== 'blockhit') sfx.play(e.e, e.x, e.y);
+          break;
+
+        // Ice breaking. The tile itself already changed with the `blockdie` just before this; the
+        // water arrives in the snapshot's puddle list. This is only the moment of it.
+        case 'melt':
+          renderer?.addMelt(e.x, e.y);
+          sfx.play('melt', e.x, e.y);
           break;
 
         case 'bomb':
@@ -896,11 +904,12 @@ function drawHud() {
   castText($('who'), me.name);
   setValue($('rank'), mine ? mine.tier : '');
   drawXp(mine);
+  drawCabinet(mine?.medals);
   setValue($('vKills'), me.kills);
   setValue($('vDeaths'), me.deaths, { worse: true });
   // Gold. Lifetime, not this round — it is the one stat here that accumulates, which is the
   // whole point of it, and it is going to be a currency.
-  setValue($('vGold'), me.gold || 0);
+  setValue($('vCoins'), me.coins || 0);
   renderLive();
 
   // Every live perk as a pip, lit when you are carrying more than you started with. Shields used
@@ -971,12 +980,12 @@ function renderRoundTable(m) {
   for (const [n, p] of (m.standings || []).entries()) {
     const tr = document.createElement('tr');
     const you = p.i === world.you;
-    cell(tr, n === 0 ? '1st' : `${n + 1}`, n === 0 ? 'var(--gold)' : null, n !== 0);
+    placeCell(tr, n);
     cell(tr, you ? `${p.name} (you)` : p.name, playerColor(p.i));
     num(cell(tr, p.k));
     num(cell(tr, p.d));
-    num(cell(tr, p.s));
-    if (you) { tr.className = 'me'; mine = tr; }
+    num(cell(tr, p.s)).classList.add('score');
+    if (you) { tr.classList.add('me'); mine = tr; }
     body.append(tr);
   }
   $('roundNext').textContent = `next map: ${m.nextMap}`;
@@ -1060,7 +1069,10 @@ function renderLive() {
   for (const [n, p] of rows.entries()) {
     const li = list.children[n];
     const [pos, nm, kd, sc] = li.children;
-    pos.textContent = n + 1;
+    // Only rebuilt when the place in this slot changes — this runs five times a second, and the
+    // slot's place never changes at all once the list exists. Cheap either way.
+    if (pos.dataset.n !== String(n)) { pos.dataset.n = n; pos.replaceChildren(placeMark(n)); }
+    for (const k of [1, 2, 3]) li.classList.toggle(`p${k}`, n === k - 1);
     nm.textContent = p.name;
     nm.style.color = playerColor(p.i);
     // A robot beside anything that is not a person. `bot` comes from the scores broadcast, which
@@ -1094,6 +1106,80 @@ function cell(tr, text, colour, dim) {
 /** Tabular figures, so a column of scores lines up instead of shimmering. */
 const num = td => { td.classList.add('num'); return td; };
 
+const PLACES = ['1st', '2nd', '3rd'];
+
+/**
+ * A medal for the podium, a plain number for everyone else.
+ *
+ * Drawn by CSS (`.medal.m1`–`m3` in style.css) so all four boards share one set of medals. It
+ * keeps an accessible name, because a picture of a "1" is not a "1" to a screen reader.
+ */
+function placeMark(n) {
+  if (n > 2) return document.createTextNode(String(n + 1));
+  const m = document.createElement('span');
+  m.className = `medal m${n + 1}`;
+  m.setAttribute('role', 'img');
+  m.setAttribute('aria-label', `${PLACES[n]} place`);
+  m.title = PLACES[n];
+  return m;
+}
+
+/**
+ * A player's lifetime medals: gold, silver and bronze, each a small medal and a count.
+ *
+ * All three are always there, in place order, with an empty one dimmed rather than left out —
+ * a column whose entries change shape row to row cannot be read down, and "no silver yet" is
+ * worth seeing. `counts` is [gold, silver, bronze]; missing means nobody has told us yet.
+ */
+function medalTally(counts) {
+  const wrap = document.createElement('span');
+  wrap.className = 'tally';
+  if (!counts) { wrap.textContent = '—'; wrap.classList.add('none'); return wrap; }
+  const total = counts.reduce((a, b) => a + (b || 0), 0);
+  wrap.setAttribute('aria-label', `${counts[0] || 0} gold, ${counts[1] || 0} silver, ${counts[2] || 0} bronze`);
+  wrap.title = total ? `${counts[0] || 0} gold · ${counts[1] || 0} silver · ${counts[2] || 0} bronze`
+    : 'no podium finishes yet';
+  for (let k = 0; k < 3; k++) {
+    const n = counts[k] || 0;
+    const t = document.createElement('span');
+    t.className = 't' + (n ? '' : ' zero');
+    const m = document.createElement('span');
+    m.className = `medal mini m${k + 1}`;
+    m.setAttribute('aria-hidden', 'true');
+    t.append(m, String(n));
+    wrap.append(t);
+  }
+  return wrap;
+}
+
+/**
+ * Your own medals, on your stats card. Rebuilt only when a count changes: the HUD redraws every
+ * frame, and these change at most once a round.
+ */
+let cabinetKey = '';
+function drawCabinet(counts) {
+  const key = counts ? counts.join(',') : '';
+  if (key === cabinetKey) return;
+  cabinetKey = key;
+  const el = $('cardMedals');
+  el.replaceChildren();
+  if (!counts) return;
+  const label = document.createElement('span');
+  label.className = 'k';
+  label.textContent = 'medals';
+  el.append(label, medalTally(counts));
+}
+
+/** The place column of a table row, and the podium tint on the row itself. */
+function placeCell(tr, n) {
+  const td = document.createElement('td');
+  td.className = 'place';
+  td.append(placeMark(n));
+  if (n < 3) tr.classList.add(`p${n + 1}`);
+  tr.append(td);
+  return td;
+}
+
 function renderScores() {
   const rows = world.players.filter(Boolean).sort((a, b) => b.score - a.score || b.kills - a.kills);
   const body = $('scoreRows');
@@ -1101,16 +1187,20 @@ function renderScores() {
   for (const [n, p] of rows.entries()) {
     const tr = document.createElement('tr');
     const r = ranks.get(p.i);
-    cell(tr, n + 1, null, true);
+    placeCell(tr, n);
     cell(tr, p.name, playerColor(p.i));
     // The rank ladder is the thing returning Game of Bombs players recognise first, so it gets a
     // column of its own rather than a tooltip.
     cell(tr, r ? `${r.level} \u00b7 ${r.tier}` : '\u2014', null, true);
+    cell(tr, '').append(medalTally(r?.medals));
     num(cell(tr, p.kills));
     num(cell(tr, p.deaths));
-    num(cell(tr, p.gold || 0, (p.gold || 0) > 0 ? 'var(--gold)' : null));
+    // Coins this life, then the round score. Both, because they answer different questions:
+    // the score is who is winning right now, the coins are what you are taking away from it.
+    num(cell(tr, p.coins || 0, (p.coins || 0) > 0 ? 'var(--gold)' : null));
+    num(cell(tr, p.score)).classList.add('score');
     num(cell(tr, r ? r.xp.toLocaleString() : '\u2014', null, true));
-    if (p.i === world.you) tr.style.fontWeight = 'bold';
+    if (p.i === world.you) tr.classList.add('me');
     body.append(tr);
   }
 
@@ -1118,10 +1208,11 @@ function renderScores() {
   best.textContent = '';
   for (const [n, e] of allTime.entries()) {
     const tr = document.createElement('tr');
-    cell(tr, n + 1, null, true);
+    placeCell(tr, n);
     cell(tr, e.name);
     cell(tr, `${e.level} \u00b7 ${e.tier}`, null, true);
-    num(cell(tr, e.gold || 0, (e.gold || 0) > 0 ? 'var(--gold)' : null));
+    cell(tr, '').append(medalTally([e.gold, e.silver, e.bronze]));
+    num(cell(tr, e.coins || 0, (e.coins || 0) > 0 ? 'var(--gold)' : null));
     num(cell(tr, e.score));
     best.append(tr);
   }
@@ -1195,6 +1286,15 @@ function play(observe = false) {
   document.body.classList.toggle('observing', observe);
   localStorage.setItem('bv.name', name);
   renderer = createRenderer($('game'), world);
+  // The sea dances to the music. The renderer asks once a frame; see audio/listen.js.
+  const listen = createListener();
+  renderer.setSound(dtMs => {
+    // How far the speakers are behind the analyser. The listener delays everything by this, so
+    // a swell lands when the kick is heard rather than a few frames before it.
+    const c = music.seaAnalyser?.context;
+    const latencyS = c ? (c.outputLatency || 0) + (c.baseLatency || 0) : 0;
+    return listen(music.seaAnalyser, music.audible, dtMs, latencyS);
+  });
   sfx.start().then(() => sfx.play('click'));
   /* Out of the theme and into a bed, immediately and at random.
    *

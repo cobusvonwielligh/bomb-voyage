@@ -148,6 +148,18 @@ unaffected.
 | Column | ∞ | **yes** | only with Reduction | Fire ignores it, bodies do not. |
 | Shrub (walk-through) | ∞ | yes, −1 radius | yes | You are **invisible** to others while inside. |
 | Shrub (solid) | ∞ | yes, −1 radius | no | |
+| Ice | **1** | no | no | Melts instead of breaking. Drops water, never a perk. |
+
+**Ice and water.** One soft wall in twenty is ice (`ICE_CHANCE`), at map generation and when walls
+grow back. A blast that reaches ice melts it and floods **the ice tile and the four tiles beside
+it** — five at most, and only where you could stand; a wall, rock or the sea next to it stays dry.
+The water lasts **4 s** and is drawn drying up over the last 1.5 s.
+
+In water you move at **half pace**, and it is slippery: let go of the keys and you keep sliding the
+way you are facing for **8 ticks** before you stop. Sliding costs no stamina. Leaving the water
+ends a slide at once. Two melts that overlap extend each other rather than stacking. Water is not
+a status — it is where you are standing, judged by the tile your centre is in, like everything
+else.
 
 One point of blast damage per fire event. A reinforced block therefore needs six separate blasts.
 A damaged block shows its damage state visually (see [ART-AUDIO.md](ART-AUDIO.md)).
@@ -268,6 +280,12 @@ it. Contagion has a **1 s per-pair cooldown** so a scrum does not ping-pong.
 | Alive at round end | +50 |
 
 Round score resets each round. **Lifetime score persists** per `playerId` and is your XP.
+
+**Medals.** At the end of every round the top three by score (then kills — the order the
+round-over table shows) get a gold, silver or bronze, counted for life alongside kills and
+deaths. A place only pays if somebody finished below it — gold needs two players, silver three,
+bronze four — so last is never on the podium, and a finish on **zero points** wins nothing.
+Your count is on your stats card, and everyone's is on the TAB board and the all-time table.
 
 **Levels replaced ranks.** Sixteen military titles were flavour nobody could place on a scale;
 a level with a bar under it is a number you can feel moving. The curve is anchored at one real

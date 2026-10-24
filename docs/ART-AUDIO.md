@@ -129,6 +129,8 @@ Acceptance: with 16 bots on screen, you can follow any one of them by tracer alo
 | Iron | 2 variants | |
 | Column | 1 | |
 | Shrub | 2 (walk-through / solid) | Walk-through is visibly lighter. |
+| Ice | 1 | Pale cyan, three lit facets and one hard diagonal glint — nothing else on the map has one. |
+| Water | per frame | Melted ice. Not a tile; see **Puddles** below. |
 | Perks | 6 live + 9 reserved | 16 × 16 icons inside a rounded tile. Bomb, fire, boots, shield, stim, rum. |
 | Status icons | 7 | Shown above the player's head, small. |
 
@@ -144,6 +146,23 @@ play now; the rest are diseases with no source since the Gift was removed (RULES
 | Changeling | Sprite flipped vertically |
 | Reduction | 50 % scale |
 | Fast Detonation | Red spark particles |
+
+### Puddles
+
+Melted ice is drawn per frame, on the floor and under everything else, in `drawPuddles` in
+`render.js`. Every wet tile contributes three overlapping ellipses plus a bridge to each wet
+neighbour, all in **one path**, so five tiles read as one pool with an organic edge rather than as
+five balloons — the first version, without bridges, looked exactly like that. The union is filled
+opaque into its own layer (rim, body, a sheen toward the top-left light) and composited once at
+partial alpha, so overlaps never darken. Two glints circle slowly on each tile, rings spread from
+idle drips and from the feet of anyone wading.
+
+A puddle's presence is eased rather than read off the tick: it swells in fast, dries from the
+edges inward over its last 1.5 s while steam rises off it, and keeps drying for a moment after the
+simulation has dropped it, which is what makes the end read as evaporation rather than as a delete.
+
+The melt itself is a flash, two rings of meltwater pushing out, and a dozen ice shards thrown off
+with drag, plus the `melt` sound.
 
 ---
 
@@ -308,6 +327,10 @@ result is a venetian blind with the loud ones somewhere inside it.
 canned keyframes that were a loop pretending to be a level — and a glow on the dock pill that
 reaches eighteen pixels at its loudest. A round is not the place for a light show.
 
+**The sea has an ear of its own** — a second analyser, pre-fader and lightly smoothed, read by
+`audio/listen.js` rather than by this spectrum. The bars want heavy smoothing; beat and tempo
+detection wants transients, which that smoothing blurs away. See *The sea listens* below.
+
 ### Explosions
 
 Five layers, in sequence, because a blast is a sequence and that is what carries size:
@@ -376,6 +399,7 @@ caller has already decided when, where and how loud.
 | `boom {chain}` | a bomb set off by another | same, pitched up 15 %, capped at 3 per frame |
 | `blockdie` | a wall is destroyed | band-passed noise 900 → 420 Hz, quiet — several fire per blast |
 | `blocknew` | a wall grows back | low sine thud 150 → 70 Hz. Your escape route just changed |
+| `melt` | ice breaks | a highpassed crack, five high sine tinkles, then a lowpassed splash. Nothing else rings |
 | `pickup` | a perk is collected | two-note triangle; **the interval says which perk** |
 | `glug` / `hiccup` | rum, and being drunk on it | the one pickup that does not go up |
 | `shield` | a shield eats a blast | glassy sine pair, a fifth apart |
@@ -502,6 +526,95 @@ coming back at full volume while the chat box still has focus.
 
 Silence while stopped is deliberate, not a fallthrough: the delay lines ring for about two seconds
 after the last note, and moving the slider must not un-mute that tail once the music is off.
+
+### The sea listens
+
+The ocean moves to the music. `audio/listen.js` turns an `AnalyserNode` into a handful of numbers
+and a sixteen-band equaliser a frame, and `render.js` draws with them. Nothing music-driven is
+drawn while the music is off.
+
+**Measure it in a round, not on the menu.** The first two versions were tuned against the theme
+and looked fine there. Probed in a real round — real Chrome, real `drift.mp3`, the listener's
+output sampled every half second — the pipe worked and the sea still looked dead: the beds give
+about one detected kick every two seconds, the tempo never locks, hats are rare, and a curve meant
+to keep "usual" quiet turned a bass of 0.5 into 0.11. Everything below is built for what plays
+during a round.
+
+**The island is the speaker.** The headline effect: a 16-band equaliser made of the sea itself.
+Every stretch of coast belongs to one band, by angle round the island — bass at the bottom,
+treble at the top, mirrored left and right — and that band's level pushes a bar of light out from
+the rock, up to 4.5 tiles, built from inset sea-tile segments like the blocks of an LED meter, with
+a bright cap on the tip. Each band is scored against its own history, so every bar dances around
+its own usual height; on the beds the bands swing across their whole range from second to second.
+Drawn under the island, additive, so anything reaching into a bay is covered by the land.
+
+**Accents, not just kicks.** An onset anywhere from 60 Hz to 8 kHz — a chord arriving, a pad
+swelling, a pluck — counts. Without a locked tempo, any beat or accent sends a swell walking out
+along the coast, a **sonar ring** sweeping out across the open sea from the island, and foam off
+the rocks.
+
+Two further layers:
+
+**Rhythm — it keeps time.** Detected beats feed a tempo (the mean of recent spacings that agree
+with their median, folded into 71–143 BPM) and a phase-locked metronome: `phase` runs 0→1 once a
+beat on its own, and every detected beat pulls both its position and its rate back into line.
+Once the spacings are regular enough to trust (`lock` ≥ 0.5), swells leave the coast on the
+metronome's downbeat — on the beat, every beat, including kicks the detector missed, and never on a
+false hit between them. Until then, on each detected beat. The metronome also drives a concentric
+wave through the current, centred on the island, one crest per beat, so the streaks breathe in
+rings in time with the music between the kicks as well as on them.
+
+**Colour — each band does a different thing.**
+
+| Music | Sea |
+|---|---|
+| overall level | the clock the water runs on (`flowT`): current, waves and surface texture all speed up together |
+| bass | wave trains push harder; the shallows glow; the ship rolls deeper; the sea lifts toward the light |
+| mids | the current streaks stretch |
+| highs | glints come on a few at a time (each has its own threshold) and brighten |
+| highs, and hat and snare onsets | bioluminescence in the shallows: a steady trickle that follows the top end, and a burst on every hit |
+| brightness (spectral centroid) | the tint of the water: indigo for dark passages, teal for bright ones |
+| each beat or accent | a band of swell walks out along the coast, a sonar ring sweeps out to sea, foam bursts off the rocks |
+| 16 bands | the coastal equaliser |
+
+The continuous couplings are **linear** above 0.25 (`lifted()`). They were curved for a while, to
+keep the music's usual level from moving the water — and that is exactly what made the sea look
+dead during a round, where the usual level is most of the signal there is.
+
+**What you see lands when you hear it.** The analyser hears audio as it is processed, which is the
+output latency — tens of milliseconds — before the speakers do. Everything the listener reports
+goes through a short delay line of that length (`outputLatency + baseLatency`), with the
+metronome's phase advanced across the gap so frame jitter cannot make it stutter.
+
+The decisions underneath:
+
+- **Tapped after the duck, before the fader** (`music.js`, `build`). The slider is how loud, not
+  how much, so the sea moves the same at 10% as at 100%; and an explosion that ducks the music
+  ducks the sea on the same beat. Paused or faded to zero, it reads as silence and the sea calms.
+- **Each band is a z-score against its own recent history**, mapped so "usual" is 0.4. Raw bytes
+  are decibels, which sit in the top third of the range and barely move; the first version
+  normalised against a decaying peak and, measured on the real mp3s, every band sat at 0.95 the
+  whole time. Now they span roughly 0.3 to 0.9 on every track, and silence maps to zero.
+- **A beat is spectral flux in 40–140 Hz** — every low bin that got louder, summed — above an
+  adaptive threshold *and* an absolute floor, with a 260 ms refractory gap. Without the floor,
+  ordinary jitter on a beatless bed fired constantly. Measured offline through a real analyser:
+  the theme, at 116 BPM, detects 118 beats a minute.
+
+Attack is fast and release slow everywhere, so the water rises with the music and settles after
+it. The beat swell is drawn as rows of sea tiles stepped out from the shoreline — the same
+construction as the shallows — so it follows every bay and headland; an earlier ring round the
+island's bounding box left the visible strip of sea before anybody saw it.
+
+Measured on the real mp3s, offline through a real analyser: the theme (116 BPM) locks at 114, and
+every track holds a lock for 57–88% of a 40-second stretch. Brightness separates the tracks on its
+own — the theme and `suspend` sit around 0.75, `drift` and `undertow` around 0.28 — so each bed
+gets its own light.
+
+`test/listen.test.js` holds it to that with a fake analyser: beats at 90, 116 and 140 BPM land
+within 12%; the tempo is learned within 5% and trusted; the metronome stays within 8% of a beat of
+the kicks with one kick in four missing; a beatless bed builds no tempo; hats are their own event;
+the equaliser's bass bars swing with a kick far more than its treble bars; chords with no kick are
+accents and not beats; output is delayed by the latency; and paused is still.
 
 ---
 

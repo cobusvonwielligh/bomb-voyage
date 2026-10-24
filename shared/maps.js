@@ -8,7 +8,7 @@
 // Classic Bomberman lattice: indestructible pillars on odd/odd, soft walls scattered everywhere
 // else, and the eight cells around each spawn kept clear so nobody dies on the first tick.
 
-import { BLOCK, BLOCK_HP } from './constants.js';
+import { BLOCK, BLOCK_HP, ICE_CHANCE } from './constants.js';
 import { rng } from './util/rng.js';
 
 // `shape` decides what the arena is cut out of. A rectangle is the Bomberman default and Arena
@@ -306,7 +306,8 @@ export function buildMap(def) {
   if (def.rows) {
     // Hand-authored ASCII, if a map ever wants it.
     const legend = { '#': BLOCK.IRON, '.': BLOCK.FLOOR, b: BLOCK.SOFT, R: BLOCK.REINFORCED,
-                     M: BLOCK.MONOLITH, c: BLOCK.COLUMN, s: BLOCK.SHRUB_WALK, S: BLOCK.SHRUB_SOLID };
+                     M: BLOCK.MONOLITH, c: BLOCK.COLUMN, s: BLOCK.SHRUB_WALK, S: BLOCK.SHRUB_SOLID,
+                     i: BLOCK.ICE };
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
       const t = legend[def.rows[y]?.[x]] ?? BLOCK.FLOOR;
       cells[at(x, y)] = packCell(t);
@@ -315,6 +316,9 @@ export function buildMap(def) {
   }
 
   const next = rng(def.seed);
+  // Ice draws from its own stream, so turning some crates to ice leaves every map's layout exactly
+  // as it was — one more call on `next` per soft wall would have reshuffled the whole island.
+  const iceNext = rng(def.seed ^ 0x1ce1ce);
   const land = landMask(def, next);
   const isLand = (x, y) => x >= 0 && y >= 0 && x < w && y < h && land[y * w + x] === 1;
 
@@ -352,7 +356,7 @@ export function buildMap(def) {
         if (r > def.density) type = BLOCK.FLOOR;
         else if (r < def.density * def.shrubs) type = BLOCK.SHRUB_WALK;
         else if (r < def.density * (def.shrubs + def.reinforced)) type = BLOCK.REINFORCED;
-        else type = BLOCK.SOFT;
+        else type = iceNext() < ICE_CHANCE ? BLOCK.ICE : BLOCK.SOFT;
       }
       cells[at(x, y)] = packCell(type);
     }
