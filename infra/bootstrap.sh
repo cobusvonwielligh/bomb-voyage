@@ -44,6 +44,25 @@ sudo alternatives --set node /usr/bin/node-22
 node --version
 [ "$(node -p 'process.versions.node.split(".")[0]')" -ge 20 ] || { echo "need node >= 20"; exit 1; }
 
+echo "==> sshd"
+# Keys only, no root, no X11. Files in sshd_config.d are read before the main config and the first
+# value wins, so this overrides the distribution's defaults without editing them. Validated
+# before the reload, because a broken sshd config on a box you reach only by SSH is a lockout.
+sudo tee /etc/ssh/sshd_config.d/00-bomb-voyage.conf >/dev/null <<'SSHD'
+# Bomb Voyage hardening. Files here are read before the main config, and the first value wins.
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+AllowUsers ec2-user
+MaxAuthTries 3
+LoginGraceTime 30
+X11Forwarding no
+SSHD
+sudo chmod 600 /etc/ssh/sshd_config.d/00-bomb-voyage.conf
+if sudo sshd -t; then sudo systemctl reload sshd; else
+  sudo rm -f /etc/ssh/sshd_config.d/00-bomb-voyage.conf; echo "    !! sshd rejected it; left as it was"
+fi
+
 echo "==> directories"
 sudo mkdir -p "$APP_DIR" "$DATA_DIR" "$CERT_DIR"
 sudo chown -R ec2-user:ec2-user "$APP_DIR" "$DATA_DIR"

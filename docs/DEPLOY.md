@@ -333,7 +333,7 @@ What stands between the internet and the box, checked end to end on 2026-10-24 f
 | Layer | What it does |
 |---|---|
 | **Security group** | 443 and 80 to the world, 22 to one address. sshd logged no attempt from anywhere else in the three days checked. |
-| **sshd** | Keys only, no root login, no X11, three tries per connection — `/etc/ssh/sshd_config.d/00-bomb-voyage.conf`, put there by hand (not by `bootstrap.sh`). |
+| **sshd** | Keys only, no root login, no X11, three tries per connection — `/etc/ssh/sshd_config.d/00-bomb-voyage.conf`, written by `bootstrap.sh`. |
 | **The service** | Runs as `ec2-user` with `NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome` and a private `/tmp`. `ec2-user` can sudo anything, so `NoNewPrivileges` is the line that keeps a hole in the game from becoming root. |
 | **HTTP** | Per-address token bucket (40/s, burst 200) on both listeners; headers must arrive within 10 s; `GET /%`-style junk is a 404, never an exception. CSP `default-src 'self'`, `frame-ancestors 'none'`, HSTS, `nosniff`. |
 | **Sockets** | WebSocket *and* WebTransport share the per-address limits: 90 connects a minute (burst 40), 64 open at once, 120 messages a second per socket, 4 KB per message. A socket that keeps flooding is closed. |
