@@ -176,15 +176,23 @@ export const POWDER_GUARANTEE_TICK = Math.round(0.6 * 10 * 60 * TICK_HZ);
  *
  * A blast that reaches ice melts it — no perk, the water IS the drop — and floods the ice tile
  * plus its four neighbours, wherever those are walkable. Five tiles at most. The puddle lasts
- * four seconds, the last PUDDLE_FADE_TICKS of them visibly drying up.
+ * EIGHT seconds, the last PUDDLE_FADE_TICKS of them visibly drying up.
+ *
+ * Eight, up from four. At four a puddle was gone before anybody but the person who made it
+ * could do anything about it: ice is one soft wall in twenty, so a patch of water is a rare
+ * thing to find, and a rare thing that evaporates before you can cross the map to use it is a
+ * rare thing nobody ever uses. Eight seconds is long enough for the fight to move INTO the
+ * water, which is the point of having it — it is terrain, not a side effect.
  *
  * Standing in water halves your pace and makes you slide: let go of the keys and you carry on
  * the way you were going for PUDDLE_SLIDE_TICKS before you stop. Momentum, not ice-rink chaos —
  * at half pace that is about a third of a tile, enough to overshoot a corner you were braking
  * for and not enough to carry you into a blast you were standing clear of. */
 export const ICE_CHANCE = 0.05;
-export const PUDDLE_TICKS = 4 * TICK_HZ;
-export const PUDDLE_FADE_TICKS = Math.round(1.5 * TICK_HZ);   // render only
+export const PUDDLE_TICKS = 8 * TICK_HZ;
+// The drying-up, scaled with the lifetime so the tail is still the same share of it — a puddle
+// that sits full for six and a half seconds and then vanishes in a blink reads as a bug.
+export const PUDDLE_FADE_TICKS = Math.round(3 * TICK_HZ);   // render only
 export const PUDDLE_SPEED_NUM = 1, PUDDLE_SPEED_DEN = 2;
 export const PUDDLE_SLIDE_TICKS = 8;
 
