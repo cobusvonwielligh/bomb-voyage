@@ -67,6 +67,18 @@ export const config = {
   // laptop and nowhere else: names are not secret, and this one is in a public repository.
   adminKey: pick('ADMIN_KEY', 'admin', 'key', ''),
   adminName: String(pick('ADMIN_NAME', 'admin', 'name', 'cobusvw')).toLowerCase(),
+
+  /* Do names need a password? On by default, and the default is the one that matters: the
+   * leaderboard is keyed by name (see careerKey), so without this anybody can type your name and
+   * inherit your career. See server/accounts.js.
+   *
+   * It is a switch because there is a real configuration where it is wrong: a LAN party, a demo,
+   * a kiosk — anywhere the room is the access control and asking sixteen people to invent
+   * passwords is friction for nothing. `REQUIRE_PASSWORD=0` turns the whole thing off and the
+   * handshake is exactly what it was before passwords existed, which is also how the tests that
+   * are about ROOMS rather than about sign-in keep being about rooms.
+   */
+  requirePassword: String(pick('REQUIRE_PASSWORD', 'server', 'require_password', '1')) !== '0',
 };
 
 export const usingTls = Boolean(config.tlsCert && config.tlsKey);

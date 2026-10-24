@@ -5,6 +5,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { encodeFrame, createFramer, pickChannel, DATAGRAM_SAFE_BYTES } from '../shared/wire.js';
+import {
+  IN_MASK, IN_RIGHT, IN_UP, IN_LEFT, IN_DOWN, IN_BOMB, IN_SLIDE,
+} from '../shared/constants.js';
 import { peerIp } from '../server/webtransport.js';
 
 const bytes = s => new TextEncoder().encode(s);
@@ -118,4 +121,37 @@ test('a WebTransport peer address is reduced to the address alone', () => {
   assert.equal(peerIp('::ffff:1.2.3.4:5678'), '::ffff:1.2.3.4');
   assert.equal(peerIp(undefined), null);
   assert.equal(peerIp('undefined:undefined'), null);
+});
+
+/* What a modified client can assert, and what it cannot. See docs/ANTICHEAT.md §2.
+ *
+ * These are source-level assertions rather than behavioural ones on purpose: the property being
+ * defended is the ABSENCE of code — that nothing on the server reads a position from a client, and
+ * that the input mask is narrowed before it reaches the simulation. A behavioural test can only
+ * show that today's server ignores the field; this shows that it never looks.
+ */
+test('the server never trusts a client position, and narrows every input mask', () => {
+  const room = readFileSync(new URL('../server/room.js', import.meta.url), 'utf8');
+  const net = readFileSync(new URL('../server/net.js', import.meta.url), 'utf8');
+  const code = s => s.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+
+  // The client sends x and y with every input (see the send in client/main.js). Nothing on the
+  // server may read them: a server that believes a client about where it is has no collision
+  // detection, no fire damage and no pickups worth the name.
+  for (const [name, src] of [['room.js', room], ['net.js', net]]) {
+    assert.doesNotMatch(code(src), /\bmsg\.x\b|\bmsg\.y\b/,
+      `${name} reads a position out of a client message`);
+  }
+
+  // And the mask is masked, with the shared allowlist rather than a hand-written literal — a
+  // literal is how a new input bit gets silently dropped, or an old one silently allowed.
+  assert.match(code(room), /mask & IN_MASK/, 'input masks are not narrowed to IN_MASK');
+});
+
+test('IN_MASK is exactly the bits a keyboard can produce', () => {
+  // A new input bit has to be added to IN_MASK deliberately. If this fails because a bit was
+  // added, add it here too — and think about whether the simulation validates what it means.
+  const all = IN_RIGHT | IN_UP | IN_LEFT | IN_DOWN | IN_BOMB | IN_SLIDE;
+  assert.equal(IN_MASK, all);
+  assert.equal(IN_MASK, 0b111111, `IN_MASK is ${IN_MASK.toString(2)}`);
 });

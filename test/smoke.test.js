@@ -29,6 +29,10 @@ const startServer = () => new Promise((resolve, reject) => {
       MIN_BOTS: '0',
       // Never let a test actually redeploy anything.
       DEPLOY_SCRIPT: '/dev/null',
+      // This file is about the deployment spine, not about signing in: with passwords on, every
+      // `hello` below would be answered with "pick a password" instead of a welcome. The sign-in
+      // handshake has its own end-to-end test — see test/password.test.js.
+      REQUIRE_PASSWORD: '0',
     },
     stdio: ['ignore', 'pipe', 'inherit'],
   });

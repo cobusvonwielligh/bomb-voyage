@@ -10,6 +10,7 @@ import { attachHub } from './net.js';
 import { config, usingTls, ROOT, sameSecret } from './config.js';
 import { canonicalTarget } from './canonical.js';
 import { createLeaderboard } from './leaderboard.js';
+import { createAccounts } from './accounts.js';
 import { startWebTransport } from './webtransport.js';
 import { createGuard } from './guard.js';
 
@@ -319,7 +320,15 @@ function hardenTimeouts(s) {
 }
 
 const leaderboard = createLeaderboard({ dataDir: config.dataDir });
-const hub = attachHub(server, { ...config, leaderboard, guard });
+// Passwords and trusted browsers. Beside the leaderboard because it protects the leaderboard:
+// the career is keyed by name, so the name is what needs an owner. See server/accounts.js.
+const accounts = createAccounts({ dataDir: config.dataDir });
+// `requirePassword: false` hands the hub no store at all rather than a store it is asked to
+// ignore — one branch instead of two, and no way for a future edit to half-enable it.
+const hub = attachHub(server, {
+  ...config, leaderboard, guard,
+  accounts: config.requirePassword ? accounts : null,
+});
 
 /**
  * WebTransport on UDP/443, beside the WebSocket on TCP/443.
@@ -368,6 +377,9 @@ process.on('uncaughtException', err => {
   console.error('uncaught exception — saving the leaderboard before exiting', err);
   try { hub.bankScores(); } catch (e) { console.error(`bank on crash failed (${e.message})`); }
   leaderboard.flushSync();
+  // A password set seconds before a crash must not be lost: the person would be locked out of
+  // their own name, with no way back except editing the file by hand.
+  accounts.flushSync();
   process.exit(1);
 });
 process.on('unhandledRejection', err => {
@@ -397,6 +409,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
       // Synchronously, so the backstop timer above can never cut a save off halfway.
       await leaderboard.stop();
       if (leaderboard.flushSync()) console.log('leaderboard saved');
+      accounts.flushSync();
     } catch (err) {
       console.warn(`leaderboard: save on shutdown failed (${err.message})`);
     }

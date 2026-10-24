@@ -6,17 +6,44 @@
 
 import { PING_EVERY_MS, RTT_SAMPLES, CLOCK_SAFETY_MS, TICK_MS } from '/shared/constants.js';
 import { createTransport } from './transport.js';
+// Every value this module keeps goes through the seal: the identity, the device id, the trusted
+// browser tokens and the admin key. See client/store.js for what sealing does and does not buy.
+import { store } from './store.js';
 
 /** A random id for this browser, made once and kept. See MAX_SESSIONS_PER_DEVICE on the server. */
 function deviceId() {
-  try {
-    let id = localStorage.getItem('bv.device');
-    if (!id) {
-      id = (crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
-      localStorage.setItem('bv.device', id);
-    }
-    return id;
-  } catch { return null; }            // private mode with storage blocked: no limit applies
+  let id = store.get('bv.device');
+  if (!id) {
+    id = (crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
+    store.set('bv.device', id);
+  }
+  // A browser with storage blocked gets a fresh id every load, so no limit effectively applies —
+  // which is the same outcome the old code had and the right one: the alternative is turning
+  // private browsing into a ban.
+  return id;
+}
+
+/* The trusted-browser token, per name.
+ *
+ * Per NAME and not one per browser, because the name is the identity: two colleagues sharing a
+ * laptop each have their own, and neither can use the other's. Keyed by the lowercased name,
+ * which is the same key the server files the account under.
+ *
+ * This is a bearer credential, so it is the one thing in localStorage that genuinely matters —
+ * and it is also, unavoidably, readable by anything running in the page. That is the honest limit
+ * of a browser: there is no secret a page can keep from its own console. What it buys is that the
+ * PASSWORD is never stored anywhere, that a token is worthless on any other machine only insofar
+ * as it is not copied, and that it expires (DEVICE_TTL_MS) — and the server can revoke every one
+ * of them for a name at once. See docs/DESIGN.md on the anti-cheat position.
+ */
+const trustKey = name => `bv.trust.${String(name ?? '').trim().toLowerCase()}`;
+
+function trustFor(name) {
+  return store.get(trustKey(name)) || null;
+}
+
+function rememberTrust(name, token) {
+  store.set(trustKey(name), token);
 }
 
 /**
@@ -29,11 +56,11 @@ function adminKey() {
     const url = new URL(location.href);
     const given = url.searchParams.get('admin');
     if (given !== null) {
-      if (given) localStorage.setItem('bv.adminKey', given); else localStorage.removeItem('bv.adminKey');
+      if (given) store.set('bv.adminKey', given); else store.remove('bv.adminKey');
       url.searchParams.delete('admin');
       history.replaceState(null, '', url);
     }
-    return localStorage.getItem('bv.adminKey') || undefined;
+    return store.get('bv.adminKey') || undefined;
   } catch { return undefined; }
 }
 adminKey();
@@ -152,8 +179,20 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
         // Guarded: a welcome with no id must not overwrite a good token with "undefined",
         // which the server would then accept as a real id.
         if (m.playerId) {
-          localStorage.setItem('bv.playerId', m.playerId);
+          store.set('bv.playerId', m.playerId);
           hello = { ...hello, playerId: m.playerId };
+        }
+        /* Signed in. Keep the token, and forget the password.
+         *
+         * Dropping `pw` from `hello` is the point: the socket reconnects on its own, with the
+         * same hello, for as long as this tab is open — and a password sitting in a module
+         * variable being re-sent every wifi blip is a password with a much larger surface than
+         * it needs. The token that just arrived covers every one of those reconnects.
+         */
+        if (m.trust && hello?.name) rememberTrust(hello.name, m.trust);
+        if (hello?.pw) {
+          const { pw, ...rest } = hello;
+          hello = { ...rest, trust: trustFor(hello.name) };
         }
         connectedAt = performance.now();
         // The rate first: the tick below is converted to a clock using it.
@@ -182,7 +221,7 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
       case 'reject':
         // `forget` means the stored identity is what was refused, so drop it: the next attempt
         // then arrives as a new player instead of being turned away for the same reason.
-        if (m.forget) { try { localStorage.removeItem('bv.playerId'); } catch { /* private mode */ } }
+        if (m.forget) store.remove('bv.playerId');
         closedByUs = true;
         onStatus?.(`rejected: ${m.why}`);
         onRejected?.(m);
@@ -234,14 +273,23 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
      * @param observe true to watch without taking a seat. A spectator still sends a name and an
      *   id, so a reconnect lands back in the same mode rather than silently claiming a seat.
      */
-    connect(name, observe = false) {
+    /**
+     * @param pw a password, when the server has asked for one. Sent once, never stored, and
+     *   dropped from `hello` the moment the server accepts it — so a reconnect an hour later
+     *   does not carry it, and a crash dump of this tab does not contain it.
+     */
+    connect(name, observe = false, pw = null) {
       hello = {
         t: 'hello', name, observe,
-        playerId: localStorage.getItem('bv.playerId') || null,
+        playerId: store.get('bv.playerId') || null,
         // This browser, for the server's sessions-per-browser limit. Separate from the player
         // identity, so signing out does not reset it.
         device: deviceId(),
         adminKey: adminKey(),
+        // This browser's proof that it has signed in as this name before, if it has one. The
+        // reason the password box is not part of joining a game. See server/accounts.js.
+        trust: trustFor(name),
+        ...(pw ? { pw } : null),
       };
       open();
     },
@@ -258,7 +306,7 @@ export function createNet({ onWelcome, onSnap, onChat, onStatus, onRoundEnd, onS
     },
     /** Drop the stored identity. The seat is only released if the server is told as well. */
     forgetIdentity() {
-      try { localStorage.removeItem('bv.playerId'); } catch { /* private mode */ }
+      store.remove('bv.playerId');
       hello = hello ? { ...hello, playerId: null } : hello;
     },
 

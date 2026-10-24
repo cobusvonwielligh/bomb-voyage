@@ -85,21 +85,49 @@ export function createBans({ now = Date.now } = {}) {
  * the permission checks can be tested without a socket, a port or a running room.
  */
 export function createCommands({ room, config, reply, announce, kick, signOut, bans }) {
-  const PUBLIC = `commands: /bots N (0-${config.maxPlayers - 1}) · /who · /logout · /help`;
-  const ADMIN = 'admin: /restart · /godmode · /kick bot N · /kick NAME [hours] · ' +
+  /* Two tiers, and the line between them is "can this ruin somebody else's round".
+   *
+   * HOST things are safe to hand to whoever happens to be in charge: adding bots, and throwing a
+   * bot out again. A room with nobody in it who can top the bots up is a worse room, and the
+   * worst a mistake there can do is change who you are playing against.
+   *
+   * OWNER things are not. Restarting the round throws away everybody's score, godmode makes one
+   * player unkillable, /gamespeed and /roundtime change the rules under sixteen people, /map
+   * replaces the board mid-fight, and /kick NAME can ban a person for hours. Those belong to the
+   * one account that owns the server — the admin key, or `adminName` where no key is configured
+   * — and emphatically NOT to "the longest-standing player", which is what `hostSeat` falls back
+   * to and which is simply whoever joined first.
+   *
+   * They are also not advertised. `PUBLIC` is what everybody sees from /help, and it does not
+   * mention them: a command somebody cannot use is noise, and a command nobody knows about is
+   * not one they will spend the evening trying.
+   */
+  const PUBLIC = `commands: /bots N (0-${config.maxPlayers - 1}) · /kick bot N · /who · /logout · /help`;
+  const OWNER = 'owner: /restart · /godmode · /kick NAME [hours] · ' +
     `/map 0-${room.maps().length - 1} · /gamespeed ${GAMESPEED_MIN}-${GAMESPEED_MAX} · ` +
     `/roundtime ${ROUNDTIME_MIN_MIN}-${ROUNDTIME_MAX_MIN}`;
 
-  // Host privileges, not a name check. The host is the named admin when they are here and the
-  // longest-standing player otherwise, so a room is never left without somebody who can restart
-  // it — which is the whole reason the commands exist.
-  const isAdmin = seat => seat >= 0 && seat === room.hostSeat();
+  // Host privileges: the named admin when they are here, the longest-standing player otherwise.
+  // Only /bots and /kick bot are gated on this.
+  const isHost = seat => seat >= 0 && seat === room.hostSeat();
+  // The real thing. Everything that can spoil a round in progress is gated on this.
+  const isOwner = seat => seat >= 0 && room.isAdminSeat(seat);
+
+  /* One answer for "you may not", and it is the same answer as for a command that does not
+   * exist.
+   *
+   * Deliberate: "not for you" confirms that the command is real and that somebody else can use
+   * it, which is an invitation to keep trying. An unknown-command reply tells a stranger nothing
+   * they did not already know, and tells the owner nothing they need — they can always use it.
+   */
+  const deny = ws => reply(ws, `unknown command. ${PUBLIC}`);
 
   const nameOf = seat => room.state.players[seat]?.name ?? '?';
 
   /** `/kick bot N` · `/kick NAME` · `/kick NAME HOURS` */
-  function kickCommand(ws, seat, args) {
-    if (!args.length) return reply(ws, 'usage: /kick bot N | /kick NAME [hours]');
+  /** @param owner whether this seat may kick PEOPLE. A bot is anybody's to remove. */
+  function kickCommand(ws, seat, args, owner) {
+    if (!args.length) return reply(ws, owner ? 'usage: /kick bot N | /kick NAME [hours]' : 'usage: /kick bot N');
 
     if (args[0].toLowerCase() === 'bot') {
       const n = Number(args[1]);
@@ -110,6 +138,9 @@ export function createCommands({ room, config, reply, announce, kick, signOut, b
       const info = room.kickSeat(n);
       return announce(`${nameOf(seat)} kicked ${info.name}`);
     }
+
+    // Past here it is a person. Not for the host, and not even acknowledged as possible.
+    if (!owner) return deny(ws);
 
     const target = room.seatOfName(args[0]);
     if (target < 0) return reply(ws, `nobody here called "${args[0]}"`);
@@ -131,11 +162,11 @@ export function createCommands({ room, config, reply, announce, kick, signOut, b
 
   function run(ws, seat, text) {
     const [cmd, ...args] = text.slice(1).trim().split(/\s+/);
-    const admin = isAdmin(seat);
+    const owner = isOwner(seat);
 
     switch (cmd.toLowerCase()) {
       case 'help':
-        return reply(ws, admin ? `${PUBLIC} · ${ADMIN}` : PUBLIC);
+        return reply(ws, owner ? `${PUBLIC} · ${OWNER}` : PUBLIC);
 
       case 'bots': {
         if (!args.length) return reply(ws, `${room.botCount()} bots. /bots N to change.`);
@@ -156,31 +187,35 @@ export function createCommands({ room, config, reply, announce, kick, signOut, b
         return reply(ws, room.state.players.filter(Boolean)
           .map(p => `${p.name}${p.god ? '*' : ''}`).join(', ') || 'nobody');
 
-      // ── admin ──
+      /* ── the owner's own ──
+       *
+       * Every one of these refuses with `deny`, which is the unknown-command reply. See the note
+       * on it: "not for you" is an advertisement.
+       */
       case 'restart':
-        if (!admin) return reply(ws, 'not for you');
+        if (!owner) return deny(ws);
         announce('round restarted');
         return room.restartRound();
 
       case 'godmode': {
-        if (!admin) return reply(ws, 'not for you');
+        if (!owner) return deny(ws);
         const on = room.toggleGod(seat);
         return reply(ws, `godmode ${on ? 'on' : 'off'}`);
       }
 
+      // The one split command: a bot is anybody's to remove, a person is not. See kickCommand.
       case 'kick':
-        if (!admin) return reply(ws, 'not for you');
-        return kickCommand(ws, seat, args);
+        return kickCommand(ws, seat, args, owner);
 
       case 'map': {
-        if (!admin) return reply(ws, 'not for you');
+        if (!owner) return deny(ws);
         const id = args.length ? room.setMap(Number(args[0])) : null;
         if (!id) return reply(ws, `usage: /map <0-${room.maps().length - 1}>`);
         return announce(`${nameOf(seat)} switched the map to ${id}`);
       }
 
       case 'gamespeed': {
-        if (!admin) return reply(ws, 'not for you');
+        if (!owner) return deny(ws);
         if (!args.length) return reply(ws, `game speed is ${room.gamespeed()}%`);
         const pct = room.setGameSpeed(args[0]);
         if (pct === null) {
@@ -190,7 +225,7 @@ export function createCommands({ room, config, reply, announce, kick, signOut, b
       }
 
       case 'roundtime': {
-        if (!admin) return reply(ws, 'not for you');
+        if (!owner) return deny(ws);
         if (!args.length) return reply(ws, `rounds are ${room.roundMinutes()} minutes`);
         const mins = room.setRoundTime(args[0]);
         if (mins === null) {
@@ -204,11 +239,18 @@ export function createCommands({ room, config, reply, announce, kick, signOut, b
     }
   }
 
-  return Object.freeze({ run, isAdmin });
+  return Object.freeze({ run, isHost, isOwner });
 }
 
 export function attachHub(server, config) {
   const guard = config.guard ?? createGuard();
+  /* The password store, or null.
+   *
+   * Null is a supported configuration and the tests run in it: without an accounts store the
+   * hello path is exactly what it was before passwords existed, so every test that opens a room
+   * and joins it stays a test about rooms rather than about authentication. See `authorise`.
+   */
+  const accounts = config.accounts ?? null;
   const wss = new WebSocketServer({
     server, path: '/ws', maxPayload: MAX_MESSAGE_BYTES,
     // Refused before the upgrade completes, so a flood never gets as far as a socket object.
@@ -414,30 +456,36 @@ export function attachHub(server, config) {
             return sendTo(ws, { t: 'reject', why: `banned, ${humanDuration(banned)} left` });
           }
 
-          const res = room.join(playerId, name, { admin: sameSecret(msg.adminKey, config.adminKey) });
-          if (res.seat < 0) {
-            // `forget` tells the client its stored identity is the problem, so it can offer to
-            // drop it rather than leaving somebody stuck on a screen that just says no.
-            return sendTo(ws, res.why === 'already-playing'
-              ? { t: 'reject', why: 'that name is already playing in another window', forget: true }
-              : { t: 'reject', why: 'server is full' });
+          /* The name's owner has to be the one claiming it.
+           *
+           * Everything about this is in `authorise` below; what matters here is that it may need
+           * to hash a password, which takes about a tenth of a second — so this path became
+           * asynchronous, and the `seat >= 0` guard at the top of the case is no longer enough on
+           * its own. `ws.bvAuthing` closes that window: two hellos arriving back to back would
+           * otherwise both get past the guard and claim two seats for one socket.
+           */
+          if (accounts) {
+            if (ws.bvAuthing) return;
+            ws.bvAuthing = true;
+            authorise(ws, name, msg)
+              .then(auth => {
+                ws.bvAuthing = false;
+                if (!auth.ok) return sendTo(ws, { t: 'reject', ...auth.reject });
+                // The socket may have gone while we were hashing, or a second hello may have
+                // seated it. Either way there is nothing left to do here.
+                if (ws.readyState !== ws.OPEN || seat >= 0) return;
+                seatPlayer(msg, name, playerId, auth.trust);
+              })
+              .catch(err => {
+                ws.bvAuthing = false;
+                // Never leak the reason: it is either a disk problem or a bug, and in both cases
+                // the useful thing for the player is "try again", not a stack trace.
+                console.error('auth failed', err.message);
+                sendTo(ws, { t: 'reject', why: 'could not check that password — try again' });
+              });
+            return;
           }
-
-          // Resuming a seat whose socket the server had not yet noticed was dead. Close the old
-          // one rather than ending up with two on one seat.
-          const previous = bySeat.get(res.seat);
-          if (previous && previous !== ws) previous.close(4000, 'replaced by a newer connection');
-
-          seat = res.seat;
-          bySeat.set(seat, ws);
-          // Return the id the ROOM settled on, not the one we were handed. A second tab arriving with
-          // an id that is already in use is given a fresh one, and it has to learn about it or it
-          // will come back claiming the same seat again.
-          sendTo(ws, { ...room.welcomeFor(seat), playerId: res.playerId, resumed: res.resumed });
-          if (res.displaced) announce(`${res.displaced} made way for ${name}`);
-          broadcast({ t: 'chat', i: -1, name: 'SERVER',
-            msg: `${name} ${res.resumed ? 'reconnected' : 'joined'}` });
-          console.log(`${res.resumed ? 'resume' : 'join  '} seat ${seat} "${name}" (${bySeat.size}/${config.maxPlayers})`);
+          seatPlayer(msg, name, playerId, null);
           break;
         }
 
@@ -478,6 +526,100 @@ export function attachHub(server, config) {
 
         // Unknown types are ignored on purpose — that is the forward-compatibility story.
       }
+    }
+
+    /**
+     * Take the seat and say hello back.
+     *
+     * Split out of the `hello` case because authentication made that path asynchronous, and this
+     * is the part that has to run identically whether a password was involved or not.
+     *
+     * @param trust a device token to hand this browser, or null to leave what it has alone. It
+     *   travels in the welcome, is written to localStorage, and is the reason the password box
+     *   does not appear again on this machine.
+     */
+    function seatPlayer(msg, name, playerId, trust) {
+      const res = room.join(playerId, name, { admin: sameSecret(msg.adminKey, config.adminKey) });
+      if (res.seat < 0) {
+        // `forget` tells the client its stored identity is the problem, so it can offer to
+        // drop it rather than leaving somebody stuck on a screen that just says no.
+        return sendTo(ws, res.why === 'already-playing'
+          ? { t: 'reject', why: 'that name is already playing in another window', forget: true }
+          : { t: 'reject', why: 'server is full' });
+      }
+
+      // Resuming a seat whose socket the server had not yet noticed was dead. Close the old
+      // one rather than ending up with two on one seat.
+      const previous = bySeat.get(res.seat);
+      if (previous && previous !== ws) previous.close(4000, 'replaced by a newer connection');
+
+      seat = res.seat;
+      bySeat.set(seat, ws);
+      // Return the id the ROOM settled on, not the one we were handed. A second tab arriving with
+      // an id that is already in use is given a fresh one, and it has to learn about it or it
+      // will come back claiming the same seat again.
+      sendTo(ws, {
+        ...room.welcomeFor(seat), playerId: res.playerId, resumed: res.resumed,
+        ...(trust ? { trust } : null),
+      });
+      if (res.displaced) announce(`${res.displaced} made way for ${name}`);
+      broadcast({ t: 'chat', i: -1, name: 'SERVER',
+        msg: `${name} ${res.resumed ? 'reconnected' : 'joined'}` });
+      console.log(`${res.resumed ? 'resume' : 'join  '} seat ${seat} "${name}" (${bySeat.size}/${config.maxPlayers})`);
+    }
+
+    /**
+     * May this socket play as this name?
+     *
+     * The whole password design lives in the order of these four questions:
+     *
+     *   1. **Does this browser already hold a token for the name?** Then nothing is asked. This is
+     *      the answer almost every time anybody ever joins, and it costs one sha256.
+     *   2. **Is the name unclaimed?** Then this is a sign-up: a password is required, and once it
+     *      is set the name belongs to whoever set it. No password in the hello means "ask me" —
+     *      the client shows the box and sends the hello again.
+     *   3. **Is a password supplied for a claimed name?** Verify it. Right: in, with a token for
+     *      this browser. Wrong: refused, and after a few of those the name stops answering for a
+     *      while (see FAIL_LIMIT in accounts.js).
+     *   4. **Neither?** A known name from an unknown browser. Ask for the password.
+     *
+     * Spectators never reach here — see the `observe` branch in `hello`. That is deliberate: a
+     * watcher holds no seat, cannot chat and is not in the standings, so there is no identity to
+     * protect, and it leaves one way into the server that a forgotten password cannot block.
+     *
+     * The returned object carries either `{ ok: true, trust }` or `{ ok: false, reject }`, and
+     * `reject` is a message the client can act on: `need` opens the password box, `signup` opens
+     * it in "choose one" mode, `bad` reopens it with the error.
+     */
+    async function authorise(socket, name, msg) {
+      const pw = typeof msg.pw === 'string' ? msg.pw : null;
+      const token = typeof msg.trust === 'string' ? msg.trust : null;
+
+      if (token && accounts.checkDevice(name, token)) return { ok: true, trust: null };
+
+      if (!accounts.has(name)) {
+        if (!pw) {
+          return { ok: false, reject: { why: `pick a password for "${name}"`, auth: 'signup' } };
+        }
+        const made = await accounts.register(name, pw);
+        if (!made.ok) return { ok: false, reject: { why: made.why, auth: 'signup' } };
+        console.log(`signup "${name}"`);           // the name only. Never the password, ever.
+        return { ok: true, trust: made.token };
+      }
+
+      if (!pw) return { ok: false, reject: { why: `"${name}" needs its password`, auth: 'need' } };
+
+      const waitMs = accounts.lockedFor(name);
+      if (waitMs) {
+        return { ok: false,
+          reject: { why: `too many tries — wait ${humanDuration(waitMs)}`, auth: 'wait' } };
+      }
+      const check = await accounts.verify(name, pw);
+      if (!check.ok) {
+        console.warn(`auth   wrong password for "${name}" from ${socket.bvIp ?? '?'}`);
+        return { ok: false, reject: { why: check.why, auth: 'bad' } };
+      }
+      return { ok: true, trust: check.token };
     }
 
     ws.on('close', () => {
