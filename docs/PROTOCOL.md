@@ -70,7 +70,9 @@ adding an optional message safe.
   "playerId": "p_8f2a...",      // from localStorage, or null for a new player
   "device": "6c1e...",          // random per-browser id, for the two-sessions-per-browser limit
   "observe": false,             // true to spectate without a seat
-  "adminKey": "..."             // only from the host's browser; see [admin] key in config.ini
+  "adminKey": "...",            // only from the host's browser; see [admin] key in config.ini
+  "trust": "9ad3...",           // this browser's token for THIS name, if it has one
+  "pw": "..."                   // only when the server has just asked for it; never stored
 }
 ```
 
@@ -78,16 +80,42 @@ Every field is type-checked on arrival; a value of the wrong type is treated as 
 
 Server replies `welcome` or `reject`.
 
+**Signing in.** A name is owned by whoever claimed it (`server/accounts.js`), so `hello` can be
+refused with a `reject` carrying an `auth` field — and that is a step in a conversation rather than
+an error:
+
+| `auth` | Means | The client does |
+|---|---|---|
+| `signup` | nobody has claimed this name | shows the password box in "choose one" mode |
+| `need` | claimed, and this browser is not trusted | shows the password box |
+| `bad` | wrong password | shows it again, with the reason |
+| `wait` | too many attempts | shows how long is left |
+
+A successful `welcome` carries `trust`, a token for this browser, which is sent with every later
+`hello` and means the box never appears again on this machine. The password itself is sent once
+and dropped from the client's stored hello the moment it is accepted, so a reconnect an hour later
+does not carry it. Spectators (`observe: true`) are never asked. `REQUIRE_PASSWORD=0` disables the
+whole exchange. See [ANTICHEAT.md](ANTICHEAT.md) §3.
+
 ### `input` — every tick (30 Hz)
 
 ```json
 {
   "t": "input",
   "tick": 10432,                 // the client tick this input applies to
-  "m": 5,                        // bitmask: 1=right 2=up 4=left 8=down 16=bomb
-  "x": 4096, "y": 2816           // client's predicted position, for server sanity check
+  "m": 5,                        // bitmask: 1=right 2=up 4=left 8=down 16=bomb 32=slide
+  "x": 4096, "y": 2816           // client's predicted position — LOGGING ONLY, see below
 }
 ```
+
+`m` is masked with `IN_MASK` on arrival, so a crafted packet cannot carry a bit the keyboard
+cannot produce. Bit 32 is the slide: the double-tap is detected in the browser and arrives as one
+bit, and the simulation applies its own cost, cooldown and velocity — so a client setting it every
+tick gets exactly what a player who double-taps perfectly gets.
+
+`x` and `y` are **never read by the simulation**. They exist for a future desync log and are
+asserted-absent by test, because a server that believes a client about where it is has no
+collision detection, no fire damage and no pickups worth the name.
 
 Send one per tick even when the mask is unchanged — it doubles as a heartbeat and keeps the clock
 sync honest. 60 bytes × 30 Hz = 1.8 KB/s up per client. Fine.

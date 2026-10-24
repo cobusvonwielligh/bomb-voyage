@@ -72,6 +72,41 @@ faithful to Game of Bombs and the thing that makes 180 ms latency invisible — 
 **Bomb pass-through.** You may walk off a bomb you just placed. The moment your hitbox fully
 leaves that tile, the bomb becomes solid to you. Everyone else treats it as solid immediately.
 
+### The slide
+
+**Double-tap a direction and you dash that way.** It is the only other verb the game has for
+distance, and it exists because the whole fight is about whether you can be somewhere before a
+fuse ends.
+
+| | |
+|---|---|
+| Gesture | the same direction twice inside **260 ms** (client-side; the server sees one bit) |
+| Launch | **3 ×** your current walking pace — boots included, so the perk still matters |
+| Drag | **× 0.94** of the velocity per tick |
+| Ends at | **26 units/tick**, or on hitting anything solid |
+| Distance | about **3½ tiles over 18 ticks**, against 1¾ walking the same ticks |
+| Cost | **700 stamina**, a fifth of a fresh bar, taken in full at the launch |
+| Cooldown | **18 ticks** before another |
+| Refused when | already sliding, cooling down, exhausted, or short of the cost |
+
+Three rules make it a decision rather than free speed:
+
+**It owns the tick.** While one runs, the keys do nothing — no steering, no braking, no cutting it
+short. You chose the direction when you double-tapped. That is also what makes it a function of
+(velocity, direction, map), which is why the client can replay it to the unit.
+
+**Your hands are full.** No bombs from inside a slide. Without that rule the slide is a bomb
+delivery vehicle: launch, cross three tiles in half a second, drop one at the far end from safety.
+
+**Drag, not a timer.** The slide decelerates the whole way out, so starting one too late carries
+you past the turn you wanted. That mistake is the cost of using it badly, and you can see it
+coming.
+
+**Barging.** Anyone your slide passes through is left **confused** (§7): a question mark over
+their head, no bombs, and a quarter off their pace for 45 ticks. It is the reason to aim a slide
+at a person rather than at a corridor — you can go through the pirate holding a doorway, and they
+cannot answer by dropping one at your feet.
+
 ---
 
 ## 3. Bombs
@@ -216,17 +251,26 @@ dead.
 them is a weight change and one effect function: Kick, Jelly, Detonator, Bat, Jetpack, Nuclear
 charge, Blue fire, Heart, Key.
 
+**Caps.** Bombs carried and blast radius both cap at **5**. They were 8 and 6, and together they
+covered so much floor that a fully kitted player did not have to aim — position stopped being the
+thing the game is about. A powder keg stays deliberately above the cap at radius 7, which is how
+the renderer and the sound identify one without a flag on the wire.
+
 ---
 
 ## 6. Death, respawn, and what you keep
 
 Touching fire kills you, unless you are Invulnerable or hold a Shield.
 
-- **Shield** absorbs the death, is consumed, and grants **60 ticks (2 s)** Invulnerability.
+- **Shield** absorbs the death and is consumed — one shield per blast, and never two at once.
+  Spending one opens a **grace window of 18 ticks (0.6 s)** in which nothing can touch you, so a
+  chain reaction or a crossfire costs exactly one shield and the second is still there for the
+  next mistake. The grace outlasts a blast's lethal window, so the explosion that triggered it can
+  never come back for more.
 - **Death** drops your stats to the starting values (1 bomb, radius 1, 0 boots) and clears all
   statuses.
 - On death you drop **up to 3 perks** on nearby free tiles, so a good kill is rewarded.
-- You respawn by pressing **SPACE** after a **15-second** cooldown, with **90 ticks (3 s)**
+- You respawn by pressing **SPACE** after a **13.5-second** cooldown, with **90 ticks (3 s)**
   Invulnerability.
 
 **Where you respawn.** Every legal spawn is a candidate, weighted by the *square* of the
@@ -254,7 +298,14 @@ a contagious status, the other catches it with the **remaining duration**, and t
 it. Contagion has a **1 s per-pair cooldown** so a scrum does not ping-pong.
 
 | Status | Duration | Contagious | Effect |
-|---|---:|:---:|---|
+|
+
+**Confused** is the only status that does not come out of a bottle: it is what a slide leaves
+behind (§2). A question mark over the head, **no bombs**, and **speed × ¾**, for **45 ticks**. It
+is not contagious — a confused player barging about cannot confuse anybody else — and
+Invulnerability protects against it like it protects against the diseases.
+
+---|---:|:---:|---|
 | Invulnerability | 90 t / 60 t | no | Cannot die. From respawn or a broken shield. |
 | Pacifism | 300 t (10 s) | yes | Cannot place bombs. |
 | Slowdown | 300 t | yes | Speed × 0.5. |
@@ -314,10 +365,11 @@ at **half pace** until you have recovered a third of it.
 
 | | |
 |---|---|
-| Capacity | 300, plus 75 per Stim, to a maximum of 4 Stims |
-| Drain | 1 per tick while moving |
-| Regen | 2 per tick standing still, 1 per tick while limping |
+| Capacity | 3450, plus 750 per Stim, to a maximum of 4 Stims |
+| Drain | 10 per tick while moving |
+| Regen | 23 per tick standing still, 12 per tick while limping |
 | Exhausted | speed × ½ until stamina reaches a third of capacity |
+| A slide | 700 off the bar, at once — see §2 |
 
 Two details carry the whole system.
 
@@ -330,10 +382,16 @@ only once a third of the bar is back.
 makes stopping a tactical choice rather than a punishment, and it means an exhausted player is
 never stuck: limping still refills, slowly.
 
-It is shown twice over. A bar appears beside the player below 70% and drains; and the sprite
-itself heaves, scaled on one axis so it reads as breathing, with a warm pulse on the ground once
-genuinely exhausted. On the sprite rather than only in the HUD on purpose — at the moment you
+It is shown twice over. A bar appears **under the player's feet** below 70% and drains; and the
+sprite itself heaves, scaled on one axis so it reads as breathing, with a warm pulse on the ground
+once genuinely exhausted. On the sprite rather than only in the HUD on purpose — at the moment you
 need to know you are about to be slow, you are looking at your pirate, not at a bar.
+
+The bar is horizontal, thin-bordered, and deliberately **not** a health bar: this game has no
+health, and reading it as health would be actively dangerous information. A lightning bolt in
+front of it, the interface's amber rather than green-to-red, a notch at what a slide costs, and a
+red gradient with a gentle pulse below a third — the frame stays solid while it pulses, so the
+reading is never hidden at the moment it matters.
 
 ---
 
@@ -394,12 +452,14 @@ Exactly Game of Bombs', minus what we did not build.
 | Key | Action |
 |---|---|
 | Arrows / W A S D | Move |
+| Arrows / W A S D, **twice** | Slide that way — see §2 |
 | SPACE / K | Place bomb · respawn when dead |
 | Q | Toggle map overview |
 | ENTER | Toggle chat / send |
 | TAB | Scoreboard |
 | P | Fullscreen |
 | ESC | Close overlays |
+| SHIFT + direction | Emote |
 | SHIFT / L | *reserved* — detonate radio bomb |
 | I | *reserved* — safe-house |
 | F | *reserved* — jetpack |
@@ -432,10 +492,22 @@ Kill feed lines share the chat panel.
 
 ### Commands
 
-Anyone: `/bots N`, `/who`, `/logout`, `/help`.
+Anyone: `/bots N`, `/kick bot N`, `/who`, `/logout`, `/help`.
 
-Host only: `/restart`, `/godmode`, `/kick bot N`, `/kick NAME [hours]`, `/map 0-4`,
-`/gamespeed 10-200`, `/roundtime 0.1-60`.
+Owner only: `/restart`, `/godmode`, `/kick NAME [hours]`, `/map 0-4`, `/gamespeed 10-200`,
+`/roundtime 0.1-60`.
+
+**Two tiers, and the line between them is "can this ruin somebody else's round".** The host —
+whoever happens to be in charge — may add bots and remove bots, because a room with nobody who can
+top the bots up is a worse room and the worst a mistake there can do is change who you are playing
+against. Everything else belongs to the **owner**: the browser presenting the admin key, or the
+configured `admin name` where no key is set. Restarting throws away everybody's score, godmode
+makes one player unkillable, `/gamespeed` and `/roundtime` change the rules under sixteen people,
+`/map` replaces the board mid-fight, and `/kick NAME` can ban somebody for hours.
+
+The owner's commands are also **not advertised**: `/help` does not mention them to anybody else,
+and using one without the right returns the unknown-command reply rather than "not for you" — a
+refusal that confirms the command exists is an invitation to keep trying.
 
 **Bots look after themselves.** The moment a person joins, the room tops itself up to at least
 six bots (`min_bots` in config.ini, 0 to switch off). After two whole rounds with no person
@@ -445,6 +517,6 @@ emptied and sat empty for those two rounds. Asking for *more* bots never switche
 
 **The host is a role, not a name.** It is the admin while they are connected — the browser that
 presents the key in `config.ini`, never merely somebody who typed the admin's name — and the
-longest-standing human otherwise, so a room is never left without somebody who can restart it —
-which is the whole reason the commands exist. It passes down the instant they leave, and the
-scoreboard shows a crown so you can see who has it.
+longest-standing human otherwise, so a room is never left without somebody who can add bots. It
+passes down the instant they leave, and a **crown** marks them in the live list, in the TAB
+scoreboard and over their head on the board, so you can see who has it without asking.
