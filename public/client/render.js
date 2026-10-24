@@ -18,6 +18,30 @@ import { bombTile } from '/shared/sim/bombs.js';
 
 const CHUNK_PX = TILE_PX * CHUNK_TILES;
 
+/* The sea, set to music.
+ *
+ * The ocean is the one surface in this game that can carry a visualiser without costing
+ * anything: it surrounds the island, nothing is ever played on it, and it is already in
+ * constant motion — so audio-reactive water reads as water that happens to be alive rather than
+ * as a meter that happens to be wet. Everything else on screen is information.
+ *
+ * Four couplings, each to a different band, which is what stops it looking like one thing
+ * pulsing:
+ *
+ *   BASS   -> the swell. Wave amplitude and the push behind every current streak. A kick is
+ *             felt as the whole surface surging, which is the only one of these you notice.
+ *   MID    -> the length of the streaks. Busy music draws long fast strokes; a quiet passage
+ *             lets them shorten back to ripples.
+ *   TREBLE -> the glints. Hi-hats and cymbals put sparks on the water, which is exactly what
+ *             the top end sounds like.
+ *   ENERGY -> the shallows and the overall brightness, gently.
+ *
+ * Every coupling is a MULTIPLIER on something that already moves, never the thing itself. Set
+ * the gain to zero and the sea is the sea it always was — which is the test for whether a
+ * reactive effect is tasteful or a gimmick, and it is also what the silent case has to be.
+ */
+const AUDIO_REST = { bass: 0, mid: 0, treble: 0, energy: 0 };
+
 export function createRenderer(canvas, world) {
   const ctx = canvas.getContext('2d', { alpha: false });
   let chunks = new Map();          // "cx,cy" -> {canvas, dirty}
@@ -34,6 +58,11 @@ export function createRenderer(canvas, world) {
   const splashes = [];         // shoreline foam, capped — see spawnSplash
   const floaters = [];         // "+1 BOMB" rising off a player — see addFloater
   let seaT = 0;
+  /* What the music is doing, read once a frame and smoothed again on top of the spectrum's own
+   * ballistics. Double smoothing is deliberate: the dock meter wants to be snappy because it is
+   * a meter, and the sea wants to be slow because it is a sea. Water has mass. */
+  let audio = AUDIO_REST;
+  let swell = 0, flowPush = 0, sparkle = 0;
   let drunk = 0;                       // 0..1, eased, so it fades in and out rather than snapping
 
   /* Where the aim bracket is DRAWN, in tiles, as a float.
@@ -486,8 +515,11 @@ export function createRenderer(canvas, world) {
       // field reads as water being pushed rather than as dots teleporting along a curve.
       d.vx += (fx - d.vx) * 0.08;
       d.vy += (fy - d.vy) * 0.08;
-      d.x += d.vx * dt;
-      d.y += d.vy * dt;
+      // The surge. A kick pushes the whole field along for a moment, which is the one coupling
+      // you feel rather than see — the water visibly gets ahead of itself on a downbeat.
+      const surge = 1 + swell * 0.7;
+      d.x += d.vx * dt * surge;
+      d.y += d.vy * dt * surge;
 
       // Wrap round the visible sea. Cheaper than respawning and keeps the density even.
       if (d.x < -M) d.x += W + M * 2; else if (d.x > W + M) d.x -= W + M * 2;
@@ -499,11 +531,19 @@ export function createRenderer(canvas, world) {
           && cellType(map.cells[ty * map.w + tx]) !== BLOCK.WATER) continue;
 
       const sp = Math.hypot(d.vx, d.vy) || 1;
-      ctx.globalAlpha = d.a;
+      /* The music, in the water.
+       *
+       * A streak gets LONGER with the mids and BRIGHTER with the swell — length is the one
+       * that reads at a glance across a whole ocean of them, because it changes the texture of
+       * the surface rather than the colour of it. Both are multipliers on what the particle
+       * was already doing, so a silent game is the sea exactly as it was.
+       */
+      ctx.globalAlpha = d.a * (1 + swell * 0.55);
       ctx.lineWidth = sp > 18 ? 1.6 : 1;
+      const len = d.len * (1 + flowPush * 1.35 + swell * 0.4);
       ctx.beginPath();
       ctx.moveTo(d.x, d.y);
-      ctx.lineTo(d.x - (d.vx / sp) * d.len, d.y - (d.vy / sp) * d.len);
+      ctx.lineTo(d.x - (d.vx / sp) * len, d.y - (d.vy / sp) * len);
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
@@ -786,6 +826,18 @@ export function createRenderer(canvas, world) {
     }
   }
 
+  /** Smooth the raw bands into the three numbers the sea actually uses. */
+  function readAudio(dtMs) {
+    const k = 1 - Math.pow(1 - 0.09, dtMs / 16.7);
+    // Squared, so quiet passages barely move the water and loud ones move it a lot. Linear
+    // coupling makes everything twitch at all times, which is the single commonest way an
+    // audio-reactive effect ends up looking cheap.
+    swell += (audio.bass * audio.bass - swell) * k;
+    flowPush += (audio.mid * audio.mid - flowPush) * (k * 0.6);
+    // Sparkle is allowed to be fast: a cymbal that fades in slowly is not a cymbal.
+    sparkle += (audio.treble - sparkle) * (1 - Math.pow(1 - 0.22, dtMs / 16.7));
+  }
+
   function drawSea(vw, vh, ox, oy, dtMs) {
     if (!seaNear) return;
     seaT += dtMs / 1000;
@@ -848,6 +900,14 @@ export function createRenderer(canvas, world) {
      */
     ctx.save();
     ctx.fillStyle = '#dff0ff';
+    /* The top end, as light on the water.
+     *
+     * Hi-hats and cymbals ARE sparkle — it is the one band whose character matches what it is
+     * being mapped to, so this coupling needs no translation. More of them are lit and each is
+     * brighter and longer, which together read as the sun coming out rather than as the glints
+     * blinking in time.
+     */
+    const lit = Math.min(1, 0.55 + sparkle * 0.75);
     for (let i = 0; i < GLINTS; i++) {
       const epoch = Math.floor(seaT / GLINT_LIFE_S + i * 0.37);
       const f = (seaT / GLINT_LIFE_S + i * 0.37) % 1;
@@ -855,9 +915,13 @@ export function createRenderer(canvas, world) {
       const hy = hash01(i * 7919 + epoch * 104729 + 1);
       // A short rise and a long fall, so they twinkle out rather than blinking off.
       const life = f < 0.25 ? f / 0.25 : 1 - (f - 0.25) / 0.75;
-      ctx.globalAlpha = life * 0.5;
+      // Each glint has its own threshold, so the top end lights them a few at a time instead of
+      // switching the whole field on at once. A hash, so a given glint always needs the same
+      // amount of treble and the pattern of which ones appear stays stable.
+      if (hash01(i * 31 + 7) > lit) continue;
+      ctx.globalAlpha = life * (0.42 + sparkle * 0.5);
       const gx = hx * vw, gy = hy * vh;
-      const len = 1.5 + hash01(i + epoch) * 3.5;
+      const len = (1.5 + hash01(i + epoch) * 3.5) * (1 + sparkle * 0.6);
       ctx.fillRect(gx, gy, len, 1);
       ctx.fillRect(gx + len / 2 - 0.5, gy - 1, 1, 3);
     }
@@ -880,8 +944,13 @@ export function createRenderer(canvas, world) {
         }
       }
     };
-    shelf(2, 0.16, PALETTE.seaMid);     // the outer, deeper step
-    shelf(1, 0.42, PALETTE.seaLight);   // and the bright water right against the rock
+    // The shallows lift very slightly with the whole mix — the quietest of the four couplings,
+    // and the one nobody should ever be able to point at. It is here because the coast is the
+    // only part of the sea the island touches, and a reactive ocean with a dead edge looks
+    // like two different oceans.
+    const lift = 1 + swell * 0.3;
+    shelf(2, 0.16 * lift, PALETTE.seaMid);     // the outer, deeper step
+    shelf(1, 0.42 * lift, PALETTE.seaLight);   // and the bright water right against the rock
 
     /* No caustics.
      *
@@ -926,6 +995,10 @@ export function createRenderer(canvas, world) {
   function frame(dtMs = 16) {
     if (!world.ready || !world.map) return;
     ensureBaked();
+    // Before anything is drawn, so every layer in this frame agrees about what the music is
+    // doing. Reading it per-layer would let the swell and the sparkle come from different
+    // moments, which is a quarter of a frame apart and invisible — until it is not.
+    readAudio(dtMs);
 
     const me = world.me();
     if (!view.w) resize();
@@ -1458,6 +1531,16 @@ export function createRenderer(canvas, world) {
 
   resize();
   return {
+    /**
+     * Hand the renderer the live spectrum so the sea can move with the music.
+     *
+     * Pushed in rather than imported, because the renderer has no business knowing that an
+     * AudioContext exists — it takes four numbers between 0 and 1. Pass nothing and it falls
+     * back to a resting object, which is also what happens when the music is off: the ocean
+     * goes back to being the ocean, with no branch anywhere in the drawing code.
+     */
+    setAudio(a) { audio = a || AUDIO_REST; },
+
     frame, resize, invalidateAll, invalidateTile, mapChanged,
     /**
      * A line of text that floats up off a player and fades.

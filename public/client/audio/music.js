@@ -568,7 +568,17 @@ export function createMusic() {
      * visualisers look like they are barely moving.
      */
     analyser = ctx.createAnalyser();
-    analyser.fftSize = 1024;
+    /* 4096, not 1024.
+     *
+     * At 1024 the bins are 46.9 Hz wide, and log-spaced bands below about 500 Hz then round to
+     * the SAME bin — twenty-two of forty bands had one bin or less, so half the visualiser was
+     * pairs of bars moving in perfect lockstep. That reads as a rendering fault and is really
+     * an arithmetic one. 4096 brings it down to six, which is as good as it gets without
+     * spending four times the FFT on frequencies nothing reproduces anyway.
+     *
+     * Cost is one 4096-point FFT per read, once a frame, on a thread that is otherwise drawing
+     * sixteen players. It does not register. */
+    analyser.fftSize = 4096;
     analyser.smoothingTimeConstant = 0.72;
     analyser.minDecibels = -78;
     analyser.maxDecibels = -14;

@@ -131,6 +131,8 @@ function syncMeter(dtMs) {
   else menuViz.spectrum.rest(dtMs);
 
   const s = menuViz.spectrum;
+  // The sea, set to music. The renderer gets four numbers and no idea where they came from.
+  renderer?.setAudio(live ? s : null);
   const v = [s.bass, s.mid, s.treble];
   for (let i = 0; i < eqBars.length; i++) {
     // 3px floor so a silent bar is still a bar. Zero-height is a missing element, not a quiet one.
@@ -381,10 +383,23 @@ const net = createNet({
   },
   onRoundEnd: m => {
     renderRoundTable(m);
-    $('deadTitle').textContent = 'round over';
+    /* Two different endings, and the difference between them is length.
+     *
+     * Winning gets four and a half seconds of actual fanfare; everybody else gets a second of
+     * something catchier. That asymmetry IS the reward — there is nothing else the game can
+     * give you at this moment, and a win that sounds the same as fifteenth place is not a win.
+     *
+     * The consolation is deliberately not sad. Most rounds are losing rounds for fifteen out of
+     * sixteen people, and a sound you hear that often had better not be one you learn to dread.
+     */
+    const won = (m.standings || [])[0]?.i === world.you;
+    $('deadTitle').textContent = won ? 'you won the round' : 'round over';
+    $('dead').firstElementChild.classList.toggle('won', won);
     $('dead').firstElementChild.classList.add('round');
     $('dead').style.display = 'grid';
-    sfx.play('fanfare');
+    sfx.play(won ? 'fanfare' : 'playoff');
+    // Get the music out of the way of it, for as long as it runs.
+    music.dip(won ? 0.7 : 0.4, won ? 3.6 : 1.1);
     $('respawn').style.display = 'none';
     roundOverUntil = performance.now() + m.startsInMs;
     setTimeout(() => {
@@ -392,7 +407,7 @@ const net = createNet({
       $('dead').style.display = 'none';
       $('respawn').style.display = '';
       $('deadTitle').textContent = 'you died';
-      $('dead').firstElementChild.classList.remove('round');
+      $('dead').firstElementChild.classList.remove('round', 'won');
       $('roundRows').textContent = '';
       $('roundNext').textContent = '';
     }, m.startsInMs);
@@ -633,14 +648,14 @@ function loop(now) {
   fuseTicks();
   world.updateFires();
   world.interpolate(net.serverTickNow(), dt);
+  // BEFORE the renderer, not after: it reads the analyser and hands the result to the sea, and
+  // doing it afterwards would draw this frame's water with last frame's music.
+  syncMeter(dt);
   renderer.frame(dt);
 
   // Five times a second is plenty for a clock, a loadout and a track name, and it keeps a
   // pile of DOM writes out of the frame that has to draw sixteen players.
   if (now - hudAt > 200) { hudAt = now; drawHud(); syncNowPlaying(); }
-  // The meter, every frame. Three style writes, no layout, and a level that only updates five
-  // times a second does not read as a level — it reads as a progress bar.
-  syncMeter(dt);
   quips.tick();
   quips.idle();
 }
@@ -744,7 +759,9 @@ function drawXp(p) {
   box.classList.remove('levelup');
   void box.offsetWidth;
   box.classList.add('levelup');
-  sfx.play('fanfare');
+  // Its own sound, not the win fanfare: that is four and a half seconds of brass, which is
+  // right for a round ending and absurd over a firefight.
+  sfx.play('levelup');
   killFeed(`level ${p.level} \u00b7 ${p.tier}`, { youKilled: true });
 
   setTimeout(() => {

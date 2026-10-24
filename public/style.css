@@ -1282,6 +1282,22 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 .card.round #roundTable { display: block; }
 .card.round #respawn { display: none; }
 .card.round #deadTitle { color: var(--gold); }
+
+/* You won it. The only place in the interface that gets the cast treatment on demand — and the
+   only time this card ever says something worth looking at twice. */
+.card.round.won #deadTitle {
+  font-family: var(--display);
+  font-size: clamp(26px, 3.2vw, 38px);
+  letter-spacing: .06em;
+  background: var(--cast);
+  background-size: 260% 100%, 100% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+  text-shadow: none;
+  filter: var(--cast-edge) drop-shadow(0 2px 1px #0009) drop-shadow(0 0 22px #edc24e5c);
+  animation: castShine 2.4s linear infinite;
+}
 #roundTable table { width: 100%; border-collapse: collapse; font-size: 13px; }
 #roundTable th {
   color: var(--dim); font-weight: normal; text-align: left; font-size: 9.5px;

@@ -27,7 +27,13 @@
  * 40 Hz to 14 kHz: below 40 is rumble that no laptop speaker reproduces and above 14k is air.
  * Spending bars on either is spending them on nothing.
  */
-function bandEdges(n, sampleRate, fftSize, lo = 40, hi = 14000) {
+/* 55 Hz, not 40.
+ *
+ * Below about 55 nothing a laptop speaker reproduces is there, and more importantly the FFT
+ * cannot resolve it: at 4096 points the bins are 11.7 Hz wide, so 40–45 Hz and 45–50 Hz are the
+ * same bin and two adjacent bars report the identical number. Starting higher spends the
+ * resolution where there is something to see. */
+function bandEdges(n, sampleRate, fftSize, lo = 55, hi = 14000) {
   const nyquist = sampleRate / 2;
   const bins = fftSize / 2;
   const edges = [];
@@ -63,7 +69,7 @@ export function createSpectrum({ bands = 24, tilt = 4.5, rise = 0.55, fall = 0.0
     // without this the right-hand half of any visualiser is a flat line.
     gain = new Float32Array(bands);
     for (let i = 0; i < bands; i++) {
-      const decades = (i / (bands - 1)) * Math.log10(14000 / 40);
+      const decades = (i / (bands - 1)) * Math.log10(14000 / 55);
       gain[i] = Math.pow(10, (tilt * decades) / 20);
     }
   }
@@ -120,7 +126,11 @@ export function createSpectrum({ bands = 24, tilt = 4.5, rise = 0.55, fall = 0.0
         // constant fall, because a cap that drops linearly reads as a second bar.
         if (level[i] >= peak[i]) { peak[i] = level[i]; peakVel[i] = 0; }
         else {
-          peakVel[i] += 0.0016 * k;
+          // 0.0007, down from 0.0016. At the old rate a cap fell from the top to nothing in
+          // half a second, which is barely longer than the bar it is capping — so it never
+          // looked like a held peak, it looked like a second bar chasing the first. A cap wants
+          // to hang around for about a second and a half.
+          peakVel[i] += 0.0007 * k;
           peak[i] = Math.max(level[i], peak[i] - peakVel[i]);
         }
       }
