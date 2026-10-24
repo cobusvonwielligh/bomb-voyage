@@ -7,7 +7,7 @@
 import {
   TILE_PX, CHUNK_TILES, UNITS_PER_TILE, TRACER_SAMPLES, FUSE_TICKS, FIRE_TICKS, STATUS,
   BLOCK, BLOCK_HP, SEA_MARGIN_TILES, SPAWN_POP_TICKS, SPAWN_POP_SCALE, MIN_ZOOM, MAX_ZOOM,
-  PERK_FADE_TICKS, STAMINA_SHOW_AT, STAMINA_LOW_AT, SLIDE_STAMINA_COST, staminaMaxFor,
+  PERK_FADE_TICKS, STAMINA_SHOW_AT, STAMINA_LOW_AT, staminaMaxFor,
   PUDDLE_FADE_TICKS, TICK_MS, TICK_HZ,
   BLOCK_WALKABLE, MAX_SHIELDS,
 } from '/shared/constants.js';
@@ -3841,7 +3841,10 @@ export function createRenderer(canvas, world) {
     // Just under the boots, not a gap below them: at 0.62 of a tile the bar floated clear of the
     // figure and read as belonging to the floor rather than to the pirate standing on it.
     const cy = oy + (p.ry / UNITS_PER_TILE) * TILE_PX + TILE_PX * 0.5;
-    const w = TILE_PX * 0.78, h = 4.5;
+    // Two pixels thinner than it was, on request. At 4.5 it was a bar; at 2.5 it is a line with
+    // a reading in it, which is the right weight for something that is on screen while you are
+    // being chased and is never the thing you are looking at.
+    const w = TILE_PX * 0.78, h = 2.5;
     const x = cx - w / 2 + 2.5, y = cy;          // +2.5: room for the bolt on the left
 
     // Fades in over the top quarter of the visible range rather than appearing at a hard edge,
@@ -3874,7 +3877,7 @@ export function createRenderer(canvas, world) {
     c.strokeStyle = 'rgba(0,0,0,0.95)';
     c.stroke();
 
-    /* The fill, segmented and clipped to the track.
+    /* The fill, clipped to the track.
      *
      * The gradient runs along the BAR rather than along the filled part, so a colour at a given
      * position means the same thing however full it is — the left end is always the colour of
@@ -3900,22 +3903,20 @@ export function createRenderer(canvas, world) {
     c.fillRect(x + 0.5, y + 0.5, (w - 1) * frac, h - 1);
     c.restore();
 
-    /* What a slide costs, as a notch on the track.
+    /* No marks on the track, of any kind.
      *
-     * This is the line between "I can still get out of here" and "I am walking out of here", and
-     * it is the single most useful mark on the gauge. Drawn over the fill, in black, so it reads
-     * whether that part of the bar is lit or not.
+     * There was a black notch here at what a slide costs — genuinely useful information, and
+     * still the wrong thing on this object: at two and a half pixels tall, any vertical line
+     * across the bar is read as a gauge division rather than as a threshold, and a bar that looks
+     * divided looks like segments however it is drawn. The slide's cost is legible where it
+     * matters anyway: a slide you cannot afford simply does not launch, and the bar is amber
+     * above the line and red below it.
      */
-    const notch = x + 0.5 + (w - 1) * Math.min(1, SLIDE_STAMINA_COST / max);
-    c.globalAlpha = appear * 0.85;
-    c.fillStyle = 'rgba(0,0,0,0.9)';
-    c.fillRect(notch - 0.5, y - 1, 1, h + 2);
-
     // The bolt, so a horizontal bar under a character is not mistaken for health. Small, and in
     // the fill's own colour, so it dims and flashes with the gauge.
     c.globalAlpha = appear * flash;
     c.fillStyle = low ? '#ff5a3c' : '#ffe04a';
-    c.translate(x - 4.4, y - 1.6);
+    c.translate(x - 4.4, y - 2.6);
     c.scale(0.4, 0.4);
     c.beginPath();
     c.moveTo(9.5, 0); c.lineTo(3, 9); c.lineTo(7.5, 9);

@@ -360,16 +360,21 @@ implementations of one curve drift.
 
 ## 8a. Stamina
 
-Running costs something. Ten seconds of continuous movement empties the bar; once empty you move
-at **half pace** until you have recovered a third of it.
+Running costs something. About **thirteen and a half seconds** of continuous movement empties the
+bar; once empty you move at **half pace** until you have recovered a third of it.
 
 | | |
 |---|---|
-| Capacity | 3450, plus 750 per Stim, to a maximum of 4 Stims |
-| Drain | 10 per tick while moving |
-| Regen | 23 per tick standing still, 12 per tick while limping |
+| Capacity | 6900, plus 1500 per Stim, to a maximum of 4 Stims |
+| Drain | 17 per tick while moving — 13.5 s of running |
+| Regen | 53 per tick standing still (4.3 s to full), 28 while limping |
 | Exhausted | speed × ½ until stamina reaches a third of capacity |
-| A slide | 700 off the bar, at once — see §2 |
+| A slide | 1400 off the bar, at once — see §2 |
+
+The units are twentieths, because the sim is integers only and these rates have twice been asked
+for a fifteen percent change: the resolution has to be fine enough to express one. Against the
+previous numbers, the drain is **15% slower** and the regen **15% faster** — you run longer, and
+you get your wind back quicker.
 
 Two details carry the whole system.
 

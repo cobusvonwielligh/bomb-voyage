@@ -105,8 +105,9 @@ export const SLIDE_DRAG_NUM = 47, SLIDE_DRAG_DEN = 50;
 export const SLIDE_EXIT_UNITS = 26;
 export const SLIDE_MAX_TICKS = 30;
 // A fifth of a fresh bar, and it is taken in full at the launch rather than per tick: a slide you
-// can abort halfway through for half price is a slide nobody ever commits to.
-export const SLIDE_STAMINA_COST = 700;
+// can abort halfway through for half price is a slide nobody ever commits to. Scaled with
+// STAMINA_MAX for the same reason the Stim is — three slides should still be most of your wind.
+export const SLIDE_STAMINA_COST = 1400;
 // You may not chain them. Long enough that the second slide is a decision rather than the rest of
 // the first one, short enough to still be the answer to a chase.
 export const SLIDE_COOLDOWN_TICKS = 18;
@@ -320,18 +321,29 @@ export const PUDDLE_SLIDE_TICKS = 8;
  * makes stopping a real tactical choice rather than a punishment, and it means an exhausted
  * player is never stuck: limping still refills, slowly.
  */
-/* Counted in tenths of a unit, so every rate stays a whole number.
+/* Counted in TWENTIETHS of a unit, so every rate stays a whole number.
  *
  * The sim is integers only — floats in a shared simulation are a determinism bug waiting for a
- * platform that rounds differently. Wanting a 15% change to rates that were 1 and 2 forced the
- * issue: 1.15 and 2.3 are not integers, so the unit got ten times finer instead.
+ * platform that rounds differently. Each time these rates want a percentage change, the unit has
+ * to be fine enough to express it: wanting 15% off rates of 1 and 2 made the unit tenths, and
+ * wanting another 15% off a drain of 10 made it twentieths, because 8.5 is not a whole number
+ * either. Doubling the resolution is free — nothing reads these as anything but a ratio against
+ * STAMINA_MAX — and it leaves room for the next tweak.
  *
- * 3450 at 10 a tick is 11.5 seconds of running, which is the old ten plus the fifteen percent.
+ * The numbers, in seconds, which is the only unit anybody can feel:
+ *
+ *   running     6900 at 17 a tick is 13.5 s, up from 11.5. The drain is 15% slower, so the bar
+ *               takes 15% longer to reach the end.
+ *   standing    6900 at 53 a tick is 4.3 s from empty to full, down from 5. Regen is 15% faster,
+ *               so catching your breath is quicker than it was.
+ *   limping     28 a tick while exhausted — the same 15% on the slower of the two regens, so
+ *               the relationship between them is untouched: standing is still about twice as
+ *               good as limping, which is what makes stopping a decision.
  */
-export const STAMINA_MAX = 3450;
-export const STAMINA_DRAIN_PER_TICK = 10;
-export const STAMINA_REGEN_MOVING = 12;            // only while exhausted; see movement.js
-export const STAMINA_REGEN_IDLE = 23;
+export const STAMINA_MAX = 6900;
+export const STAMINA_DRAIN_PER_TICK = 17;
+export const STAMINA_REGEN_MOVING = 28;            // only while exhausted; see movement.js
+export const STAMINA_REGEN_IDLE = 53;
 export const STAMINA_RECOVER_UNITS = Math.round(STAMINA_MAX / 3);
 export const STAMINA_TIRED_NUM = 1, STAMINA_TIRED_DEN = 2;   // half pace when exhausted
 // Below this fraction the indicator appears beside the player. Above it nothing is drawn: a
@@ -343,9 +355,10 @@ export const STAMINA_SHOW_AT = 0.7;
 // point the exhausted latch lets go — so the warning zone and the recovery line are the same
 // line, and the red means one thing: from here, running out is a live possibility.
 export const STAMINA_LOW_AT = 1 / 3;
-// Each Stim adds this much to your ceiling, up to MAX_STAMINA_LEVELS of them. Four of them
-// takes eleven and a half seconds of running to twenty-three.
-export const STAMINA_PER_LEVEL = 750;
+// Each Stim adds this much to your ceiling, up to MAX_STAMINA_LEVELS of them. Four of them takes
+// thirteen and a half seconds of running to twenty-seven. Scaled with STAMINA_MAX, so a Stim is
+// still worth two and a bit seconds rather than quietly becoming worth one.
+export const STAMINA_PER_LEVEL = 1500;
 export const MAX_STAMINA_LEVELS = 4;
 export const staminaMaxFor = p => STAMINA_MAX + Math.min(p?.staminaLevel ?? 0, MAX_STAMINA_LEVELS) * STAMINA_PER_LEVEL;
 
