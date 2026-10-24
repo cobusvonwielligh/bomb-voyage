@@ -286,6 +286,44 @@ export function createRenderer(canvas, world) {
   const SHADOW_ALPHA = 0.3;
   let sunFor = null, sun = { dx: 0, dy: 0 };
 
+  /* Everything a shadow is allowed to fall on: the floor, and never the blocks standing on it.
+   *
+   * A shadow lying across the top of a crate is the one thing that tells the eye the board is
+   * flat — the crate is drawn as a solid object with a lit top, and a person's shadow sliding
+   * over that top says there is nothing there. On a real board the shadow stops at the foot of
+   * the block and climbs it, and since we have no way to climb it, stopping is the honest half.
+   *
+   * One even-odd path: the whole world, minus a rect per solid tile. Rebuilt when the tick
+   * changes, because a crate that just blew up has to stop blocking immediately — and shared by
+   * every shadow pass in the frame, which is why it is not rebuilt per pass.
+   */
+  let floorClip = null, floorClipAt = -1, floorClipMap = null;
+  function floorClipPath() {
+    const map = world.map;
+    if (!map) return null;
+    if (floorClip && floorClipAt === world.tick && floorClipMap === map) return floorClip;
+    const p = new Path2D();
+    // Bigger than any board, so the subtraction below is the only thing that shapes it.
+    p.rect(-1e5, -1e5, 2e5, 2e5);
+    for (let ty = 0; ty < map.h; ty++) {
+      for (let tx = 0; tx < map.w; tx++) {
+        if (!CASTS_SHADOW.has(cellType(map.cells[ty * map.w + tx]))) continue;
+        p.rect(tx * TILE_PX, ty * TILE_PX, TILE_PX, TILE_PX);
+      }
+    }
+    floorClip = p; floorClipAt = world.tick; floorClipMap = map;
+    return p;
+  }
+
+  /** Clip the caller — which must already have saved — to the floor. Board transform in. */
+  function clipToFloor(ox, oy) {
+    const p = floorClipPath();
+    if (!p) return;
+    ctx.translate(ox, oy);
+    ctx.clip(p, 'evenodd');
+    ctx.translate(-ox, -oy);
+  }
+
   function sunVec() {
     const map = world.map;
     if (!map) return sun;
@@ -720,9 +758,14 @@ export function createRenderer(canvas, world) {
    * Deterministic in the map, never random. Scenery that moves when you respawn is a bug as far
    * as the eye is concerned.
    */
-  // 2.5 times the 2 she was, in two steps the user asked for: two thirds larger, then half again.
-  const SHIP_SCALE = 2 * 1.66 * 1.5;
-  const SHIP_ALPHA = 0.42;
+  // Sized by eye, in rounds: two thirds larger, half again, then halved back and nudged up a
+  // quarter. Left as the arithmetic rather than the product so the next round is one more
+  // factor, not a number nobody can place.
+  const SHIP_SCALE = 2 * 1.66 * 1.5 * 0.5 * 1.25 * 1.25;
+  // Solid enough to be a boat. At 0.42 she was a ghost of one: you could read the sea through
+  // her hull, which is the one thing a hull must not do. What keeps her in the background is
+  // being small, far out, and painted down into the sea's colour — not being see-through.
+  const SHIP_ALPHA = 0.72;
   // The rings and the shadow under her were sized for a scale of 2; they grow with her.
   const SHIP_GROW = SHIP_SCALE / 2;
   // drawShip's own extent, in its units: the wake rings reach ±80 along and ±41 across.
@@ -743,7 +786,7 @@ export function createRenderer(canvas, world) {
    * changes shape — the single most expensive piece of scenery on the board. Drawn once into a
    * canvas at the exact device scale she is shown at, then blitted, she looks identical and costs
    * one drawImage. Re-baked only when the zoom or the pixel ratio changes. */
-  let shipSprite = null, shipSpriteKey = '';
+  let shipSprite = null, shipSpriteKey = '', shipShade = null;
   function bakedShip() {
     const k = SHIP_SCALE * view.zoom * view.dpr;
     const key = k.toFixed(4);
@@ -755,7 +798,23 @@ export function createRenderer(canvas, world) {
     c.scale(k, k);
     c.translate(SHIP_BOX_W / 2, SHIP_BOX_H / 2);
     drawShip(c);
-    shipSprite = el; shipSpriteKey = key;
+
+    /* Her silhouette, baked beside her, for the shadow she throws on the water.
+     *
+     * `source-in` over the finished sprite keeps her alpha and replaces every colour with
+     * black: masts, rigging, the gap under the bowsprit and all. An ellipse under the hull —
+     * which is what was there — is a shadow for a barge, and it is the one cast shadow on the
+     * board big enough for the eye to check against the thing casting it.
+     */
+    const sh = document.createElement('canvas');
+    sh.width = el.width; sh.height = el.height;
+    const sc = sh.getContext('2d');
+    sc.drawImage(el, 0, 0);
+    sc.globalCompositeOperation = 'source-in';
+    sc.fillStyle = '#000';
+    sc.fillRect(0, 0, sh.width, sh.height);
+
+    shipSprite = el; shipShade = sh; shipSpriteKey = key;
     return el;
   }
 
@@ -794,7 +853,10 @@ export function createRenderer(canvas, world) {
     ctx.rotate(m.angle);
     // A slow roll at anchor. Tiny — a degree and a half — but a ship perfectly still on water
     // that is not reads as a sprite rather than as a boat.
-    ctx.rotate(Math.sin(seaT * 0.45) * 0.026);
+    const roll = Math.sin(seaT * 0.45) * 0.026;
+    ctx.rotate(roll);
+    // Her total heading, for anything below that has to work in world axes rather than hers.
+    const heading = m.angle + roll;
 
     /* The water round the hull, which the ship did not have and the rocks did — so the rocks
      * were sitting IN the sea and the ship was sitting ON it. Wider than tall and offset down,
@@ -804,13 +866,29 @@ export function createRenderer(canvas, world) {
     // The hull's shadow, cast the same way as everything on the island. Drawn before the wake,
     // so the foam rings sit on top of it rather than under.
     const sv = sunVec();
-    ctx.save();
-    ctx.globalAlpha = SHADOW_ALPHA * 0.45;
-    ctx.fillStyle = '#000';
     const G = SHIP_GROW;
-    ctx.beginPath();
-    ctx.ellipse(sv.dx / SHIP_SCALE * G, (6 + sv.dy / SHIP_SCALE * 0.7) * G, 26 * G, 9 * G, 0, 0, 7);
-    ctx.fill();
+
+    /* Her own shape on the water, thrown away from the sun — not an ellipse under the hull.
+     *
+     * The offset and the flattening are both done in WORLD axes, which is why the rotations
+     * either side are there: she is moored across the board as often as along it, and a shadow
+     * that leaned with her heading instead of with the light would be a second sun.
+     *
+     * Nine times the island's offset, because she floats high out of the water and the shadow
+     * of a thing is cast from its height. Far enough to read as light coming from somewhere,
+     * close enough to stay attached to her.
+     */
+    ctx.save();
+    ctx.globalAlpha = SHADOW_ALPHA * 0.5;
+    ctx.rotate(-heading);                      // out of her frame, into the world's
+    ctx.translate(sv.dx * 9, sv.dy * 9);
+    ctx.scale(1, 0.5);                         // flat on the water, as a cast shadow is
+    ctx.rotate(heading);                       // and back into hers, to draw her shape
+    bakedShip();                               // keeps shipShade in step with the zoom
+    if (shipShade) {
+      ctx.drawImage(shipShade, -SHIP_BOX_W / 2 * SHIP_SCALE, -SHIP_BOX_H / 2 * SHIP_SCALE,
+        SHIP_BOX_W * SHIP_SCALE, SHIP_BOX_H * SHIP_SCALE);
+    }
     ctx.restore();
 
     const lap = mood.beat * 0.55 + mood.bass * 0.3;
@@ -876,9 +954,10 @@ export function createRenderer(canvas, world) {
    */
   const ROCK_FULLY_VISIBLE = 1;
   const ROCK_MIN_VISIBLE = 0.2;
-  // How much bigger than its band the set is drawn, in two rounds of the user asking: the
-  // largest doubled and then +75%, the others +70% and then +50%.
-  const ROCK_GROW_LARGEST = 2 * 1.75;
+  // How much bigger than its band the set is drawn, in rounds of the user asking: the largest
+  // doubled, then +75%, then halved back; the others +70% and then +50% and left there. The
+  // small ones staying put is the point — the set reads as a set because they differ.
+  const ROCK_GROW_LARGEST = 2 * 1.75 * 0.5;
   const ROCK_GROW_OTHERS = 1.7 * 1.5;
 
   function waterRocks() {
@@ -986,13 +1065,18 @@ export function createRenderer(canvas, world) {
        * like decals laid on the surface. Half the strength of the shadows on land, because
        * water scatters light and a hard shadow on it looks like a hole. */
       const sv = sunVec();
+      // The light's direction as a unit vector. `sunVec` is an offset in pixels; what the
+      // shading below wants is which way is away from the sun, at whatever distance it likes.
+      const ux = sv.dx / SHADOW_LEN, uy = sv.dy / SHADOW_LEN;
       ctx.save();
-      ctx.globalAlpha = SHADOW_ALPHA * 0.45;
+      ctx.globalAlpha = SHADOW_ALPHA * 0.62;
       ctx.fillStyle = '#000';
       for (const l of k.lumps) {
+        // Thrown a good way clear of the rock rather than tucked under it: a boulder stands
+        // well out of the water, and a shadow directly beneath a tall thing reads as noon.
         ctx.beginPath();
-        ctx.ellipse(x + l.dx + sv.dx, y + l.dy + sv.dy * 0.7,
-          l.r, l.r * l.squash * 0.8, l.turn, 0, 7);
+        ctx.ellipse(x + l.dx + ux * (l.r * 0.5 + SHADOW_LEN), y + l.dy + uy * (l.r * 0.4 + SHADOW_LEN * 0.8),
+          l.r * 1.02, l.r * l.squash * 0.78, l.turn, 0, 7);
         ctx.fill();
       }
       ctx.restore();
@@ -1026,15 +1110,20 @@ export function createRenderer(canvas, world) {
         ctx.ellipse(x + l.dx, y + l.dy, l.r * grow, l.r * l.squash * grow, l.turn, 0, 7);
         ctx.fill();
       };
-      for (const l of k.lumps) lump(l, 1.06, '#071320', 0.55);        // wet shadow underneath
+      // The dark side first, pushed AWAY from the sun, then the stone over most of it.
+      for (const l of k.lumps) lump({ ...l, dx: l.dx + ux * l.r * 0.2, dy: l.dy + uy * l.r * 0.2 },
+        1.06, '#071320', 0.6);                                        // the shaded side
       for (const l of k.lumps) lump(l, 1, '#2b3038', 0.92);           // the stone
-      // The two lit layers at half strength. They were the brightest thing in the open water
-      // and the only part of a rock that caught the eye from across the board — which is the
-      // opposite of what a piece of background is for.
-      for (const l of k.lumps) lump({ ...l, dx: l.dx - l.r * 0.22, dy: l.dy - l.r * 0.24 },
-        0.6, '#3c424c', 0.75);                                        // the lit shoulder
-      for (const l of k.lumps) lump({ ...l, dx: l.dx - l.r * 0.3, dy: l.dy - l.r * 0.34 },
-        0.26, '#4b515c', 0.5);                                        // the dry cap
+      /* The lit layers, offset TOWARD the sun instead of always up and to the left.
+       *
+       * The light on a map is a hash of its name and points anywhere in a half-circle, so a
+       * rock lit from the top left on a board whose shadows fall to the right was the only
+       * thing out there disagreeing with the sun. Still at half strength: they were once the
+       * brightest thing on open water, which is the opposite of what background is for. */
+      for (const l of k.lumps) lump({ ...l, dx: l.dx - ux * l.r * 0.32, dy: l.dy - uy * l.r * 0.32 },
+        0.6, '#3c424c', 0.78);                                        // the lit shoulder
+      for (const l of k.lumps) lump({ ...l, dx: l.dx - ux * l.r * 0.46, dy: l.dy - uy * l.r * 0.46 },
+        0.26, '#565d6a', 0.55);                                       // the dry cap, sunward
 
       // A wet line where it goes into the water, which is what sells "half submerged".
       ctx.globalAlpha = ROCK_ALPHA * 0.7;
@@ -1439,9 +1528,18 @@ export function createRenderer(canvas, world) {
       const cx = ox + (lx + lw / 2) * TILE_PX, cy = oy + (ly + lh / 2) * TILE_PX;
       const r = Math.hypot(vw, vh) * 0.62;
       depth = ctx.createRadialGradient(cx, cy, Math.min(vw, vh) * 0.18, cx, cy, r);
+      /* Flat for the first half, then falling away harder and harder.
+       *
+       * A gradient that darkens evenly the whole way out reads as a vignette — a lens effect
+       * laid over the picture. Water does not do that: there is a shelf around the island that
+       * is all much the same, and then a shelf edge, and past it the colour goes quickly. So
+       * the inner stops barely move, and from halfway out every stop is a bigger step than the
+       * one before it. */
       depth.addColorStop(0, 'rgba(29,81,118,0.30)');     // shelf, close in
-      depth.addColorStop(0.45, 'rgba(18,50,82,0.16)');
-      depth.addColorStop(1, 'rgba(2,8,16,0.55)');        // the deep, at the edges
+      depth.addColorStop(0.5, 'rgba(24,68,102,0.28)');   // still the shelf
+      depth.addColorStop(0.7, 'rgba(14,44,74,0.44)');    // the edge of it
+      depth.addColorStop(0.86, 'rgba(6,22,44,0.64)');
+      depth.addColorStop(1, 'rgba(1,5,12,0.86)');        // the deep, at the corners
       depthFor = `${vw}x${vh}`;
     }
     ctx.fillStyle = depth;
@@ -1876,6 +1974,8 @@ export function createRenderer(canvas, world) {
    * bird and turning crisp. */
   function drawGullShadows(ox, oy, t) {
     if (!world.gulls.length) return;
+    ctx.save();
+    clipToFloor(ox, oy);
     for (const g of world.gulls) {
       if (gullSeen.get(g.id)?.gone) continue;
       const p = gullPose(g, t);
@@ -1889,6 +1989,7 @@ export function createRenderer(canvas, world) {
       drawGull(ctx, { span: p.span, fold: p.fold, lean: p.lean, shadow: true });
       ctx.restore();
     }
+    ctx.restore();
   }
 
   /** A gull is down: the tumble, a burst of feathers, and the coin's glint where it lands. */
@@ -2461,9 +2562,16 @@ export function createRenderer(canvas, world) {
       ctx.lineTo(x, y + 6);
       ctx.lineTo(x + 5, y - 1);
       ctx.closePath();
-      ctx.fillStyle = '#f4f7fbee';
+      /* An emote gets a DARK bubble; words keep the white one.
+       *
+       * An emoji is a picture, not a glyph: it brings its own colours, and most of them are
+       * bright — a yellow face on near-white is two light things on top of each other and the
+       * shape disappears at the size this is drawn. Tinting or outlining it is not an option
+       * either, because the glyph is a bitmap the font owns. So the background moves instead.
+       * Words go the other way: dark text on white is what makes them readable. */
+      ctx.fillStyle = emoji ? '#131a24f2' : '#f4f7fbee';
       ctx.fill();
-      ctx.strokeStyle = '#0b0f16aa';
+      ctx.strokeStyle = emoji ? '#ffffff44' : '#0b0f16aa';
       ctx.lineWidth = 1;
       ctx.stroke();
 
@@ -2481,6 +2589,7 @@ export function createRenderer(canvas, world) {
     if (!set || !set.length) return;
     const { dx, dy } = sunVec();
     ctx.save();
+    clipToFloor(ox, oy);
     ctx.globalAlpha = SHADOW_ALPHA * 0.8;
     for (const p of alive) {
       if (!p.alive) continue;

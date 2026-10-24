@@ -262,6 +262,10 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     p.alive = true;
     unstick(state, p);
     applyStatus(state, p, STATUS.INVULN, STATUS_TICKS[STATUS.INVULN]);
+    // Godmode is a property of the SEAT, not of the body. `respawn` clears every status, and a
+    // new round builds a new player object from scratch, so without this the admin quietly
+    // stopped being invulnerable at the next round boundary and nothing said so.
+    if (seats[p.i]?.god) grantGod(p);
     state.events.push({ e: 'spawn', tick: state.tick, i: p.i, x: p.x, y: p.y });
   }
 
@@ -821,15 +825,31 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     return m;
   }
 
-  /** Toggle permanent invulnerability. Re-applied every tick would be neater, but this is a
-   *  very long status and nothing else writes INVULN except respawn, which also sets it. */
+  /** Permanent invulnerability, on the body in front of us. */
+  function grantGod(p) {
+    p.god = true;
+    applyStatus(state, p, STATUS.INVULN, 1e9);
+  }
+
+  /* Toggle permanent invulnerability.
+   *
+   * The flag is kept on the SEAT, which survives a death, a round end and a map change; the
+   * player object does not. It used to live on the player alone, so godmode lasted exactly
+   * until the next round began and then went off without a word. `respawn` reads the seat and
+   * puts it back on whatever body it has just built.
+   */
   function toggleGod(seat) {
+    const s = seats[seat];
     const p = state.players[seat];
-    if (!p) return false;
-    const on = !p.god;
-    p.god = on;
-    if (on) applyStatus(state, p, STATUS.INVULN, 1e9);
-    else { p.status &= ~STATUS.INVULN; delete p.statusUntil[STATUS.INVULN]; }
+    if (!s || !p) return false;
+    const on = !s.god;
+    s.god = on;
+    if (on) grantGod(p);
+    else {
+      p.god = false;
+      p.status &= ~STATUS.INVULN;
+      delete p.statusUntil[STATUS.INVULN];
+    }
     return on;
   }
 

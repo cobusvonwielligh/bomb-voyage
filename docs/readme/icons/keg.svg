@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="18" height="18">
+<path
+        fill="#edc24e"
+        d="M4.2 2h7.6c.5 2 .8 3.9.8 6s-.3 4-.8 6H4.2c-.5-2-.8-3.9-.8-6s.3-4 .8-6z"
+      />
+      <path
+        d="M3.6 5.2h8.8M3.6 10.8h8.8"
+        stroke="#000"
+        stroke-opacity=".35"
+        stroke-width="1.3"
+      />
+      <path
+        d="M6 6.2l4 3.6M10 6.2l-4 3.6"
+        stroke="#a83442"
+        stroke-width="1.6"
+        stroke-linecap="round"
+      />
+</svg>
