@@ -8,7 +8,7 @@ import {
   TICK_MS, TICK_HZ, NAME_MAX_CHARS, UNITS_PER_TILE, IN_BOMB, playerColor,
   MAX_SKATES, MAX_SHIELDS, MAX_STAMINA_LEVELS, IDLE_DISCONNECT_MS, RESPAWN_DELAY_TICKS, TILE_PX,
   MAX_BOMBS_CARRIED, MAX_RADIUS, START_BOMBS, START_RADIUS,
-  STAMINA_SHOW_AT, staminaMaxFor, POWDER_RADIUS, PERK, STATUS,
+  STAMINA_SHOW_AT, staminaMaxFor, POWDER_RADIUS, PERK, STATUS, VOLUME_MUSIC_DEFAULT,
 } from '/shared/constants.js';
 import { createNet } from './net.js';
 import { createInput, typingSomewhere, createTap } from './input.js';
@@ -149,12 +149,15 @@ const syncAudio = () => {
   $('sfxVol').value = Math.round(sfx.volume * 100);
   m.style.setProperty('--lvl', music.volume);
   f.style.setProperty('--lvl', sfx.volume);
-  m.classList.toggle('on', music.playing && music.volume > 0);
-  m.classList.toggle('muted', !music.playing || music.volume === 0);
-  // The glyph IS the state: a play triangle means "press this to hear something", two bars mean
-  // "this is running". A note icon that merely dims is a thing you have to learn.
+  // These describe the FADER, not the transport: a paused track at 60% is still a 60% fader,
+  // and greying it out would say the level had been lost when it had not.
+  m.classList.toggle('on', music.volume > 0);
+  m.classList.toggle('muted', music.volume === 0);
+  // The glyph IS the transport state: a play triangle means "press this to hear something", two
+  // bars mean "this is running". A note icon that merely dims is a thing you have to learn.
   $('musicBtn').firstElementChild.firstElementChild
     .setAttribute('href', music.playing ? '#i-pause' : '#i-play');
+  $('musicBtn').classList.toggle('on', music.playing);
   f.classList.toggle('on', sfx.volume > 0);
   f.classList.toggle('muted', sfx.volume === 0);
   // The speaker glyph becomes a crossed-out one at zero, because a grey bar alone is easy to
@@ -163,8 +166,25 @@ const syncAudio = () => {
     .setAttribute('href', sfx.volume === 0 ? '#i-mute' : '#i-spk');
   syncNowPlaying();
 };
+// Play/pause. Nothing else: it used to carry the volume fader too, which meant the music level
+// was hidden under the transport and the only fader anybody could find was the sound effects one.
 $('musicBtn').onclick = async () => { await music.toggle(); syncAudio(); };
 $('vol').oninput = e => { music.setVolume(e.target.value / 100); syncAudio(); };
+
+/* Mute, as a real toggle — down to zero and back to whatever it was.
+ *
+ * Deliberately NOT the same thing as pause. Pause stops the track and loses your place in it;
+ * mute leaves it running and silent, which is what you want when somebody walks over to your
+ * desk. The same pair exists for the sound effects below, and the two faders behave
+ * identically because being able to guess the second one from the first is the whole point of
+ * putting them side by side.
+ */
+let musicBeforeMute = VOLUME_MUSIC_DEFAULT;
+$('musicVolBtn').onclick = () => {
+  if (music.volume > 0) { musicBeforeMute = music.volume; music.setVolume(0); }
+  else music.setVolume(musicBeforeMute || VOLUME_MUSIC_DEFAULT);
+  syncAudio();
+};
 
 /* Skip, in both directions.
  *

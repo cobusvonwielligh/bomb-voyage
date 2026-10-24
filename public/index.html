@@ -39,6 +39,9 @@
       <path d="M9.6 5.4a3.6 3.6 0 010 5.2M11.8 3.4a6.6 6.6 0 010 9.2" stroke="currentColor"
             stroke-width="1.4" fill="none" stroke-linecap="round"/>
     </symbol>
+    <symbol id="i-note" viewBox="0 0 16 16">
+      <path fill="currentColor" d="M13 2v8.2a2.6 2.6 0 10-1.6 2.4V5.6L7 6.8v5.6a2.6 2.6 0 11-1.6-2.4V4.4z"/>
+    </symbol>
     <symbol id="i-play" viewBox="0 0 16 16">
       <path fill="currentColor" d="M4 2.5l9 5.5-9 5.5z"/>
     </symbol>
@@ -214,23 +217,32 @@
      Icon and level in one control: the icon is the mute toggle, the slider unrolls out of it on
      hover or focus, and the level stays readable as a bar under the glyph while collapsed. -->
 <div id="dock">
+  <!-- Transport first, then the two faders. They were one control and that was a mistake: the
+       music level lived under the play/pause button, so the only volume you could SEE was the
+       sound effects one and the other may as well not have existed. A button does one thing. -->
   <button class="volBtn skip" id="prevTrack" title="previous track" aria-label="previous track">
     <svg><use href="#i-prev"/></svg>
   </button>
-  <!-- Play/pause and the level in one control: the glyph is the transport, and the fader slides
-       up out of it on hover or focus. The level stays readable as a bar under the glyph while
-       the fader is closed, so the collapsed state still answers "how loud is this". -->
-  <span class="vol" id="musicCtl">
-    <button class="volBtn" id="musicBtn" title="play/pause" aria-label="play or pause the music">
-      <svg><use href="#i-play"/></svg>
-    </button>
-    <span class="slot"><input id="vol" type="range" min="0" max="100" value="10" aria-label="music volume"></span>
-  </span>
+  <button class="volBtn" id="musicBtn" title="play/pause" aria-label="play or pause the music">
+    <svg><use href="#i-play"/></svg>
+  </button>
   <button class="volBtn skip" id="nextTrack" title="next track" aria-label="next track">
     <svg><use href="#i-next"/></svg>
   </button>
+
+  <span class="sep"></span>
+
+  <!-- Two faders, side by side and identical: click the glyph to mute, hover or focus it and
+       the level slides up out of it. The level stays readable as a bar under the glyph while
+       the fader is closed, so the collapsed state still answers "how loud is this". -->
+  <span class="vol" id="musicCtl">
+    <button class="volBtn" id="musicVolBtn" title="music volume (click to mute)" aria-label="music volume">
+      <svg><use href="#i-note"/></svg>
+    </button>
+    <span class="slot"><input id="vol" type="range" min="0" max="100" value="10" aria-label="music volume"></span>
+  </span>
   <span class="vol" id="sfxCtl">
-    <button class="volBtn" id="sfxBtn" title="sound effects (click to mute)" aria-label="sound effects">
+    <button class="volBtn" id="sfxBtn" title="sound effects volume (click to mute)" aria-label="sound effect volume">
       <svg><use href="#i-spk"/></svg>
     </button>
     <span class="slot"><input id="sfxVol" type="range" min="0" max="100" value="75" aria-label="sound effect volume"></span>

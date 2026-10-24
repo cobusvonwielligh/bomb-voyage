@@ -443,13 +443,25 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 }
 .volBtn svg { width: 18px; height: 18px; display: block; }
 
-/* Skip back and skip forward. Narrower than the play button and without a level bar under them,
-   because they are not a level — the asymmetry is what makes the middle one read as the one you
-   press most. */
+/* Skip back and skip forward. Narrower than play/pause and without a level bar, because they
+   are not a level — the asymmetry is what makes the middle one read as the one you press most. */
 .volBtn.skip { width: 24px; height: 30px; color: #6f7b8c; }
 .volBtn.skip svg { width: 14px; height: 14px; }
 .volBtn.skip:hover, .volBtn.skip:focus-visible { color: var(--ink); background: #ffffff10; }
-.volBtn.skip::after { content: none; }     /* the level bar belongs to the fader buttons only */
+
+/* The level bar belongs to the two FADER buttons and to nothing else. On a transport button it
+   would be a progress bar that never moves, which is worse than no bar at all. */
+.volBtn.skip::after, #musicBtn::after { content: none; }
+#musicBtn { width: 30px; }
+#musicBtn.on { color: var(--gold); }
+
+/* A hairline between the transport and the two faders. Three buttons then two buttons reads as
+   five buttons without it, and the pill is small enough that five of anything is a row. */
+#dock .sep {
+  width: 1px; height: 16px; flex: 0 0 auto;
+  margin: 0 4px;
+  background: #ffffff1f;
+}
 .vol:hover .volBtn, .volBtn:focus-visible { color: var(--ink); }
 .vol.on .volBtn { color: var(--gold); }
 
