@@ -7,11 +7,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { tick as stepRound } from '../shared/sim/round.js';
 import { createState } from '../shared/sim/state.js';
-import { dropChance, perkTarget, collect, drop } from '../shared/sim/perks.js';
+import { dropChance, perkTarget, collect, drop, maybeDrop } from '../shared/sim/perks.js';
+import { tileCentre, createPlayer } from '../shared/sim/state.js';
 import * as perks from '../shared/sim/perks.js';
 import {
   PERK, PERK_DROP_CHANCE_SOFT, PERK_GLUT_FLOOR, PERK_SCARCE_BOOST, PERK_TARGET_MIN,
   HITBOX_UNITS, TICK_HZ, PERK_EXPIRE_TICKS, PERK_FADE_TICKS,
+  GOLD_MAX_PER_ROUND, SCORE,
 } from '../shared/constants.js';
 import { MAPS, buildMap, cellType } from '../shared/maps.js';
 import { PERK_WEIGHTS, BLOCK } from '../shared/constants.js';
@@ -175,4 +177,62 @@ test('the sea boulders are placed against the view, with a visibility guarantee'
   // And its slide along the shore must be clamped, which is the easy way to lose a guarantee
   // you only checked on one axis.
   assert.match(render, /Math\.max\(0, spread - r\)/, 'the along-shore slide is unclamped');
+});
+
+// ─── gold coins ───────────────────────────────────────────────────────────────
+
+test('gold is capped per round, and the cap counts drops rather than pickups', () => {
+  /* Two limits do two jobs. The WEIGHT makes any one coin a surprise; the CAP makes the
+   * surprise finite, so a long round on a wall-heavy map cannot pay out five times what a short
+   * one on a sparse map does. Without the cap the reward is a function of the map.
+   *
+   * Counted on the DROP: a coin nobody reached was still gold this round contained. Counting
+   * pickups instead would let an expired coin quietly refund itself, and a round could hand out
+   * far more than five.
+   */
+  const s = fresh();
+  for (let i = 0; i < GOLD_MAX_PER_ROUND + 4; i++) drop(s, 1 + i * 2, 1, PERK.GOLD);
+  assert.equal(s.goldDropped, GOLD_MAX_PER_ROUND + 4,
+    'drop() is the primitive and does not enforce the cap — the roll does');
+
+  // The roll is where the cap lives. Once it is hit, no amount of breaking walls produces gold.
+  const r = fresh();
+  r.goldDropped = GOLD_MAX_PER_ROUND;
+  let coins = 0;
+  for (let i = 0; i < 4000; i++) {
+    const before = r.perks.length;
+    maybeDrop(r, (i % 30) + 2, ((i / 30) | 0) + 2, BLOCK.SOFT);
+    if (r.perks.length > before && r.perks[r.perks.length - 1].type === PERK.GOLD) coins++;
+    r.perks.length = 0;                      // keep the supply-and-demand rate out of it
+  }
+  assert.equal(coins, 0, `${coins} coins dropped after the cap was reached`);
+});
+
+test('gold is rare, and rarer than rum', () => {
+  const total = Object.values(PERK_WEIGHTS).reduce((n, w) => n + w, 0);
+  const share = PERK_WEIGHTS[PERK.GOLD] / total;
+  assert.ok(share > 0.015 && share < 0.03, `gold is ${(share * 100).toFixed(2)}% of drops, wanted ~2%`);
+  assert.ok(PERK_WEIGHTS[PERK.GOLD] < PERK_WEIGHTS[PERK.RUM],
+    'gold should be the rarest thing on the board');
+});
+
+test('a coin pays XP and changes nothing else about you', () => {
+  // The whole design: every other perk makes you better at THIS round, and this one does not.
+  const s = fresh();
+  const p = createPlayer(0, 'p');
+  p.alive = true;
+  p.x = tileCentre(3); p.y = tileCentre(3);
+  s.players[0] = p;
+  const before = {
+    bombs: p.bombs, radius: p.radius, speed: p.speed, shields: p.shields,
+    stamina: p.stamina, status: p.status,
+  };
+  drop(s, 3, 3, PERK.GOLD);
+  collect(s);
+
+  assert.equal(p.gold, 1, 'the coin was not collected');
+  assert.equal(p.score, SCORE.GOLD, `a coin paid ${p.score}, wanted ${SCORE.GOLD}`);
+  for (const [k, v] of Object.entries(before)) {
+    assert.equal(p[k], v, `collecting gold changed ${k}, which it must not`);
+  }
 });

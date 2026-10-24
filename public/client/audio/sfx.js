@@ -36,6 +36,18 @@ const CLOSE_UP = new Set([
   'hiccup', 'chat', 'mention', 'ready', 'playoff', 'levelup',
 ]);
 
+/* How loud somebody ELSE's sound is, against the same thing happening to you.
+ *
+ * Distance attenuation alone is not enough. With sixteen players on a board, most of what you
+ * hear is other people — their bombs, their pickups, their deaths — and all of it arrives at
+ * the same volume as your own as soon as they are standing near you. The result is that the
+ * sound you most need to hear, the one you caused, is buried in fifteen other people's.
+ *
+ * A third quieter keeps them all audible as information and gets them out of the way of yours,
+ * which is the actual job: this mix has one listener and fifteen other subjects.
+ */
+const THEIRS_SCALE = 0.65;
+
 // Sounds whose whole job is to say WHERE. Panned to the full width of the field rather than the
 // gentle third the general rolloff gives, because a cue you have to concentrate to place is not
 // a cue in a game where you are being chased.
@@ -868,6 +880,8 @@ export function createSfx({ listener }) {
 
       const where = place(CLOSE_UP.has(name) ? undefined : tx, ty, WIDE_PAN.has(name));
       if (!where) return;                   // too far away to hear
+      // `theirs` is set by the caller, which is the only place that knows whose event this was.
+      if (opts?.theirs) where.level *= THEIRS_SCALE;
 
       const c = audioContext();
       if (c.state !== 'running') return;    // still blocked; do not pile up dead nodes

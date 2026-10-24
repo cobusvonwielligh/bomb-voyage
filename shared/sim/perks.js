@@ -6,7 +6,7 @@ import {
   PERKS_DROPPED_ON_DEATH, START_BOMBS, START_RADIUS, MAX_STAMINA_LEVELS,
   STATUS_TICKS,
   PERK_TARGET_PER_PLAYER, PERK_TARGET_MIN, PERK_SCARCE_BOOST, PERK_GLUT_FLOOR,
-  PERK_TAKE_DECAY, PERK_DEMAND_BOOST,
+  PERK_TAKE_DECAY, PERK_DEMAND_BOOST, GOLD_MAX_PER_ROUND,
 } from '../constants.js';
 import { staminaMaxFor } from '../constants.js';
 import { tileAt, toTile, applyStatus } from './state.js';
@@ -21,6 +21,23 @@ function roll(next) {
   let r = randInt(next, TOTAL);
   for (const [type, w] of LIVE) { if (r < w) return type; r -= w; }
   return PERK.BOMB;
+}
+
+/* Gold is the one type with a cap on top of its weight, so the roll has to be able to say no.
+ *
+ * Re-rolling rather than removing gold from the table once the cap is hit, because removing it
+ * would silently redistribute its 2% across the other perks — a late round would have very
+ * slightly more bombs and fire in it than an early one, for no reason anybody could name. One
+ * re-roll keeps the other six at exactly their own weights and turns a capped coin into
+ * "nothing special this time", which is what it should be.
+ *
+ * Bounded at two attempts: at 2% the chance of needing a third is one in two thousand, and an
+ * unbounded loop inside the simulation is never worth the tail it saves. */
+function rollDroppable(state) {
+  let type = roll(state.next);
+  if (type === PERK.GOLD && state.goldDropped >= GOLD_MAX_PER_ROUND) type = roll(state.next);
+  if (type === PERK.GOLD && state.goldDropped >= GOLD_MAX_PER_ROUND) type = PERK.BOMB;
+  return type;
 }
 
 /**
@@ -54,11 +71,14 @@ export function dropChance(state) {
 export function maybeDrop(state, tx, ty, blockType) {
   const always = PERK_DROP_ALWAYS.includes(blockType);
   if (!always && state.next() > dropChance(state)) return;
-  drop(state, tx, ty, roll(state.next));
+  drop(state, tx, ty, rollDroppable(state));
 }
 
 export function drop(state, tx, ty, type) {
   if (state.perks.some(k => k.tx === tx && k.ty === ty)) return;
+  // Counted on the DROP, not on the pickup: the cap is on how much gold a round contains, and a
+  // coin that expires on the floor was still gold this round had in it.
+  if (type === PERK.GOLD) state.goldDropped = (state.goldDropped || 0) + 1;
   const perk = { id: state.nextPerkId++, tx, ty, type, until: state.tick + PERK_EXPIRE_TICKS };
   state.perks.push(perk);
   state.events.push({ e: 'perkadd', tick: state.tick, id: perk.id, x: tx, y: ty, p: type });
@@ -93,6 +113,17 @@ function apply(state, p, type) {
       applyStatus(state, p, STATUS.DRUNK, STATUS_TICKS[STATUS.DRUNK]);
       return true;
 
+    /* Gold changes nothing. That is the design, not an omission.
+     *
+     * Every other perk makes you better at the round you are in, which means every other perk
+     * is a reason to take a risk NOW. A coin is a reason to take a risk for later, and the two
+     * feel different precisely because this one does nothing for you today. Returning true pays
+     * SCORE.GOLD rather than SCORE.PERK_CAPPED — it is always "gained", it can never be capped,
+     * and there is no ceiling to walk past. */
+    case PERK.GOLD:
+      p.gold = (p.gold || 0) + 1;
+      return true;
+
     case PERK.STAMINA:
       if ((p.staminaLevel ?? 0) >= MAX_STAMINA_LEVELS) return false;
       p.staminaLevel = (p.staminaLevel ?? 0) + 1;
@@ -120,7 +151,8 @@ export function collect(state) {
       const perk = state.perks[k];
       if (perk.tx < x0 || perk.tx > x1 || perk.ty < y0 || perk.ty > y1) continue;
       const gained = apply(state, p, perk.type);
-      p.score += gained ? SCORE.PERK : SCORE.PERK_CAPPED;
+      p.score += perk.type === PERK.GOLD ? SCORE.GOLD
+        : gained ? SCORE.PERK : SCORE.PERK_CAPPED;
       state.perks.splice(k, 1);
       state.perkTakeRate += 1;
       state.events.push({ e: 'perkget', tick: state.tick, id: perk.id, i: p.i });

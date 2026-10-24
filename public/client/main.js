@@ -50,6 +50,7 @@ const PERK_LABEL = {
   4: { text: 'SHIELD', colour: '#5ad1a0' },
   15: { text: '+ STIM', colour: '#ffe04a' },
   16: { text: 'RUM', colour: '#d99a55' },
+  17: { text: 'GOLD!', colour: '#f6e7a9' },
 };
 
 // The mascot is an image now, ringed by the same moving gradient as the panels. The hand-drawn
@@ -292,7 +293,7 @@ const net = createNet({
 
         case 'bomb':
           // Your own bomb already made a noise the instant you pressed the key, two ticks ago.
-          if (e.o !== world.you) sfx.play('place', e.x, e.y);
+          if (e.o !== world.you) sfx.play('place', e.x, e.y, { theirs: true });
           break;
 
         case 'boom': {
@@ -311,7 +312,7 @@ const net = createNet({
           const type = perkTypes.get(e.id);
           // Rum is the one pickup that might be bad news, so it is the one that does not go up.
           sfx.playAtUnits(type === PERK.RUM ? 'glug' : 'pickup',
-            p.rx ?? p.x, p.ry ?? p.y, { perk: type });
+            p.rx ?? p.x, p.ry ?? p.y, { perk: type, theirs: e.i !== world.you });
           if (e.i === world.you) {
             showUpgrade(type);
             if (type === PERK.RUM) quips.rum();
@@ -330,7 +331,7 @@ const net = createNet({
 
         case 'shield': {
           const p = world.players[e.i];
-          if (p) sfx.playAtUnits('shield', p.rx ?? p.x, p.ry ?? p.y);
+          if (p) sfx.playAtUnits('shield', p.rx ?? p.x, p.ry ?? p.y, { theirs: e.i !== world.you });
           // Being saved by a shield deserves to be as legible as dying would have been.
           if (e.i === world.you) renderer?.addFlash(0.4, '90,209,160');
           break;
@@ -338,7 +339,7 @@ const net = createNet({
 
         case 'status': {
           const p = world.players[e.i];
-          if (p) sfx.playAtUnits('status', p.rx ?? p.x, p.ry ?? p.y);
+          if (p) sfx.playAtUnits('status', p.rx ?? p.x, p.ry ?? p.y, { theirs: e.i !== world.you });
           break;
         }
 
@@ -350,7 +351,7 @@ const net = createNet({
           // Panned and attenuated by where it happened, so the sound alone tells you which side
           // of you somebody just appeared on. Your own is centred, because you are not elsewhere.
           if (e.i === world.you) { sfx.play('ownSpawn'); quips.spawned(); }
-          else sfx.playAtUnits('spawn', e.x, e.y);
+          else sfx.playAtUnits('spawn', e.x, e.y, { theirs: true });
           break;
 
         // The death screen is driven by whether you are alive (see the HUD block below), not by
@@ -375,7 +376,7 @@ const net = createNet({
           } else if (e.by === world.you) {
             sfx.play('kill');
             renderer?.addFlash(0.22, '134,217,255');   // an accent blink: that one was yours
-          } else sfx.playAtUnits('death', e.x, e.y);
+          } else sfx.playAtUnits('death', e.x, e.y, { theirs: true });
           break;
         }
       }
@@ -860,7 +861,9 @@ function drawHud() {
   drawXp(mine);
   setValue($('vKills'), me.kills);
   setValue($('vDeaths'), me.deaths, { worse: true });
-  setValue($('vScore'), me.score);
+  // Gold. Lifetime, not this round — it is the one stat here that accumulates, which is the
+  // whole point of it, and it is going to be a currency.
+  setValue($('vGold'), me.gold || 0);
   renderLive();
 
   // Every live perk as a pip, lit when you are carrying more than you started with. Shields used
@@ -1068,7 +1071,7 @@ function renderScores() {
     cell(tr, r ? `${r.level} \u00b7 ${r.tier}` : '\u2014', null, true);
     num(cell(tr, p.kills));
     num(cell(tr, p.deaths));
-    num(cell(tr, p.score));
+    num(cell(tr, p.gold || 0, (p.gold || 0) > 0 ? 'var(--gold)' : null));
     num(cell(tr, r ? r.xp.toLocaleString() : '\u2014', null, true));
     if (p.i === world.you) tr.style.fontWeight = 'bold';
     body.append(tr);
@@ -1081,6 +1084,7 @@ function renderScores() {
     cell(tr, n + 1, null, true);
     cell(tr, e.name);
     cell(tr, `${e.level} \u00b7 ${e.tier}`, null, true);
+    num(cell(tr, e.gold || 0, (e.gold || 0) > 0 ? 'var(--gold)' : null));
     num(cell(tr, e.score));
     best.append(tr);
   }
@@ -1094,7 +1098,7 @@ function leave() {
   $('menu').style.display = 'grid';
   $('hud').classList.remove('on');
   $('dead').style.display = 'none';
-  $('scores').style.display = 'none';
+  $('scores').classList.remove('on');
   scoresOpen = false;
   roundOverUntil = 0;
   clearTimeout(idleTimer);
@@ -1176,11 +1180,14 @@ function play(observe = false) {
      */
     const r = bomb.r ?? bomb.radius ?? 1;
     const keg = r >= POWDER_RADIUS;
+    // Somebody else's blast. A keg is nobody's for this purpose — it was not placed, and the
+    // one thing everybody needs to hear at full volume is seven tiles of fire going off.
+    const theirs = !keg && (bomb.o ?? bomb.owner) !== world.you;
     // A blast before its own fuse ran out was set off by something else. A bomb we never even
     // saw placed counts too — that only happens when a chain reaches it inside one snapshot.
     const chain = bomb.at === undefined || world.tick < bomb.at;
     if (keg) sfx.play('kegboom', bomb.tx, bomb.ty);
-    else sfx.play('boom', bomb.tx, bomb.ty, { chain, size: (r - 1) / (MAX_RADIUS - 1) });
+    else sfx.play('boom', bomb.tx, bomb.ty, { chain, size: (r - 1) / (MAX_RADIUS - 1), theirs });
 
     // Shake falls off with distance and is saturating, so a chain reaction across the map rattles
     // once rather than sixteen times. Nothing past eight tiles moves the camera at all.
@@ -1239,7 +1246,7 @@ const tapRespawn = createTap();
 
 const toggleScores = tapScores(() => {
   scoresOpen = !scoresOpen;
-  $('scores').style.display = scoresOpen ? 'block' : 'none';
+  $('scores').classList.toggle('on', scoresOpen);
   if (scoresOpen) renderScores();
 });
 
@@ -1247,7 +1254,7 @@ const openChat = tapChat(() => { $('chatInput').focus(); music.duck(true); });
 
 const onEscape = tapEscape(() => {
   if (chatHasFocus()) { $('chatInput').blur(); music.duck(false); }
-  else if (scoresOpen) { scoresOpen = false; $('scores').style.display = 'none'; }
+  else if (scoresOpen) { scoresOpen = false; $('scores').classList.remove('on'); }
   else if (running) leave();                 // there has to be a way out of the game
 });
 

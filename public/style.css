@@ -234,7 +234,36 @@ canvas#game {
 /* The shine is a flourish and the outline is not. Reduced motion keeps the metal and the edge
    and parks the highlight where it looks best, which is just off centre. */
 @media (prefers-reduced-motion: reduce) {
-  .cast { animation: none; background-position: 42% 0, 0 0; }
+  .cast, .castSm { animation: none; background-position: 42% 0, 0 0; }
+}
+
+/* ─── cast gold, small ─────────────────────────────────────────────────────────
+ * The same metal for type between about 13 and 20px: your name, the panel headings, the
+ * scoreboard's leader.
+ *
+ * It is a SEPARATE class and not just `.cast` at a smaller size, because the full ramp has
+ * eight stops and at 15px there are not eight rows of pixels to put them in — that is the mush
+ * documented on `.cast`. This one has four: dark, highlight, body, dark. Enough to read as
+ * metal, few enough that each one gets more than a pixel.
+ *
+ * No drop-shadow glow either. At this size a bloom is a blur, and these sit in the top bar where
+ * something is always moving behind them. The thin edge stays, because without it pale gold on
+ * a translucent panel over bright water is not type, it is a suggestion. */
+.castSm {
+  background:
+    linear-gradient(104deg,
+      #ffffff00 43%, #ffffff00 47%, #ffffffe0 50%, #ffffff00 53%, #ffffff00 57%),
+    linear-gradient(180deg, #a06a12 0%, var(--gold-hi) 34%, var(--gold) 62%, #8a5a10 100%);
+  background-size: 240% 100%, 100% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+  text-shadow: none;
+  filter:
+    drop-shadow(0.8px 0 0 #140d02) drop-shadow(-0.8px 0 0 #140d02)
+    drop-shadow(0 0.8px 0 #140d02) drop-shadow(0 -0.8px 0 #140d02)
+    drop-shadow(0 1px 0 #0009);
+  animation: castShine 9s linear infinite;
 }
 
 .edge {
@@ -776,9 +805,11 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 }
 /* The text face, not the display one. This is a name read at a glance beside the mascot, and
    A display face turns anything with a lowercase 'rn' or a '1' in it into a puzzle at 17px. */
+/* Your name, beside the mascot's face. Cast, at the small end — it is the one piece of text on
+   screen that is about YOU, and the only reason it was ever the accent colour. */
 #who {
-  font-family: var(--text); font-weight: 700; font-size: 17px; color: var(--gold);
-  text-shadow: var(--rim), 0 2px 0 #0008; letter-spacing: .03em; display: block;
+  font-family: var(--text); font-weight: 700; font-size: 17px;
+  letter-spacing: .03em; display: block;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 #rank {
@@ -839,6 +870,16 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 #cardStats .k {
   color: var(--dim); font-size: 9px; text-transform: uppercase;
   letter-spacing: .14em; font-family: var(--text); margin-right: 4px;
+}
+
+/* Gold. The only stat with a picture instead of a word, because it is the only one that is a
+   THING rather than a count of events — and because a coin is faster to recognise than the
+   four letters it would take to spell it. */
+.goldStat { display: inline-flex; align-items: center; gap: 5px; color: var(--gold); }
+.goldStat .coin {
+  width: 13px; height: 13px; display: block;
+  color: var(--gold);
+  filter: drop-shadow(0 1px 0 #0008) drop-shadow(0 0 5px #edc24e4d);
 }
 
 /* Experience.
@@ -915,9 +956,12 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   #xp.levelup #xpFill, #xp.levelup #xpLevel, #xp.levelup #xpTrack::after { animation: none; }
 }
 
+/* Panel headings. 11px and cast, up from 9.5px flat grey — the cast ramp needs the extra
+   pixels, and these are labels you read once per session rather than data. */
 .panelHead {
-  margin: 0 0 7px; font-size: 9.5px; font-weight: normal; color: var(--dim);
-  text-transform: uppercase; letter-spacing: .22em;
+  margin: 0 0 7px; font-size: 11px; font-weight: normal;
+  font-family: var(--display);
+  text-transform: uppercase; letter-spacing: .18em;
 }
 
 #liveRows { list-style: none; margin: 0; padding: 0; font-size: 12.5px; }
@@ -1006,7 +1050,13 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   width: calc(100vw - var(--side) - var(--gap) * 3);
   height: calc(100vh - var(--bar) - var(--gap) * 3);
   display: grid; place-items: center;
+  /* A third of the way up from centre, not centred.
+   *
+   * Dead centre is where your own player is, which is the one spot on the board a banner must
+   * not cover — an announcement that hides the thing it is announcing about is worse than none.
+   * A third up puts it clear of the fight and still well inside the eye's resting area. */
   align-content: center;
+  padding-bottom: 22%;
 }
 @media (max-width: 1080px) { #centre { width: calc(100vw - var(--gap) * 2); } }
 
@@ -1033,7 +1083,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   position: absolute; left: 50%; top: 50%;
   /* px, not em: `#streak` has no font-size of its own, so `1.25em` resolved against the
      inherited 16px and drew a 20px ribbon behind 118px type — a pinstripe, not a band. */
-  width: 150vw; height: 92px;
+  width: 150vw; height: 78px;
   margin-left: -75vw;
   transform: translateY(-62%) skewX(-13deg) scaleX(0);
   background: linear-gradient(90deg,
@@ -1051,7 +1101,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 }
 
 #streak .big, #deadBanner .big {
-  display: block; font-size: 66px; color: var(--gold);
+  display: block; font-size: 56px; color: var(--gold);
   text-shadow: 0 0 28px #edc24e, 0 5px 0 #0009;
 }
 /* The first two rungs are cast gold. The top two are not, and that is the escalation: once the
@@ -1070,12 +1120,12 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   animation: castShine 1.1s linear infinite;
 }
 #streak .who, #deadBanner .who {
-  display: block; font-size: 16px; color: var(--ink); margin-top: 8px; opacity: .85;
+  display: block; font-size: 14px; color: var(--ink); margin-top: 7px; opacity: .85;
   font-family: var(--text); letter-spacing: .14em; text-transform: uppercase;
 }
 /* The name gets the accent and some weight: it is the half of the message that says whether
    this is a thing to celebrate or a thing to worry about. */
-#streak .who { font-size: 19px; font-weight: 700; color: var(--gold); opacity: 1; }
+#streak .who { font-size: 16px; font-weight: 700; color: var(--gold); opacity: 1; }
 
 /* Each rung is bigger and hotter than the last, so the escalation is visible as well as audible.
    Every step is a real jump — 66, 82, 100, 118 — because two sizes eight pixels apart are the
@@ -1085,20 +1135,22 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
    of type inside a 910px board on a 1280 screen: one narrow window away from wrapping, and a
    kill streak that wraps onto two lines is a paragraph. The middle term does the work; the
    outer two stop it from vanishing or exploding. */
-#streak.s2 .big { font-size: clamp(40px, 5.2vw, 66px); }
-#streak.s3 .big { font-size: clamp(46px, 6.4vw, 82px); }
+/* 15% off every rung. They were sized for a banner in the middle of an empty screen; up at a
+   third they sit over the board, and anything covering the board has to earn its width. */
+#streak.s2 .big { font-size: clamp(34px, 4.4vw, 56px); }
+#streak.s3 .big { font-size: clamp(39px, 5.4vw, 70px); }
 #streak.s4 .big {
-  font-size: clamp(52px, 7.8vw, 100px); color: #fff;
+  font-size: clamp(44px, 6.6vw, 85px); color: #fff;
   text-shadow: 0 0 44px #edc24e, 0 0 90px #e8655a, 0 7px 0 #0009;
 }
 #streak.ace .big {
-  font-size: clamp(58px, 9.2vw, 118px); color: #fff;
+  font-size: clamp(49px, 7.8vw, 100px); color: #fff;
   text-shadow: 0 0 48px #ffc98a, 0 0 100px #edc24e, 0 0 170px #b36bff, 0 8px 0 #0009;
 }
 /* The top two rungs get a hotter band and a wider rule as well, or the escalation lives entirely
    in the font size and stops being felt somewhere around the third one. */
-#streak.s3::before { height: 110px; }
-#streak.s4::before, #streak.ace::before { height: 134px; filter: brightness(1.4); }
+#streak.s3::before { height: 94px; }
+#streak.s4::before, #streak.ace::before { height: 114px; filter: brightness(1.4); }
 #streak.ace::before {
   background: linear-gradient(90deg,
     #edc24e00 0%, #b36bff33 15%, #edc24e66 50%, #b36bff33 85%, #edc24e00 100%);
@@ -1318,12 +1370,40 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 #roundTable tr.me td:first-child { padding-left: 8px; }
 #roundNext { margin: 12px 0 0; text-align: center; color: var(--dim); font-size: 11px; }
 
+/* Centred on the BOARD, not the window — the same correction the kill-streak banner got.
+ *
+ * The side panel is 340px of chrome and the top bar is another 52. A panel centred on the
+ * viewport therefore sits visibly off to one side and low of the thing you are looking at, and
+ * TAB is pressed mid-round by somebody who wants to glance and get back. Anchored to the board
+ * it lands where their eyes already are.
+ *
+ * The inset values are the same expressions `canvas#game` uses, so the two can never drift. */
 #scores {
   --panel-fill: #141b24f7;
-  position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 9;
-  display: none; border-radius: 12px; padding: 20px 24px; min-width: 500px;
-  max-height: 82vh; overflow-y: auto;
+  position: fixed; z-index: 9;
+  top: calc(var(--bar) + var(--gap) * 2);
+  left: var(--gap);
+  width: calc(100vw - var(--side) - var(--gap) * 3);
+  height: calc(100vh - var(--bar) - var(--gap) * 3);
+  /* The panel itself is centred INSIDE that box rather than filling it: a scoreboard the size
+     of the board is a page, and this is a glance. `place-items` does the centring, and the grid
+     is only here to do it. */
+  display: none; place-items: center;
+  pointer-events: none;
+  background: none; border: 0; padding: 0;
 }
+#scores.on { display: grid; }
+#scores > * { pointer-events: auto; }
+
+/* The card. Everything that used to be on #scores lives here now, so the outer element can be
+   a positioning frame and nothing else. */
+#scoresCard {
+  --panel-fill: #141b24f7;
+  border-radius: 12px; padding: 20px 24px; min-width: 500px; max-width: 100%;
+  max-height: 100%; overflow-y: auto;
+}
+
+@media (max-width: 1080px) { #scores { width: calc(100vw - var(--gap) * 2); } }
 #scores table { width: 100%; border-collapse: collapse; font-size: 13px; }
 #scores th {
   color: var(--dim); font-weight: normal; text-align: left; padding-bottom: 7px;
@@ -1336,10 +1416,10 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 #scores .sub { margin: 14px 0 0; text-align: center; }
 #allTime { display: none; margin-top: 18px; padding-top: 14px; border-top: 1px solid #edc24e33; }
 #allTime h2 {
-  margin: 0 0 8px; font-size: 11px; font-weight: normal; color: var(--gold);
+  margin: 0 0 8px; font-size: 13px; font-weight: normal;
   letter-spacing: .2em; text-transform: uppercase; font-family: var(--display);
-  text-shadow: var(--rim);
 }
+
 
 /* ─── menu ────────────────────────────────────────────────────────────────────── */
 

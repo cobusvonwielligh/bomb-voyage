@@ -56,18 +56,22 @@ export function createLeaderboard({ dataDir }) {
     score: e.score,
     kills: e.kills,
     deaths: e.deaths,
+    gold: e.gold || 0,
     // Lifetime score IS the XP, so the level comes straight off it rather than being stored.
     // One derivation, in shared/, used by the server and the client alike.
     ...progressFor(e.score),
   });
 
-  function record(playerId, { name, score, kills, deaths } = {}) {
+  function record(playerId, { name, score, kills, deaths, gold } = {}) {
     if (typeof playerId !== 'string' || !playerId) return;
-    const e = players.get(playerId) ?? { name: 'anon', score: 0, kills: 0, deaths: 0 };
+    // `gold` defaults in for every record written before coins existed, so an old file loads
+    // without a migration and a player who has never seen one starts at zero rather than NaN.
+    const e = players.get(playerId) ?? { name: 'anon', score: 0, kills: 0, deaths: 0, gold: 0 };
     if (name != null) e.name = sanitizeName(name);
     e.score += positive(score);
     e.kills += positive(kills);
     e.deaths += positive(deaths);
+    e.gold = (e.gold || 0) + positive(gold);
     players.set(playerId, e);
     dirty = true;
   }
