@@ -27,21 +27,34 @@ import { rng } from './util/rng.js';
 //   arena   a plain rectangle, the Bomberman default: no terrain to hide behind, pure lattice
 //   cove    one organic island, all bays and headlands, where the coast makes the chokepoints
 //   twins   two round islands joined by a single causeway, so crossing is a decision
+/* `shrubs` is retired and every map carries 0.
+ *
+ * They were walkable green bushes and solid green hedges, and the green was the problem: on an
+ * island of sand, stone and sea it was the one colour that did not belong to anything, and a
+ * walkable block that looks like a wall is also the worst possible thing to put on a board where
+ * the only question that matters is "can I get through there". The look they were reaching for —
+ * growth on old stone — is now moss, which is drawn on top of the tiles that are already there
+ * and spans several of them. See mossAt in client/render.js.
+ *
+ * The weight stays rather than coming out, like the retired perk ids: a map is data, and a field
+ * every map sets to zero is a switch somebody can turn back on. The block types stay for the same
+ * reason — and because a snapshot from an older server may still contain one.
+ */
 export const MAPS = [
   { id: 'arena', name: 'Arena', w: 37, h: 23, seed: 1337,
-    shape: 'rect', density: 0.62, reinforced: 0.05, shrubs: 0.03 },
+    shape: 'rect', density: 0.62, reinforced: 0.05, shrubs: 0 },
   { id: 'cove', name: 'Cove', w: 37, h: 23, seed: 4242,
-    shape: 'blob', density: 0.7, reinforced: 0.12, shrubs: 0.04 },
+    shape: 'blob', density: 0.7, reinforced: 0.12, shrubs: 0 },
   { id: 'twins', name: 'Twins', w: 39, h: 23, seed: 777,
-    shape: 'twin', density: 0.58, reinforced: 0.09, shrubs: 0.08 },
+    shape: 'twin', density: 0.58, reinforced: 0.09, shrubs: 0 },
   // A crescent round a lagoon. The inside of the curve is water, so the two tips are the
   // furthest-apart places on a board that is not actually very big.
   { id: 'lagoon', name: 'Lagoon', w: 39, h: 25, seed: 2468,
-    shape: 'horseshoe', density: 0.6, reinforced: 0.1, shrubs: 0.06 },
+    shape: 'horseshoe', density: 0.6, reinforced: 0.1, shrubs: 0 },
   // Four arms off a central plaza: the only map where the middle is the shortest route between
   // anywhere and anywhere else, which makes it contested by construction.
   { id: 'crossroads', name: 'Crossroads', w: 37, h: 25, seed: 13579,
-    shape: 'cross', density: 0.66, reinforced: 0.07, shrubs: 0.05 },
+    shape: 'cross', density: 0.66, reinforced: 0.07, shrubs: 0 },
 ];
 
 /** Pack a block type and its HP into one byte, per docs/PROTOCOL.md §5. */

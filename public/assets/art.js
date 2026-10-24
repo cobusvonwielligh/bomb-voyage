@@ -120,7 +120,7 @@ export const STONE_RADIUS = 3;
 /* Which types get it: everything solid that sits ON the sand. Not FLOOR (it IS the sand), and
  * not the types that already draw their own shape on a floor of their own — a column, a keg and
  * a block of ice are objects, not cells, and they were never square to begin with. */
-const ROUNDED_BLOCKS = new Set([BLOCK.SOFT, BLOCK.HARD, BLOCK.REINFORCED, BLOCK.MONOLITH, BLOCK.IRON]);
+const ROUNDED_BLOCKS = new Set([BLOCK.SOFT, BLOCK.REINFORCED, BLOCK.MONOLITH, BLOCK.IRON]);
 
 /**
  * One tile.

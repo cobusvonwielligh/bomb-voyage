@@ -302,8 +302,17 @@ export function createRenderer(canvas, world) {
    * nowhere near a circle. Only exposed corners get it (see the chunk pass), so a wall of rock is
    * still one unbroken mass. STONE_RADIUS stays the crates' number. */
   const ROCK_RADIUS = Math.max(STONE_RADIUS, 6);
-  const SHADOW_LEN = TILE_PX * 0.62;
-  const SHADOW_ALPHA = 0.3;
+  const SHADOW_LEN = TILE_PX * 0.72;
+  /* Darker, and SOFT.
+   *
+   * 0.3 was a shadow you had to be told about. The thing that makes a stronger one look better
+   * rather than merely heavier is the edge: a hard-edged black rectangle at 45% reads as a hole
+   * cut in the floor, and the same shape through a three-pixel blur reads as light not reaching
+   * the sand. Baked into the chunk cache with everything else, so the blur is paid once per chunk
+   * and never per frame — which is the only reason a canvas filter is affordable here at all.
+   */
+  const SHADOW_ALPHA = 0.46;
+  const SHADOW_BLUR_PX = 3;
   let sunFor = null, sun = { dx: 0, dy: 0 };
 
   /* Everything a shadow is allowed to fall on: the floor, and never the blocks standing on it.
@@ -392,6 +401,10 @@ export function createRenderer(canvas, world) {
       cc.save();
       cc.globalAlpha = SHADOW_ALPHA;
       cc.fillStyle = '#000';
+      // One blur for the whole pass rather than per shape, and skipped entirely where the browser
+      // does not have it — a hard shadow is the old look, not a broken one.
+      const canBlur = 'filter' in cc;
+      if (canBlur) cc.filter = `blur(${SHADOW_BLUR_PX}px)`;
       for (let j = 0; j < CHUNK_TILES; j++) {
         for (let i = 0; i < CHUNK_TILES; i++) {
           const tx = cx * CHUNK_TILES + i, ty = cy * CHUNK_TILES + j;
@@ -399,10 +412,11 @@ export function createRenderer(canvas, world) {
           const t = cellType(map.cells[ty * map.w + tx]);
           if (!CASTS_SHADOW.has(t)) continue;
           cc.beginPath();
-          cc.roundRect(i * TILE_PX + sdx, j * TILE_PX + sdy, TILE_PX, TILE_PX, 3);
+          cc.roundRect(i * TILE_PX + sdx, j * TILE_PX + sdy, TILE_PX, TILE_PX, 4);
           cc.fill();
         }
       }
+      if (canBlur) cc.filter = 'none';
       cc.restore();
 
       for (let j = 0; j < CHUNK_TILES; j++) {
@@ -473,6 +487,35 @@ export function createRenderer(canvas, world) {
           cc.restore();
         }
       }
+      /* The sun, on the blocks themselves.
+       *
+       * Up to here the only lighting a block had was `bevel` in art.js: a two-pixel white line on
+       * the top-left and a dark one on the bottom-right, the same on every tile and in the same
+       * place whatever the map's light is doing. That is an outline pretending to be shading, and
+       * it is why a wall of crates read as a flat pattern.
+       *
+       * This is the real thing, and it is three passes over one tile:
+       *
+       *   the ramp    a linear gradient ACROSS the tile along the sun's own direction — bright on
+       *               the face the light comes from, dark on the face it cannot reach. The map's
+       *               light points anywhere in a half-circle (see sunVec), so this is the first
+       *               thing on the board that actually answers to it.
+       *   the rim     a short bright line on the two sunward edges, which is what makes a block
+       *               read as having a TOP: a lit edge is a corner catching the light.
+       *   the shade   a hashed tint per tile, a few percent either way, so sixteen identical
+       *               crates in a row are sixteen crates rather than one texture tiled sixteen
+       *               times. Deterministic in (tx, ty) like everything else in the terrain, or a
+       *               wall would reshuffle itself every time a neighbour broke.
+       *
+       * All of it lands in the chunk cache, so the cost is a few gradients when a chunk is built
+       * and nothing at all per frame.
+       */
+      lightPass(cc, cx, cy, map, sdx, sdy);
+
+      // Moss over the blocks and the sand, under the occlusion so a crease is dark whether there
+      // is moss in it or not. See the long note on mossAt.
+      mossPass(cc, cx, cy, map);
+
       /* Ambient occlusion, baked.
        *
        * The sun shadow says where the light comes FROM. This says where it cannot reach: the
@@ -513,14 +556,200 @@ export function createRenderer(canvas, world) {
     return c.canvas;
   }
 
+  /* Which tiles the light pass treats as objects standing on the sand.
+   *
+   * Everything solid, plus the two that are objects in their own right — a column and a keg are
+   * shaped things on a floor, and they want the same ramp across them. Not FLOOR (it IS the
+   * sand, and the floor already has its own tonal drift) and not WATER (the sea is lit by its own
+   * depth gradient and its glints). */
+  const LIT_BLOCKS = new Set([
+    BLOCK.SOFT, BLOCK.REINFORCED, BLOCK.MONOLITH, BLOCK.IRON,
+    BLOCK.COLUMN, BLOCK.POWDER, BLOCK.SHRUB_SOLID,
+  ]);
+
+  // How hard the light and the dark side of the ramp are driven, and how much a tile's own hashed
+  // shade can vary. All three are deliberately modest: the ramp is doing the work, and anything
+  // past this starts to read as a vignette on each tile rather than as a lit object.
+  const LIGHT_FACE = 0.3, DARK_FACE = 0.34, SHADE_SPREAD = 0.075;
+
+  /** The sun, across every block in one chunk. See the long note at the call site. */
+  function lightPass(cc, cx, cy, map, sdx, sdy) {
+    // The light's direction as a unit vector, pointing AWAY from the sun (that is what `sunVec`
+    // gives: the direction a shadow is thrown).
+    const len = Math.hypot(sdx, sdy) || 1;
+    const ux = sdx / len, uy = sdy / len;
+    const S = TILE_PX, H = S / 2;
+
+    for (let j = 0; j < CHUNK_TILES; j++) {
+      for (let i = 0; i < CHUNK_TILES; i++) {
+        const tx = cx * CHUNK_TILES + i, ty = cy * CHUNK_TILES + j;
+        if (tx < 0 || ty < 0 || tx >= map.w || ty >= map.h) continue;
+        const type = cellType(map.cells[ty * map.w + tx]);
+        if (!LIT_BLOCKS.has(type)) continue;
+
+        const x = i * S, y = j * S;
+        cc.save();
+        cc.beginPath();
+        /* Clipped to the tile's own rounded shape, so the ramp does not paint over the sand in
+         * the corners the rounding opened up. ICE is deliberately not in the set above: it is
+         * translucent and lit from inside by its own frost and sheen, and a ramp across it would
+         * put an opaque gradient over the one block you are supposed to see through. */
+        cc.roundRect(x, y, S, S, type === BLOCK.IRON ? ROCK_RADIUS : STONE_RADIUS);
+        cc.clip();
+
+        /* The ramp. From the sunward edge to the far one, through the tile's centre, so the
+         * gradient's axis is the light's axis whatever direction it points. */
+        const g = cc.createLinearGradient(
+          x + H - ux * H, y + H - uy * H,
+          x + H + ux * H, y + H + uy * H,
+        );
+        g.addColorStop(0, `rgba(255,246,214,${LIGHT_FACE})`);        // warm light, not white
+        g.addColorStop(0.45, 'rgba(255,255,255,0)');
+        g.addColorStop(1, `rgba(6,10,18,${DARK_FACE})`);             // cool shadow, not black
+        cc.fillStyle = g;
+        cc.fillRect(x, y, S, S);
+
+        /* The rim: a short bright line along the two sunward edges. This is the part that says
+         * "this has a top" — a block with a lit edge is a solid standing in light, and a block
+         * without one is a coloured square. */
+        cc.globalAlpha = 0.5;
+        cc.fillStyle = 'rgba(255,249,228,0.7)';
+        if (uy > 0.25) cc.fillRect(x, y, S, 2);                      // light from above
+        if (uy < -0.25) cc.fillRect(x, y + S - 2, S, 2);
+        if (ux > 0.25) cc.fillRect(x, y, 2, S);                      // light from the left
+        if (ux < -0.25) cc.fillRect(x + S - 2, y, 2, S);
+
+        /* And this tile's own shade. A hash, so it never changes and no two neighbours agree —
+         * the thing that turns a wall of crates back into a stack of individual crates. */
+        const h = hash01(tx * 73856093 ^ ty * 19349663);
+        const shade = (h - 0.5) * 2 * SHADE_SPREAD;
+        cc.globalAlpha = Math.abs(shade);
+        cc.fillStyle = shade > 0 ? '#fff6dc' : '#060a12';
+        cc.fillRect(x, y, S, S);
+        cc.restore();
+      }
+    }
+  }
+
+  /* ─── moss ───────────────────────────────────────────────────────────────────
+   *
+   * Growth on old stone, in patches that span several tiles and belong to the island rather than
+   * to any one block of it.
+   *
+   * This replaces the green shrub blocks (see MAPS in shared/maps.js). Those were a block type —
+   * a thing you could walk into, or not, depending on which of two nearly identical green squares
+   * it was — and they were the one colour on the board that answered to nothing. Moss is the
+   * opposite in every way that matters: it is paint, it has no rules, it never changes what you
+   * can walk through, and it is drawn ACROSS tiles so it reads as something that grew there
+   * rather than as something that was placed.
+   *
+   * The pattern is value noise at two frequencies. The low one — a cell every five tiles —
+   * decides where a patch is; the high one breaks its edge up so the boundary is ragged rather
+   * than a smooth blob. Bilinear interpolation between hashed lattice points, which is the
+   * cheapest noise that does not look like static, and deterministic in (tx, ty) so a patch is
+   * the same patch forever and does not reshuffle when a wall beside it breaks.
+   *
+   * Baked into the chunk cache, so all of it costs nothing per frame.
+   */
+  const MOSS_LOW = 5;            // tiles per cell of the patch noise
+  const MOSS_HIGH = 1.7;         // and of the edge-breaking noise
+  const MOSS_AT = 0.56;          // above this there is moss; the margin above it is its density
+  const MOSS_MAX = 0.3;          // alpha at the heart of a patch
+
+  const smooth = t => t * t * (3 - 2 * t);
+
+  /** Value noise at `freq` tiles per cell, 0..1, smooth and seedable. */
+  function noiseAt(x, y, freq, seed) {
+    const fx = x / freq, fy = y / freq;
+    const x0 = Math.floor(fx), y0 = Math.floor(fy);
+    const tx = smooth(fx - x0), ty = smooth(fy - y0);
+    const at = (i, j) => hash01((i * 73856093) ^ (j * 19349663) ^ seed);
+    const a = at(x0, y0), b = at(x0 + 1, y0), c = at(x0, y0 + 1), d = at(x0 + 1, y0 + 1);
+    return (a + (b - a) * tx) * (1 - ty) + (c + (d - c) * tx) * ty;
+  }
+
+  /** How mossy this tile is, 0..1. Two frequencies: one for the patch, one for its edge. */
+  function mossAt(tx, ty) {
+    const patch = noiseAt(tx, ty, MOSS_LOW, 0x6d055);
+    const edge = noiseAt(tx, ty, MOSS_HIGH, 0x9e3779);
+    const v = patch * 0.78 + edge * 0.22;
+    return v <= MOSS_AT ? 0 : Math.min(1, (v - MOSS_AT) / (1 - MOSS_AT));
+  }
+
+  /* What moss grows on: the sand and every kind of stone. Not a crate — wood on a beach for a few
+   * minutes does not grow anything, and more practically the crates are the one tile type that
+   * has to stay instantly readable as breakable. Not ice, not water, not a keg. */
+  const MOSSY = new Set([BLOCK.FLOOR, BLOCK.REINFORCED, BLOCK.MONOLITH, BLOCK.IRON, BLOCK.COLUMN]);
+
+  /** Moss over one chunk, after the blocks and their lighting, before the occlusion. */
+  function mossPass(cc, cx, cy, map) {
+    const S = TILE_PX;
+    for (let j = 0; j < CHUNK_TILES; j++) {
+      for (let i = 0; i < CHUNK_TILES; i++) {
+        const tx = cx * CHUNK_TILES + i, ty = cy * CHUNK_TILES + j;
+        if (tx < 0 || ty < 0 || tx >= map.w || ty >= map.h) continue;
+        const type = cellType(map.cells[ty * map.w + tx]);
+        if (!MOSSY.has(type)) continue;
+        const m = mossAt(tx, ty);
+        if (m <= 0.02) continue;
+
+        const x = i * S, y = j * S;
+        cc.save();
+        cc.beginPath();
+        cc.roundRect(x, y, S, S, type === BLOCK.IRON ? ROCK_RADIUS
+          : type === BLOCK.FLOOR ? 0 : STONE_RADIUS);
+        cc.clip();
+
+        /* The wash, in two tones so a patch is not one flat colour: a cool green over the whole
+         * tile and a warmer, lighter one on a quarter of it, at a sub-tile offset from the noise
+         * so the two layers never line up into a grid. */
+        cc.globalAlpha = m * MOSS_MAX;
+        cc.fillStyle = '#4a6b3a';
+        cc.fillRect(x, y, S, S);
+        cc.globalAlpha = m * MOSS_MAX * 0.55;
+        cc.fillStyle = '#6f8f46';
+        const ox2 = noiseAt(tx * 3 + 11, ty * 3 + 7, 2.3, 0x1055) * S * 0.5;
+        const oy2 = noiseAt(tx * 3 + 5, ty * 3 + 13, 2.3, 0x2055) * S * 0.5;
+        cc.fillRect(x + ox2, y + oy2, S * 0.6, S * 0.6);
+
+        /* And the texture: a scatter of darker specks, more of them the denser the patch. Without
+         * these a mossy tile is a green tint; with them it is something growing. */
+        const n = Math.round(m * 9);
+        cc.fillStyle = 'rgba(32,54,26,0.5)';
+        for (let k = 0; k < n; k++) {
+          const hx = hash01((tx * 911 + k * 37) ^ (ty * 557));
+          const hy = hash01((ty * 911 + k * 53) ^ (tx * 331));
+          cc.globalAlpha = m * 0.55;
+          cc.fillRect(x + hx * (S - 3), y + hy * (S - 3), 2, 2);
+        }
+        /* A rim of lighter growth along the top edge of a mossy BLOCK, because moss on a solid
+         * thing catches the light on the face that is up. Floor gets none: there is no face. */
+        if (type !== BLOCK.FLOOR) {
+          cc.globalAlpha = m * 0.3;
+          cc.fillStyle = '#8bae57';
+          cc.fillRect(x + 2, y + 1, S - 4, 2);
+        }
+        cc.restore();
+      }
+    }
+  }
+
   /* The two AO stamps, baked once: an edge and an inside corner.
    *
    * Gradients rather than flat rects, because a hard-edged band of shadow along a wall reads as a
    * second wall. Both are drawn at tile scale and rotated into place, so one edge sprite serves
    * all four sides and one corner sprite all four corners.
    */
-  const AO_REACH = Math.round(TILE_PX * 0.34);      // how far into the floor the dark reaches
-  const AO_ALPHA = 0.3;                             // of the stamp itself; see the note on aoPass
+  const AO_REACH = Math.round(TILE_PX * 0.46);      // how far into the floor the dark reaches
+  /* 0.72, up from 0.3.
+   *
+   * The first pass was tuned to be deniable — "the board looks softer" — and the honest report
+   * was that you could not see it. Occlusion in a crease is not subtle in life: the inside of a
+   * join between a wall and the floor is genuinely dark, and at nearly half a tile of reach and
+   * this alpha the corridors finally have depth instead of a hint of one. The falloff below is
+   * what keeps it from reading as paint: dense in the first few pixels, almost gone by the end.
+   */
+  const AO_ALPHA = 0.72;
   let aoEdge = null, aoCorner = null;
 
   function aoSprites() {
@@ -531,9 +760,9 @@ export function createRenderer(canvas, world) {
     const g = e.createLinearGradient(0, 0, 0, AO_REACH);
     // Squared falloff: dense in the first few pixels and almost gone by the end, which is how a
     // crease actually darkens. A linear ramp looks like a painted stripe.
-    g.addColorStop(0, 'rgba(0,0,0,0.85)');
-    g.addColorStop(0.35, 'rgba(0,0,0,0.3)');
-    g.addColorStop(0.7, 'rgba(0,0,0,0.08)');
+    g.addColorStop(0, 'rgba(0,0,0,0.95)');
+    g.addColorStop(0.3, 'rgba(0,0,0,0.46)');
+    g.addColorStop(0.62, 'rgba(0,0,0,0.16)');
     g.addColorStop(1, 'rgba(0,0,0,0)');
     e.fillStyle = g;
     e.fillRect(0, 0, TILE_PX, AO_REACH);
@@ -542,8 +771,8 @@ export function createRenderer(canvas, world) {
     aoCorner.width = aoCorner.height = AO_REACH;
     const c = aoCorner.getContext('2d');
     const r = c.createRadialGradient(0, 0, 0, 0, 0, AO_REACH);
-    r.addColorStop(0, 'rgba(0,0,0,0.8)');
-    r.addColorStop(0.4, 'rgba(0,0,0,0.26)');
+    r.addColorStop(0, 'rgba(0,0,0,0.92)');
+    r.addColorStop(0.38, 'rgba(0,0,0,0.42)');
     r.addColorStop(1, 'rgba(0,0,0,0)');
     c.fillStyle = r;
     c.fillRect(0, 0, AO_REACH, AO_REACH);
@@ -1576,7 +1805,10 @@ export function createRenderer(canvas, world) {
     const from = Math.random() < 0.5 ? -1 : 1;
     const side = Math.random() < 0.5 ? -1 : 1;
     const span = (horizontal ? (lw + 4) * TILE_PX : (lh + 4) * TILE_PX) + pad * 2;
-    const offset = side * ((horizontal ? lh : lw) * TILE_PX * 0.5 + pad * (0.7 + Math.random() * 0.6));
+    // Closer to the coast than it was (0.7-1.3 of the margin): far enough out that it never
+    // appears to swim over the sand, near enough that its path is inside the visible sea rather
+    // than hugging the edge of the board where half of it is off screen.
+    const offset = side * ((horizontal ? lh : lw) * TILE_PX * 0.5 + pad * (0.45 + Math.random() * 0.45));
     const midx = (lx + lw / 2) * TILE_PX, midy = (ly + lh / 2) * TILE_PX;
     jelly = {
       // Position and heading in world pixels.
@@ -1603,8 +1835,15 @@ export function createRenderer(canvas, world) {
   function jellyDepth(j) {
     const a = Math.sin(j.age * 0.19 + j.ph1);
     const b = Math.sin(j.age * 0.071 + j.ph2);
-    // Biased downward: it spends most of its time deep, which is what makes a rise an event.
-    const raw = (a * 0.6 + b * 0.4) * 0.5 + 0.34;
+    /* Biased SHALLOW now, where it used to be biased deep.
+     *
+     * 0.34 of bias meant the two sines spent most of their swing below the threshold where
+     * anything is drawn at all, so even a jellyfish that was present was usually invisible —
+     * three hundred percent more of them would have been three hundred percent more of nothing.
+     * At 0.62 it is in sight for most of a crossing and still spends real time sinking away,
+     * which is the part that makes it read as an animal with somewhere else to be.
+     */
+    const raw = (a * 0.6 + b * 0.4) * 0.42 + 0.62;
     /* The bass lifts it, gently and with a long memory.
      *
      * `j.lift` chases the bass rather than following it — a quarter of a second up and most of
@@ -1618,8 +1857,14 @@ export function createRenderer(canvas, world) {
   function drawJelly(ox, oy, dtMs) {
     const dt = dtMs / 1000;
     if (!jelly) {
-      // A gap between them, so the sea is not continuously occupied.
-      if (Math.random() < dt / 14) spawnJelly();
+      /* Four times as likely to arrive as it was: a mean gap of three and a half seconds rather
+       * than fourteen, which is "300% more" with the old rate kept as the unit.
+       *
+       * The gap still exists on purpose. One at a time is the rule that keeps this an animal
+       * rather than an effect — a sea with three jellyfish in it is an aquarium — but at the old
+       * spacing most rounds never showed one at all, which is the same as not having built it.
+       */
+      if (Math.random() < dt / 3.5) spawnJelly();
       return;
     }
     const j = jelly;

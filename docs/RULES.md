@@ -138,7 +138,7 @@ simulation, the client's prediction, the click sound, and the bots.
 | Start bombs | 1 |
 | Max bombs | **16** |
 | Start fire radius | 1 |
-| Max fire radius | **6** (9 with Blue fire — *not in v1*) |
+| Max fire radius | **5** (9 with Blue fire — *not in v1*) |
 
 Placing a bomb requires: you are alive, not Pacifism, and your live bomb count < your bomb stat.
 A bomb is placed at the **centre of the tile your hitbox centre is in**. One bomb per tile.
@@ -148,7 +148,8 @@ in each of the four directions. The arm stops when it hits:
 
 - an indestructible block → stops **before** it,
 - a destructible block → damages it, fills that tile with fire, then stops,
-- a shrub → passes through but **radius is reduced by 1** for the rest of that arm,
+- a shrub → passes through but **radius is reduced by 1** for the rest of that arm (no map
+  generates shrubs any more; the rule stays, because the block type does),
 - another bomb → that bomb detonates **this same tick** (chain), and the arm stops,
 - a column → fire passes through, no reduction, arm continues.
 
@@ -255,6 +256,20 @@ charge, Blue fire, Heart, Key.
 covered so much floor that a fully kitted player did not have to aim — position stopped being the
 thing the game is about. A powder keg stays deliberately above the cap at radius 7, which is how
 the renderer and the sound identify one without a flag on the wire.
+
+---
+
+**Moss.** Patches of growth over the sand and every kind of stone, spanning several tiles at a
+time, from value noise at two frequencies — one that decides where a patch is and one that breaks
+its edge. Paint, nothing more: no rule anywhere reads it, it never changes what you can walk
+through, and it replaced the green shrub blocks, which were the one colour on the board that
+answered to nothing and, worse, made a walkable tile look like a wall.
+
+**Light.** The map's sun (a hash of its name, pointing anywhere in a half-circle) now lights the
+blocks themselves rather than only throwing shadows: a gradient across each one along the light's
+axis, a bright rim on its sunward edges, and a hashed tint per tile so a wall of crates is a stack
+of crates rather than one texture repeated. Contact shadows darken the floor where it meets
+anything solid. All of it is baked into the chunk cache, so it costs nothing per frame.
 
 ---
 
