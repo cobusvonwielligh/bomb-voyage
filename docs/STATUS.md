@@ -1,6 +1,6 @@
 # Bomb Voyage — Where We Stand
 
-Last updated: **2026-10-24**. Live on `bombvoyage.online`. 260 tests passing.
+Last updated: **2026-10-24**. Live on `bombvoyage.online`. 262 tests passing.
 
 This document replaces the "⬜ The game: not started" line in the README. The game is built, the
 whole plan in [PLAN.md](PLAN.md) has been walked through, and several decisions in it have since

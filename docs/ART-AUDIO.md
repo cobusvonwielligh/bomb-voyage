@@ -530,8 +530,30 @@ after the last note, and moving the slider must not un-mute that tail once the m
 ### The sea listens
 
 The ocean moves to the music. `audio/listen.js` turns an `AnalyserNode` into a handful of numbers
-a frame and `render.js` uses them to turn dials the sea already had. Nothing new is drawn while
-the music is off. Two layers:
+and a sixteen-band equaliser a frame, and `render.js` draws with them. Nothing music-driven is
+drawn while the music is off.
+
+**Measure it in a round, not on the menu.** The first two versions were tuned against the theme
+and looked fine there. Probed in a real round — real Chrome, real `drift.mp3`, the listener's
+output sampled every half second — the pipe worked and the sea still looked dead: the beds give
+about one detected kick every two seconds, the tempo never locks, hats are rare, and a curve meant
+to keep "usual" quiet turned a bass of 0.5 into 0.11. Everything below is built for what plays
+during a round.
+
+**The island is the speaker.** The headline effect: a 16-band equaliser made of the sea itself.
+Every stretch of coast belongs to one band, by angle round the island — bass at the bottom,
+treble at the top, mirrored left and right — and that band's level pushes a bar of light out from
+the rock, up to 4.5 tiles, built from inset sea-tile segments like the blocks of an LED meter, with
+a bright cap on the tip. Each band is scored against its own history, so every bar dances around
+its own usual height; on the beds the bands swing across their whole range from second to second.
+Drawn under the island, additive, so anything reaching into a bay is covered by the land.
+
+**Accents, not just kicks.** An onset anywhere from 60 Hz to 8 kHz — a chord arriving, a pad
+swelling, a pluck — counts. Without a locked tempo, any beat or accent sends a swell walking out
+along the coast, a **sonar ring** sweeping out across the open sea from the island, and foam off
+the rocks.
+
+Two further layers:
 
 **Rhythm — it keeps time.** Detected beats feed a tempo (the mean of recent spacings that agree
 with their median, folded into 71–143 BPM) and a phase-locked metronome: `phase` runs 0→1 once a
@@ -550,14 +572,14 @@ rings in time with the music between the kicks as well as on them.
 | bass | wave trains push harder; the shallows glow; the ship rolls deeper; the sea lifts toward the light |
 | mids | the current streaks stretch |
 | highs | glints come on a few at a time (each has its own threshold) and brighten |
-| hat and snare onsets | bioluminescence: a handful of cold green-blue points flare in the shallows |
+| highs, and hat and snare onsets | bioluminescence in the shallows: a steady trickle that follows the top end, and a burst on every hit |
 | brightness (spectral centroid) | the tint of the water: indigo for dark passages, teal for bright ones |
-| each beat | a band of swell walks out from the coast along its own contour; foam bursts off the rocks |
+| each beat or accent | a band of swell walks out along the coast, a sonar ring sweeps out to sea, foam bursts off the rocks |
+| 16 bands | the coastal equaliser |
 
-The continuous couplings are curved: the listener puts "usual" at 0.4, and the renderer's
-`lifted()` maps that to nearly zero, so the music doing its ordinary thing barely moves the water
-and only real lifts do. Linear coupling twitches constantly and is the commonest way this looks
-cheap. The rhythm layer is what carries constant musical motion instead.
+The continuous couplings are **linear** above 0.25 (`lifted()`). They were curved for a while, to
+keep the music's usual level from moving the water — and that is exactly what made the sea look
+dead during a round, where the usual level is most of the signal there is.
 
 **What you see lands when you hear it.** The analyser hears audio as it is processed, which is the
 output latency — tens of milliseconds — before the speakers do. Everything the listener reports
@@ -591,7 +613,8 @@ gets its own light.
 `test/listen.test.js` holds it to that with a fake analyser: beats at 90, 116 and 140 BPM land
 within 12%; the tempo is learned within 5% and trusted; the metronome stays within 8% of a beat of
 the kicks with one kick in four missing; a beatless bed builds no tempo; hats are their own event;
-output is delayed by the latency; and paused is still.
+the equaliser's bass bars swing with a kick far more than its treble bars; chords with no kick are
+accents and not beats; output is delayed by the latency; and paused is still.
 
 ---
 

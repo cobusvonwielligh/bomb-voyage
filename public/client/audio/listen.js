@@ -66,8 +66,23 @@ const LOCK_TOLERANCE = 0.12;      // a spacing within 12% of the tempo agrees wi
 
 const HISTORY = 40;               // frames of delay line; ~650 ms at 60 fps
 
+/* The equaliser: EQ_BANDS log-spaced bands, each its own z-score like the three broad ones, so
+ * every band dances around its own usual level instead of the bass towering over the treble.
+ * Fast in, quick out — these are drawn as bars, and bars that sag for a second read as lag. */
+export const EQ_BANDS = 16;
+const EQ_LO = 45, EQ_HI = 11000;
+const EQ_ATTACK_MS = 25, EQ_RELEASE_MS = 160;
+
+/* Accents: an onset ANYWHERE in the spectrum, not just the kick. Ambient beds have almost no
+ * kicks — measured in game, one detected beat every two seconds and a tempo lock that never
+ * formed — but they are full of events: a chord arriving, a pad swelling, a pluck. Those are
+ * what the sea should answer to when there is no drummer. */
+const ACCENT_GAP_MS = 380;
+const ACCENT_K = 1.6;
+const ACCENT_MIN_FLUX = 3.2;
+
 const FIELDS = ['bass', 'mid', 'high', 'level', 'beat', 'beats', 'bpm', 'phase', 'lock',
-  'spark', 'sparks', 'tone'];
+  'spark', 'sparks', 'tone', 'accent', 'accents'];
 
 export function createListener() {
   let bins = null, prevBins = null, binHz = 0;
@@ -75,18 +90,23 @@ export function createListener() {
   const dev = { bass: 0, mid: 0, high: 0 };       // running variance
   const kick = { mean: 0, vari: 0, since: 1e9 };
   const hats = { mean: 0, vari: 0, since: 1e9 };
+  const wide = { mean: 0, vari: 0, since: 1e9 };
+  const eqAvg = new Float32Array(EQ_BANDS), eqDev = new Float32Array(EQ_BANDS);
+  const eqNow = new Float32Array(EQ_BANDS);
+  let eqEdges = null;
   let clock = 0, lastBeatAt = -1, period = 0.5, trim = 1;
   const spacings = [];
 
   const now = {
     bass: 0, mid: 0, high: 0, level: 0, beat: 0, beats: 0,
-    bpm: 0, phase: 0, lock: 0, spark: 0, sparks: 0, tone: 0.5,
+    bpm: 0, phase: 0, lock: 0, spark: 0, sparks: 0, tone: 0.5, accent: 0, accents: 0,
   };
 
-  // The delay line: preallocated snapshots, so a frame allocates nothing.
-  const ring = Array.from({ length: HISTORY }, () => ({ t: -1, ...now }));
+  // The delay line: preallocated snapshots, so a frame allocates nothing. The equaliser rides in
+  // it too, as a copy per slot.
+  const ring = Array.from({ length: HISTORY }, () => ({ t: -1, ...now, eq: new Float32Array(EQ_BANDS) }));
   let head = 0;
-  const out = { ...now };
+  const out = { ...now, eq: new Float32Array(EQ_BANDS) };
 
   const ease = (cur, target, dtMs, releaseMs) => {
     const tau = target > cur ? ATTACK_MS : releaseMs;
@@ -162,7 +182,7 @@ export function createListener() {
     dtMs = Math.min(100, Math.max(1, dtMs));
     clock += dtMs / 1000;
     const target = { bass: 0, mid: 0, high: 0 };
-    let kickFlux = 0, hatFlux = 0, tone = now.tone;
+    let kickFlux = 0, hatFlux = 0, wideFlux = 0, tone = now.tone;
 
     if (analyser && audible) {
       if (!bins || bins.length !== analyser.frequencyBinCount) {
@@ -173,6 +193,25 @@ export function createListener() {
       analyser.getByteFrequencyData(bins);
       kickFlux = rise(...KICK);
       hatFlux = rise(...HATS);
+      wideFlux = rise(60, 8000);
+
+      // The equaliser. Each band reports its LOUDEST bin, so a note reads as a note rather than
+      // diluted by the quiet bins beside it, then is scored against its own history.
+      if (!eqEdges) {
+        eqEdges = [];
+        for (let i = 0; i <= EQ_BANDS; i++) eqEdges.push(binOf(EQ_LO * Math.pow(EQ_HI / EQ_LO, i / EQ_BANDS)));
+      }
+      const eqK = 1 - Math.exp(-dtMs / 2500);
+      for (let k = 0; k < EQ_BANDS; k++) {
+        let v = 0;
+        for (let i = eqEdges[k], e = Math.max(eqEdges[k] + 1, eqEdges[k + 1]); i < e; i++) if (bins[i] > v) v = bins[i];
+        const d = v - eqAvg[k];
+        eqAvg[k] += d * eqK;
+        eqDev[k] += (d * d - eqDev[k]) * eqK;
+        const target = Math.max(0, Math.min(1, 0.35 + (d / Math.max(5, Math.sqrt(eqDev[k]))) * 0.32));
+        const tau = target > eqNow[k] ? EQ_ATTACK_MS : EQ_RELEASE_MS;
+        eqNow[k] += (target - eqNow[k]) * (1 - Math.exp(-dtMs / tau));
+      }
 
       const avgK = 1 - Math.exp(-dtMs / 3000);
       for (const k of Object.keys(BANDS)) {
@@ -197,8 +236,17 @@ export function createListener() {
       }
       if (sum > 0) tone = Math.max(0, Math.min(1, (wsum / sum - TONE_LO) / (TONE_HI - TONE_LO)));
       prevBins.set(bins);
-    } else if (prevBins) {
-      prevBins.fill(0);
+    } else {
+      if (prevBins) prevBins.fill(0);
+      // Silence: the bars fall away rather than freezing where they were.
+      for (let k = 0; k < EQ_BANDS; k++) eqNow[k] *= Math.exp(-dtMs / EQ_RELEASE_MS);
+    }
+
+    if (onset(wide, wideFlux, dtMs, ACCENT_K, ACCENT_MIN_FLUX, ACCENT_GAP_MS)) {
+      now.accent = 1;
+      now.accents++;
+    } else {
+      now.accent *= Math.exp(-dtMs / 260);
     }
 
     if (onset(kick, kickFlux, dtMs, BEAT_K, BEAT_MIN_FLUX, BEAT_GAP_MS) && target.bass > 0.45) {
@@ -231,6 +279,7 @@ export function createListener() {
     const slot = ring[head];
     slot.t = clock;
     for (const f of FIELDS) slot[f] = now[f];
+    slot.eq.set(eqNow);
     head = (head + 1) % HISTORY;
 
     const want = clock - Math.max(0, latencyS);
@@ -241,7 +290,7 @@ export function createListener() {
       pick = s;
       if (s.t <= want) break;
     }
-    if (pick) for (const f of FIELDS) out[f] = pick[f];
+    if (pick) { for (const f of FIELDS) out[f] = pick[f]; out.eq.set(pick.eq); }
     // Phase is a clock, not a sample: advance the delayed one by however far short of `want` it
     // fell, so frame-time jitter in the delay line cannot make the metronome stutter.
     if (pick) out.phase = (pick.phase + Math.max(0, want - pick.t) / beatS) % 1;
