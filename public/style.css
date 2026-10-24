@@ -439,8 +439,17 @@ canvas#game {
 .stat .k {
   color: #aab6c8; font-size: 11px; text-transform: uppercase; letter-spacing: .12em;
 }
+/* The SAME SIZE as the grey label beside it, not bigger.
+ *
+ * These were 15px against an 11px label, which made every stat a heading with a caption — three
+ * of them in a row, each shouting, and the only number in the bar that actually wants to shout
+ * is the clock. Matched in size, the pairing reads as one item, and the ACCENT does the work
+ * that size was doing: the label is grey, the value is gold, and the eye still lands on the
+ * value without the bar having to be loud about it.
+ *
+ * 600 weight stays. Dropping that too would make the value recede behind its own label. */
 .stat .v {
-  font-family: var(--nums); font-variant-numeric: tabular-nums; font-size: 15px;
+  font-family: var(--nums); font-variant-numeric: tabular-nums; font-size: 11px;
   font-weight: 600;
   /* The accent, not plain ink. These three are the numbers you glance at without stopping, and
      colour is what makes a glance work — the labels beside them stay grey so the value is the
@@ -503,16 +512,18 @@ body.observing #who { color: var(--dim); }
 
 /* loadout */
 #gear { display: flex; gap: 14px; align-items: center; position: relative; }
+/* Same again for the loadout. 16px numbers next to a 13px cap was the same mismatch, and these
+   sit in the same row as the stats — three type sizes across one bar is two too many. */
 .pip {
   display: flex; align-items: center; gap: 7px;
-  font-family: var(--nums); font-variant-numeric: tabular-nums; font-size: 16px;
+  font-family: var(--nums); font-variant-numeric: tabular-nums; font-size: 13px;
   font-weight: 600;
   color: var(--gold);
 }
 /* 1.5x. These are the only pictures in the bar and they were losing to the text beside them. */
 .pip svg { width: 20px; height: 20px; display: block; }
 .pip .n { display: inline-block; min-width: 1.2ch; text-align: right; }
-.pip .cap { color: #9fabbd; font-size: 13px; }
+.pip .cap { color: #9fabbd; font-size: 13px; }   /* matches .pip itself — see above */
 .pip.max .n { color: var(--gold); }
 /* Carrying at least one. The glow is the part that reads without being looked at; the number is
    there for when you do look. */
@@ -1818,7 +1829,10 @@ h1 {
     drop-shadow(0 0 30px #edc24e52);
 }
 
-.sub { color: var(--dim); margin: 0 0 24px; font-size: 14.5px; letter-spacing: .04em; }
+/* The 10px top margin is for the landing slogan, which wants air under the title rather than
+   to sit tight against it. Harmless on the other `.sub`s — "tab to close" and "no scores" are
+   both last lines in their cards with nothing above them to be pushed away from. */
+.sub { color: var(--dim); margin: 10px 0 24px; font-size: 14.5px; letter-spacing: .04em; }
 /* The two lines that introduce the game are centred; everything below them is a form and stays
    left-aligned, so the eye still has one edge to run down. */
 #title, #menu > #menuWrap .sub { text-align: center; }
@@ -1835,10 +1849,10 @@ h1 {
 #titleWrap {
   position: relative;
   width: fit-content; max-width: 100%;
-  /* 15px up. A negative TOP margin rather than a transform, so the slogan and the form below
-     come up with it — a transform would move the title off its own space and leave the gap it
-     used to fill sitting there empty. */
-  margin: -15px auto 0;
+  /* 10px up — it was 15, then back down 5. A negative TOP margin rather than a transform, so
+     the slogan and the form below come up with it: a transform would move the title off its own
+     space and leave the gap it used to fill sitting there empty. */
+  margin: -10px auto 0;
 }
 #version {
   position: absolute; right: 0; top: 100%;
