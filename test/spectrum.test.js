@@ -171,22 +171,19 @@ test('the sea rests to itself, and its clock is a multiplier from 1', () => {
   assert.match(clock[1], /^1 \+/, `flowT advances at ${clock[1]}, not a multiplier from 1`);
 });
 
-test('the flow lines never listen to the music', () => {
-  /* Two lessons, learned separately and the hard way.
+test('the flow field never listens to the music', () => {
+  /* The streaks themselves are gone — six hundred white lines on the open water were the most
+   * legible thing on screen and the one thing nobody needed to look at. What survives is the
+   * FIELD, and the lesson it was taught survives with it: swing the current on a beat and
+   * everything drifting on it — the dust off a slide, the bioluminescence, a drying puddle —
+   * changes its mind faster than it can move, which reads as flicker rather than as water.
    *
-   * First: the flow field decides where every streak is HEADING. Swing it on a beat and the
-   * target under each streak changes faster than the streak can ease toward it — eight hundred
-   * arrows changing their minds. Second, and stricter: even with the field calm, streaks that
-   * stretched, brightened and surged with the music turned the whole ocean into flicker. They
-   * are what says which way the water is going, so they now follow the plain current on the
-   * plain clock and the music lives in the coast and the bioluminescence. */
+   * So the field stays on the plain clock, and the music lives in the coast and the glow. */
   const src = readFileSync(new URL('../public/client/render.js', import.meta.url), 'utf8');
-  const code = s => s.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
-  const body = code(src.slice(src.indexOf('function drawDrops('), src.indexOf('const MAX_SPLASHES')));
-  assert.ok(body.length > 100, 'drawDrops not found');
-  assert.doesNotMatch(body, /\bsound\.|flowT/, 'drawDrops reads the music');
-  // No per-particle shove: each streak moves by the field, and only the field.
-  assert.match(body, /d\.x \+= d\.vx \* dt;/, 'a particle is being moved independently of the field');
-  const field = code(src.slice(src.indexOf('const flowX = '), src.indexOf('function drawDrops(')));
+  const code = t => t.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+  const field = code(src.slice(src.indexOf('function flowAt('), src.indexOf('function spawnSplash(')));
+  assert.ok(field.length > 100, 'the flow field was not found');
   assert.doesNotMatch(field, /\bsound\.|swell|tempo/, 'the flow field reads the music');
+  // And it is a field rather than a picture now: it computes a vector and draws nothing at all.
+  assert.doesNotMatch(field, /ctx\.stroke\(\)/, 'the flow field is drawing lines again');
 });

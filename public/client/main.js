@@ -1055,7 +1055,9 @@ function streakGlow(flow) {
 
 function setValue(el, text, { worse = false, calm = false } = {}) {
   if (!el || el.textContent === String(text)) return;
-  const first = el.textContent === '' || el.textContent === '--';
+  // An em dash is the placeholder these start at; see the top bar in index.html. Arriving at a
+  // real value from one is a join, not an event, so it does not flash.
+  const first = el.textContent === '' || el.textContent === '\u2014';
   el.textContent = text;
   if (first) return;                        // joining is not an event worth flashing
   const cls = calm ? 'bump-calm' : worse ? 'bump-bad' : 'bump';
