@@ -129,6 +129,8 @@ Acceptance: with 16 bots on screen, you can follow any one of them by tracer alo
 | Iron | 2 variants | |
 | Column | 1 | |
 | Shrub | 2 (walk-through / solid) | Walk-through is visibly lighter. |
+| Ice | 1 | Pale cyan, three lit facets and one hard diagonal glint — nothing else on the map has one. |
+| Water | per frame | Melted ice. Not a tile; see **Puddles** below. |
 | Perks | 6 live + 9 reserved | 16 × 16 icons inside a rounded tile. Bomb, fire, boots, shield, stim, rum. |
 | Status icons | 7 | Shown above the player's head, small. |
 
@@ -144,6 +146,23 @@ play now; the rest are diseases with no source since the Gift was removed (RULES
 | Changeling | Sprite flipped vertically |
 | Reduction | 50 % scale |
 | Fast Detonation | Red spark particles |
+
+### Puddles
+
+Melted ice is drawn per frame, on the floor and under everything else, in `drawPuddles` in
+`render.js`. Every wet tile contributes three overlapping ellipses plus a bridge to each wet
+neighbour, all in **one path**, so five tiles read as one pool with an organic edge rather than as
+five balloons — the first version, without bridges, looked exactly like that. The union is filled
+opaque into its own layer (rim, body, a sheen toward the top-left light) and composited once at
+partial alpha, so overlaps never darken. Two glints circle slowly on each tile, rings spread from
+idle drips and from the feet of anyone wading.
+
+A puddle's presence is eased rather than read off the tick: it swells in fast, dries from the
+edges inward over its last 1.5 s while steam rises off it, and keeps drying for a moment after the
+simulation has dropped it, which is what makes the end read as evaporation rather than as a delete.
+
+The melt itself is a flash, two rings of meltwater pushing out, and a dozen ice shards thrown off
+with drag, plus the `melt` sound.
 
 ---
 
@@ -305,6 +324,7 @@ caller has already decided when, where and how loud.
 | `boom {chain}` | a bomb set off by another | same, pitched up 15 %, capped at 3 per frame |
 | `blockdie` | a wall is destroyed | band-passed noise 900 → 420 Hz, quiet — several fire per blast |
 | `blocknew` | a wall grows back | low sine thud 150 → 70 Hz. Your escape route just changed |
+| `melt` | ice breaks | a highpassed crack, five high sine tinkles, then a lowpassed splash. Nothing else rings |
 | `pickup` | a perk is collected | two-note triangle; **the interval says which perk** |
 | `glug` / `hiccup` | rum, and being drunk on it | the one pickup that does not go up |
 | `shield` | a shield eats a blast | glassy sine pair, a fifth apart |
@@ -431,6 +451,42 @@ coming back at full volume while the chat box still has focus.
 
 Silence while stopped is deliberate, not a fallthrough: the delay lines ring for about two seconds
 after the last note, and moving the slider must not un-mute that tail once the music is off.
+
+### The sea listens
+
+The ocean moves to the music. `audio/listen.js` turns an `AnalyserNode` into five numbers a
+frame — `bass`, `mid`, `high`, `level`, and a `beat` pulse with a counter — and `render.js` uses
+them to turn dials the sea already had. Nothing new is drawn while the music is off.
+
+| Music | Sea |
+|---|---|
+| overall level | the clock the water runs on (`flowT`): current, waves and surface texture all speed up together |
+| bass | wave trains push harder; the shallows glow; the ship rolls deeper; the whole sea lifts toward the light |
+| mids | the current streaks stretch |
+| highs | more sun glints, and brighter — the hats are the glitter |
+| each beat | a band of swell travels out from the coast along its own contour, and foam bursts off the rocks |
+
+Three decisions carry it:
+
+- **Tapped after the duck, before the fader** (`music.js`, `build`). The slider is how loud, not
+  how much, so the sea moves the same at 10% as at 100%; and an explosion that ducks the music
+  ducks the sea on the same beat. Paused or faded to zero, it reads as silence and the sea calms.
+- **Each band is a z-score against its own recent history**, mapped so "usual" is 0.4. Raw bytes
+  are decibels, which sit in the top third of the range and barely move; the first version
+  normalised against a decaying peak and, measured on the real mp3s, every band sat at 0.95 the
+  whole time. Now they span roughly 0.3 to 0.9 on every track, and silence maps to zero.
+- **A beat is spectral flux in 40–140 Hz** — every low bin that got louder, summed — above an
+  adaptive threshold *and* an absolute floor, with a 260 ms refractory gap. Without the floor,
+  ordinary jitter on a beatless bed fired constantly. Measured offline through a real analyser:
+  the theme, at 116 BPM, detects 118 beats a minute.
+
+Attack is fast and release slow everywhere, so the water rises with the music and settles after
+it. The beat swell is drawn as rows of sea tiles stepped out from the shoreline — the same
+construction as the shallows — so it follows every bay and headland; an earlier ring round the
+island's bounding box left the visible strip of sea before anybody saw it.
+
+`test/listen.test.js` holds it to that with a fake analyser: beats at 90, 116 and 140 BPM land
+within 12%, a beatless bed is not a beat, and paused is still.
 
 ---
 

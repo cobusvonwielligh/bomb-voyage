@@ -160,14 +160,24 @@ client deploy. The client must read these, never hardcode them.
   "bombs": [
     { "id": 812, "x": 10, "y": 7, "o": 3, "r": 2, "at": 10470 }
   ],
+  "perks": [ <perkState>, ... ],
+  "puddles": [
+    { "tx": 11, "ty": 7, "at": 10470, "until": 10590 }
+  ],
   "ev": [ <event>, ... ]
 }
 ```
 
+`puddles` is melted ice: slow, slippery tiles that dry up at `until`. It is in every snapshot
+(and in `welcome`) rather than derived from `melt` events, because movement prediction reads it —
+a client that joined mid-puddle, or missed the snapshot carrying the event, must still agree with
+the server about where the water is. Almost always an empty array.
+
 Player fields: `i` index · `x`,`y` position units · `d` facing 0R 1U 2L 3D · `st` state
 (0 dead, 1 alive, 2 observing) · `b` bombs · `f` fire radius · `sp` speed step · `sh` shields ·
 `s` round score · `k` kills · `dd` deaths · `stat` status bitmask · `sta` stamina ·
-`stl` stim level · `tr` exhausted.
+`stl` stim level · `tr` exhausted · `sl` ticks of slide left on water (absent when zero, which is
+nearly always).
 
 Stamina rides along for **every** player, not just you: seeing that the pirate chasing you is
 limping is the entire reason to draw it at all.
@@ -192,6 +202,7 @@ Events are things that happen at an instant and must not be missed. Each has `e`
 { "e": "blockhit", "tick": 10470, "x": 11, "y": 7, "hp": 3 }
 { "e": "blockdie", "tick": 10470, "x": 11, "y": 7 }
 { "e": "blocknew", "tick": 11000, "x": 11, "y": 7, "b": 1 }
+{ "e": "melt",     "tick": 10470, "x": 11, "y": 7 }     // ice broke; follows its blockdie
 { "e": "perkadd",  "tick": 10470, "id": 55, "x": 11, "y": 7, "p": 1 }
 { "e": "perkget",  "tick": 10480, "id": 55, "i": 3 }
 { "e": "died",     "tick": 10471, "i": 3, "by": 7, "x": 10, "y": 7 }

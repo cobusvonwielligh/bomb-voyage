@@ -16,6 +16,7 @@ import { createWorld } from './world.js';
 import { createRenderer } from './render.js';
 import { createMusic } from './audio/music.js';
 import { createSfx } from './audio/sfx.js';
+import { createListener } from './audio/listen.js';
 import { createQuips, MENU_QUIPS } from './quips.js';
 import { bombTile } from '/shared/sim/bombs.js';
 
@@ -253,6 +254,13 @@ const net = createNet({
           world.applyBlockEvent(e);
           renderer?.invalidateTile(e.x, e.y);
           if (e.e !== 'blockhit') sfx.play(e.e, e.x, e.y);
+          break;
+
+        // Ice breaking. The tile itself already changed with the `blockdie` just before this; the
+        // water arrives in the snapshot's puddle list. This is only the moment of it.
+        case 'melt':
+          renderer?.addMelt(e.x, e.y);
+          sfx.play('melt', e.x, e.y);
           break;
 
         case 'bomb':
@@ -1093,6 +1101,9 @@ function play(observe = false) {
   document.body.classList.toggle('observing', observe);
   localStorage.setItem('bv.name', name);
   renderer = createRenderer($('game'), world);
+  // The sea dances to the music. The renderer asks once a frame; see audio/listen.js.
+  const listen = createListener();
+  renderer.setSound(dtMs => listen(music.analyser, music.audible, dtMs));
   sfx.start().then(() => sfx.play('click'));
   /* Out of the theme and into a bed, immediately and at random.
    *

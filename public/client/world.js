@@ -20,6 +20,7 @@ export function createWorld() {
     players: [],          // index = seat
     bombs: [],
     perks: [],
+    puddles: [],          // melted ice; movement reads these, so prediction needs them too
     fires: [],            // derived locally, never sent — see docs/NETCODE.md §1a
     burst: new Set(),     // bomb ids already turned into fire here
     pending: [],          // inputs sent but not yet acknowledged
@@ -45,6 +46,7 @@ export function createWorld() {
     for (const p of m.players) w.players[p.i] = hydrate(p);
     w.bombs = m.bombs || [];
     w.perks = m.perks || [];
+    w.puddles = m.puddles || [];
     // Derived state belongs to the old map; a new round must not inherit its fires.
     w.fires.length = 0;
     w.burst.clear();
@@ -59,6 +61,7 @@ export function createWorld() {
     p.bombs = wire.b; p.radius = wire.f; p.speed = wire.sp; p.shields = wire.sh;
     p.score = wire.s; p.kills = wire.k; p.deaths = wire.dd; p.status = wire.stat;
     if (wire.sta !== undefined) { p.stamina = wire.sta; p.staminaLevel = wire.stl; p.tired = !!wire.tr; }
+    p.slide = wire.sl ?? 0;
     if (wire.name) p.name = wire.name;
     p.rx ??= p.x; p.ry ??= p.y;        // rendered position, smoothed for remotes
     p.trail ??= [];
@@ -131,6 +134,7 @@ export function createWorld() {
     if (snap.tick < w.tick) return;
     w.tick = snap.tick;
     w.perks = snap.perks || [];
+    w.puddles = snap.puddles || [];
 
     // Keep any bomb we already know about: the server drops it from the snapshot the moment it
     // explodes, and we may not have reached its fuse tick yet.
@@ -177,6 +181,8 @@ export function createWorld() {
     // Stamina is simulated locally too, so it is replayed with the inputs below rather than
     // simply trusted — the server's value is the one the replay starts from.
     if (wire.sta !== undefined) { me.stamina = wire.sta; me.staminaLevel = wire.stl; me.tired = !!wire.tr; }
+    // Same for the slide on water: the replay below has to start from the server's count.
+    me.slide = wire.sl ?? 0;
 
     for (const inp of w.pending) step(w, me, inp.mask);
 

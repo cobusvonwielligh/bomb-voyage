@@ -19,11 +19,11 @@ import {
   IN_RIGHT, IN_UP, IN_LEFT, IN_DOWN, IN_BOMB, BLOCK, FUSE_TICKS, FUSE_TICKS_FAST, FIRE_TICKS,
   POWDER_RADIUS,
   UNITS_PER_TILE, SPEED_UNITS_PER_TICK, SLOWDOWN_NUM, SLOWDOWN_DEN, STATUS,
-  SHRUB_RADIUS_PENALTY, HITBOX_UNITS, HITBOX_REDUCED_UNITS,
+  SHRUB_RADIUS_PENALTY, HITBOX_UNITS, HITBOX_REDUCED_UNITS, PUDDLE_SPEED_NUM, PUDDLE_SPEED_DEN,
 } from '../shared/constants.js';
 import { tileAt, walkable, toTile, has } from '../shared/sim/state.js';
 import { bombTile } from '../shared/sim/bombs.js';
-import { blocked, speedOf } from '../shared/sim/movement.js';
+import { blocked, speedOf, inPuddle } from '../shared/sim/movement.js';
 
 const DIRS = [
   { mask: IN_RIGHT, dx: 1, dy: 0 },
@@ -44,7 +44,7 @@ const BORED_TICKS = 45;         // how long a noticed cycle suppresses the hunt 
 const BOMB_COOLDOWN = 45;
 const HUNT_CHANCE = 0.7;
 
-const DESTRUCTIBLE = new Set([BLOCK.SOFT, BLOCK.REINFORCED, BLOCK.MONOLITH]);
+const DESTRUCTIBLE = new Set([BLOCK.SOFT, BLOCK.REINFORCED, BLOCK.MONOLITH, BLOCK.ICE]);
 const SHRUB = new Set([BLOCK.SHRUB_WALK, BLOCK.SHRUB_SOLID]);
 
 /**
@@ -199,11 +199,20 @@ function threatAt(danger, extra, tx, ty) {
   return a < b ? a : b;
 }
 
-/** Ticks this player needs to cross one tile. An escape that ignores speed is not an escape. */
-function ticksPerTile(p) {
+/**
+ * Ticks this player needs to cross one tile. An escape that ignores speed is not an escape.
+ *
+ * Standing in water counts as half pace for the whole route. Pessimistic — the puddle is at most
+ * a couple of tiles across — but an escape planned at full speed from a puddle is exactly the one
+ * that comes up a tile short.
+ */
+function ticksPerTile(p, state = null) {
   const i = Math.max(0, Math.min(p.speed | 0, SPEED_UNITS_PER_TICK.length - 1));
   let speed = SPEED_UNITS_PER_TICK[i];
   if (has(p, STATUS.SLOWDOWN)) speed = Math.max(1, (speed * SLOWDOWN_NUM / SLOWDOWN_DEN) | 0);
+  if (state && inPuddle(state, p)) {
+    speed = Math.max(1, (speed * PUDDLE_SPEED_NUM / PUDDLE_SPEED_DEN) | 0);
+  }
   return Math.ceil(UNITS_PER_TILE / speed);
 }
 
@@ -231,7 +240,7 @@ function ticksPerTile(p) {
  */
 function flood(state, p, danger, extra, slack = 0) {
   const map = state.map, w = map.w;
-  const perTile = ticksPerTile(p);
+  const perTile = ticksPerTile(p, state);
   const start = toTile(p.y) * w + toTile(p.x);
 
   const queue = [start];
@@ -305,7 +314,7 @@ function nearestPlayer(state, me) {
 function worthBombing(state, p, tx, ty) {
   for (const d of DIRS) {
     const t = tileAt(state.map, tx + d.dx, ty + d.dy);
-    if (t === BLOCK.SOFT || t === BLOCK.REINFORCED || t === BLOCK.MONOLITH) return true;
+    if (DESTRUCTIBLE.has(t)) return true;
   }
   for (const q of state.players) {
     if (!q || q === p || !q.alive) continue;
@@ -344,7 +353,7 @@ function noteTile(brain, key) {
 /** Pick a direction to walk. Safe tiles first, never reversing unless there is no alternative. */
 function chooseDir(state, p, brain, danger, tx, ty) {
   const map = state.map;
-  const perTile = ticksPerTile(p);
+  const perTile = ticksPerTile(p, state);
   const safe = [], risky = [];
 
   for (let i = 0; i < 4; i++) {
@@ -488,7 +497,7 @@ export function think(state, p, brain, danger) {
   const aheadThreat = threatUnderfoot(danger, p, p.x + ahead.dx * 256, p.y + ahead.dy * 256);
   const blockedAhead = !walkable(map, ax, ay) ||
     danger.solid.has(ay * map.w + ax) ||
-    aheadThreat <= ticksPerTile(p) * 4;
+    aheadThreat <= ticksPerTile(p, state) * 4;
   if (brain.hold <= 0 || blockedAhead) {
     const dir = chooseDir(state, p, brain, danger, tx, ty);
     // Boxed in on a safe tile: stay. Boxed in on a burning one — the flood found nothing — keep

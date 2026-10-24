@@ -6,7 +6,7 @@ import {
 } from '../constants.js';
 import { has, toTile, tileCentre, tileAt } from './state.js';
 import { spread } from './fire.js';
-import { damage } from './blocks.js';
+import { damage, melt } from './blocks.js';
 import { maybeDrop } from './perks.js';
 
 export const bombAt = (state, tx, ty) => state.bombs.find(b => b.tx === tx && b.ty === ty);
@@ -139,6 +139,7 @@ export function detonate(state) {
         });
         continue;                                   // kegs hold powder, not pickups
       }
+      if (res.type === BLOCK.ICE) { melt(state, tx, ty); continue; }   // the water is the drop
       maybeDrop(state, tx, ty, res.type);
     }
 

@@ -20,6 +20,9 @@ export function createState(mapDef, seed = mapDef.seed) {
     bombs: [],
     fires: [],
     perks: [],
+    // Melted ice: { tx, ty, at, until }. Not a tile type — the map stays the map, and a puddle is
+    // just somewhere slow and slippery for a few seconds. See melt() in sim/blocks.js.
+    puddles: [],
     nextBombId: 1,
     nextPerkId: 1,
     // Powder kegs placed so far this round. See POWDER_MAX_PER_ROUND.
@@ -52,6 +55,8 @@ export function createPlayer(i, name) {
     stamina: STAMINA_MAX,
     staminaLevel: 0,   // Lung perks collected; raises the ceiling, see staminaMaxFor
     tired: false,
+    // Ticks of slide left after letting go of the keys on water. See PUDDLE_SLIDE_TICKS.
+    slide: 0,
     respawnAt: 0,
   };
 }

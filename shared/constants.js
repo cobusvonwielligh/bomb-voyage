@@ -118,6 +118,9 @@ export const BLOCK = {
   // A powder keg. Destructible like a soft wall, but detonating one sets off a blast several
   // times the size of the bomb that lit it. Rare on purpose — see POWDER_* below.
   POWDER: 9,
+  // Ice. Breaks in one hit like a soft wall, but melts instead of breaking: it floods its own
+  // tile and the four next to it with a short-lived puddle. See ICE_* and PUDDLE_* below.
+  ICE: 10,
 };
 
 export const BLOCK_HP = {
@@ -131,6 +134,7 @@ export const BLOCK_HP = {
   [BLOCK.SHRUB_SOLID]: 0,
   [BLOCK.WATER]: 0,
   [BLOCK.POWDER]: 1,      // one hit, like a soft wall: the point is the explosion, not the siege
+  [BLOCK.ICE]: 1,
 };
 
 export const BLOCK_DESTRUCTIBLE = b => BLOCK_HP[b] > 0;
@@ -164,6 +168,25 @@ export const POWDER_RADIUS = 7;
 export const POWDER_CHANCE_PER_CYCLE = 0.36;
 // Six minutes in, the first one stops being optional. A round must never pass without one.
 export const POWDER_GUARANTEE_TICK = Math.round(0.6 * 10 * 60 * TICK_HZ);
+
+/* Ice, and the puddle it leaves.
+ *
+ * One soft wall in twenty is ice, at map generation and when walls grow back. Rare enough that a
+ * patch of water is an event, common enough that every map has a few.
+ *
+ * A blast that reaches ice melts it — no perk, the water IS the drop — and floods the ice tile
+ * plus its four neighbours, wherever those are walkable. Five tiles at most. The puddle lasts
+ * four seconds, the last PUDDLE_FADE_TICKS of them visibly drying up.
+ *
+ * Standing in water halves your pace and makes you slide: let go of the keys and you carry on
+ * the way you were going for PUDDLE_SLIDE_TICKS before you stop. Momentum, not ice-rink chaos —
+ * at half pace that is about a third of a tile, enough to overshoot a corner you were braking
+ * for and not enough to carry you into a blast you were standing clear of. */
+export const ICE_CHANCE = 0.05;
+export const PUDDLE_TICKS = 4 * TICK_HZ;
+export const PUDDLE_FADE_TICKS = Math.round(1.5 * TICK_HZ);   // render only
+export const PUDDLE_SPEED_NUM = 1, PUDDLE_SPEED_DEN = 2;
+export const PUDDLE_SLIDE_TICKS = 8;
 
 /* Stamina.
  *

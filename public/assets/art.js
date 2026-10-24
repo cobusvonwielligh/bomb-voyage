@@ -271,6 +271,57 @@ export function drawTile(c, type, tx = 0, ty = 0, dmg = 0) {
       c.beginPath(); c.arc(22, 1.5, 1.1, 0, 7); c.fillStyle = PALETTE.fireCore; c.fill();
       break;
     }
+    /* Ice: a block of it, faceted, cold and translucent-looking.
+     *
+     * It has to read as breakable AND as different from a crate at a glance, because it does
+     * something no other block does. Pale, desaturated cyan — still terrain, still quieter than
+     * any player — cut into three facets that catch the top-left light, with a frost rim, a
+     * couple of internal fractures and one hard specular streak. Nothing else on the map has a
+     * bright diagonal glint, so that streak is the read from across the island.
+     */
+    case BLOCK.ICE: {
+      px(c, 0, 0, S, S, '#6f9db3');
+      // Facets: lit top-left, mid face, shadowed bottom-right. Polygons, not a gradient, so it
+      // reads as cut ice rather than as a blue glass tile.
+      c.save();
+      c.fillStyle = '#a9cfdf';
+      c.beginPath(); c.moveTo(0, 0); c.lineTo(S, 0); c.lineTo(S * 0.62, S * 0.38);
+      c.lineTo(S * 0.3, S * 0.52); c.lineTo(0, S * 0.7); c.closePath(); c.fill();
+      c.fillStyle = '#86b5ca';
+      c.beginPath(); c.moveTo(S * 0.62, S * 0.38); c.lineTo(S, 0); c.lineTo(S, S * 0.66);
+      c.lineTo(S * 0.58, S * 0.72); c.lineTo(S * 0.3, S * 0.52); c.closePath(); c.fill();
+      c.fillStyle = '#58859b';
+      c.beginPath(); c.moveTo(0, S * 0.7); c.lineTo(S * 0.3, S * 0.52); c.lineTo(S * 0.58, S * 0.72);
+      c.lineTo(S, S * 0.66); c.lineTo(S, S); c.lineTo(0, S); c.closePath(); c.fill();
+      // Facet edges, faintly lit.
+      c.strokeStyle = 'rgba(235,248,255,0.35)'; c.lineWidth = 1;
+      c.beginPath(); c.moveTo(S * 0.3, S * 0.52); c.lineTo(S * 0.62, S * 0.38); c.lineTo(S, 0);
+      c.moveTo(S * 0.3, S * 0.52); c.lineTo(S * 0.58, S * 0.72); c.lineTo(S, S * 0.66); c.stroke();
+      // Internal fractures, per tile, so a patch of ice is not stamped.
+      c.strokeStyle = 'rgba(255,255,255,0.28)'; c.lineWidth = 0.8;
+      for (let i = 0; i < 2; i++) {
+        const x0 = 5 + hash(tx * 13 + i, ty * 7) * (S - 10), y0 = 5 + hash(ty * 11 + i, tx * 5) * (S - 10);
+        const a = hash(tx + i * 3, ty + 9) * Math.PI;
+        c.beginPath(); c.moveTo(x0, y0);
+        c.lineTo(x0 + Math.cos(a) * 6, y0 + Math.sin(a) * 6);
+        c.lineTo(x0 + Math.cos(a + 0.7) * 9, y0 + Math.sin(a + 0.7) * 9);
+        c.stroke();
+      }
+      // The glint: one hard diagonal streak and a small star.
+      c.strokeStyle = 'rgba(255,255,255,0.8)'; c.lineWidth = 2; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(6, 13); c.lineTo(13, 6); c.stroke();
+      c.lineWidth = 1;
+      c.beginPath(); c.moveTo(9, 18); c.lineTo(11, 16); c.stroke();
+      px(c, 23, 7, 1, 3, 'rgba(255,255,255,0.7)'); px(c, 22, 8, 3, 1, 'rgba(255,255,255,0.7)');
+      c.restore();
+      // Frost speckle along the bottom edge, where meltwater would refreeze.
+      for (let i = 0; i < 6; i++) {
+        px(c, (hash(tx * 3 + i, ty * 17) * (S - 2)) | 0, S - 3 - ((hash(i, tx + ty) * 3) | 0), 1, 1,
+          'rgba(235,248,255,0.5)');
+      }
+      bevel(c, 0, 0, S, S, 2);
+      break;
+    }
     case BLOCK.SHRUB_WALK:
     case BLOCK.SHRUB_SOLID: {
       px(c, 0, 0, S, S, PALETTE.floor);
@@ -296,7 +347,7 @@ export function drawTile(c, type, tx = 0, ty = 0, dmg = 0) {
  * turns a wall into a row of walls. Floor and water are excluded — a grid drawn on open ground
  * is a chessboard, and the floor already has its own faint seam. */
 const OUTLINED = new Set([
-  BLOCK.SOFT, BLOCK.REINFORCED, BLOCK.MONOLITH, BLOCK.POWDER, BLOCK.COLUMN,
+  BLOCK.SOFT, BLOCK.REINFORCED, BLOCK.MONOLITH, BLOCK.POWDER, BLOCK.COLUMN, BLOCK.ICE,
   BLOCK.SHRUB_SOLID, BLOCK.IRON,
 ]);
 
@@ -314,6 +365,7 @@ function outlineTile(c) {
  * of those get one. */
 const CASTS_SHADOW = new Set([
   BLOCK.SOFT, BLOCK.REINFORCED, BLOCK.MONOLITH, BLOCK.POWDER, BLOCK.COLUMN, BLOCK.SHRUB_SOLID,
+  BLOCK.ICE,
 ]);
 
 /**

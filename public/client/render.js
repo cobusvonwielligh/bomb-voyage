@@ -7,7 +7,7 @@
 import {
   TILE_PX, CHUNK_TILES, UNITS_PER_TILE, TRACER_SAMPLES, FUSE_TICKS, FIRE_TICKS, STATUS,
   BLOCK, BLOCK_HP, SEA_MARGIN_TILES, SPAWN_POP_TICKS, SPAWN_POP_SCALE, MIN_ZOOM, MAX_ZOOM,
-  PERK_FADE_TICKS, STAMINA_SHOW_AT, staminaMaxFor,
+  PERK_FADE_TICKS, STAMINA_SHOW_AT, staminaMaxFor, PUDDLE_FADE_TICKS,
 } from '/shared/constants.js';
 import { cellType, cellHp } from '/shared/maps.js';
 import {
@@ -34,6 +34,27 @@ export function createRenderer(canvas, world) {
   const splashes = [];         // shoreline foam, capped — see spawnSplash
   const floaters = [];         // "+1 BOMB" rising off a player — see addFloater
   let seaT = 0;
+
+  /* The sea listens to the music.
+   *
+   * `sound` is a snapshot of audio/listen.js's analysis, refreshed once a frame: bass, mid, high
+   * and overall level as 0..1 above-usual, and a beat pulse. Every way the water moves already
+   * existed; the music only turns the dials on it, so it never looks like a visualiser bolted
+   * onto a sea — it looks like a sea that is being played.
+   *
+   *   flowT   the clock the water runs on. It advances faster when the music is busy, so the
+   *           current, the waves and the surface texture all speed up together and slow back
+   *           down together. Accumulated rather than scaled, so a change of pace never jumps.
+   *   swell   how hard the wave trains push. The bass, and every beat on top of it.
+   *   pulses  one per beat: a ring of swell rolling out from the coast, and foam breaking on the
+   *           rocks at the same instant. The thing you can point at and say "that was the kick".
+   *
+   * With the music off every multiplier is 1 and every pulse is gone — the sea it was before.
+   */
+  const CALM = { bass: 0, mid: 0, high: 0, level: 0, beat: 0, beats: 0 };
+  let soundOf = null, sound = CALM, lastBeats = 0;
+  let flowT = 0, swell = 1;
+  const pulses = [];
   let drunk = 0;                       // 0..1, eased, so it fades in and out rather than snapping
 
   /* Where the aim bracket is DRAWN, in tiles, as a float.
@@ -185,6 +206,7 @@ export function createRenderer(canvas, world) {
 
   const invalidateAll = () => {
     chunks = new Map(); shore = null; splashes.length = 0; dropsFor = null;
+    pools.clear(); ripples.length = 0; wisps.length = 0; shards.length = 0; pops.length = 0; poolFor = null;
     rollCurrent();          // a new island sits in a different sea
   };
   const mapChanged = () => { recomputeZoom(); };
@@ -455,7 +477,7 @@ export function createRenderer(canvas, world) {
     rockFlow(x, y, rockPush);
     let v = Math.cos(current.angle) * current.speed + rockPush.x;
     for (const s of current.trains) {
-      const a = s.amp * envelopeAt(s, x, y, t);
+      const a = s.amp * swell * envelopeAt(s, x, y, t);
       v += Math.sin((x * s.dx + y * s.dy) * s.k - t * s.w + s.phase) * a * -s.dy;
     }
     return v;
@@ -464,7 +486,7 @@ export function createRenderer(canvas, world) {
     // rockPush was filled by the flowX call for this same point, one line earlier in drawDrops.
     let v = Math.sin(current.angle) * current.speed + rockPush.y;
     for (const s of current.trains) {
-      const a = s.amp * envelopeAt(s, x, y, t);
+      const a = s.amp * swell * envelopeAt(s, x, y, t);
       v += Math.sin((x * s.dx + y * s.dy) * s.k - t * s.w + s.phase) * a * s.dx;
     }
     return v;
@@ -480,8 +502,11 @@ export function createRenderer(canvas, world) {
     ctx.translate(ox, oy);
     ctx.lineCap = 'round';
     ctx.strokeStyle = PALETTE.foam;
+    // The streaks brighten with the top end and stretch with the mids: busy music, busy water.
+    const bright = Math.min(2.4, 0.8 + sound.high * 1.3 + sound.beat * 0.7);
+    const stretch = 1 + sound.mid * 1.4 + sound.beat * 0.9;
     for (const d of drops) {
-      const fx = flowX(d.x, d.y, seaT), fy = flowY(d.x, d.y, seaT);
+      const fx = flowX(d.x, d.y, flowT), fy = flowY(d.x, d.y, flowT);
       // Ease toward the current rather than snapping to it, so particles have momentum and the
       // field reads as water being pushed rather than as dots teleporting along a curve.
       d.vx += (fx - d.vx) * 0.08;
@@ -499,11 +524,11 @@ export function createRenderer(canvas, world) {
           && cellType(map.cells[ty * map.w + tx]) !== BLOCK.WATER) continue;
 
       const sp = Math.hypot(d.vx, d.vy) || 1;
-      ctx.globalAlpha = d.a;
+      ctx.globalAlpha = Math.min(0.85, d.a * bright);
       ctx.lineWidth = sp > 18 ? 1.6 : 1;
       ctx.beginPath();
       ctx.moveTo(d.x, d.y);
-      ctx.lineTo(d.x - (d.vx / sp) * d.len, d.y - (d.vy / sp) * d.len);
+      ctx.lineTo(d.x - (d.vx / sp) * d.len * stretch, d.y - (d.vy / sp) * d.len * stretch);
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
@@ -516,8 +541,10 @@ export function createRenderer(canvas, world) {
   const MAX_SPLASHES = 4;
   const SPLASH_EVERY_MS = 8000;
 
-  function spawnSplash() {
-    if (splashes.length >= MAX_SPLASHES) return;
+  function spawnSplash(onBeat = false) {
+    // Beat foam has its own, larger, allowance: it arrives in bursts and leaves quickly.
+    if (splashes.length >= (onBeat ? MAX_SPLASHES + 12 : MAX_SPLASHES)) return;
+    const quick = onBeat ? 3.5 : 1;
 
     // One in three breaks on a boulder rather than on the island. They are small and far out,
     // so without their own share of the foam they would be the only still thing in the water.
@@ -530,7 +557,8 @@ export function createRenderer(canvas, world) {
         y: k.y + Math.sin(a) * k.r * 0.8,
         life: 1,
         r: 8 + Math.random() * 8,
-        rate: 0.18 + Math.random() * 0.14,
+        rate: (0.18 + Math.random() * 0.14) * quick,
+        bright: onBeat ? 2.6 : 1,
       });
       return;
     }
@@ -547,7 +575,8 @@ export function createRenderer(canvas, world) {
       y: (s.ty + 0.5 + dy * 0.7) * TILE_PX,
       life: 1,
       r: 9 + Math.random() * 9,
-      rate: 0.16 + Math.random() * 0.12,       // five to six seconds to fade
+      rate: (0.16 + Math.random() * 0.12) * quick,   // five to six seconds; under two on a beat
+      bright: onBeat ? 2.6 : 1,
     });
   }
 
@@ -607,7 +636,8 @@ export function createRenderer(canvas, world) {
     ctx.rotate(m.angle);
     // A slow roll at anchor. Tiny — a degree and a half — but a ship perfectly still on water
     // that is not reads as a sprite rather than as a boat.
-    ctx.rotate(Math.sin(seaT * 0.45) * 0.026);
+    // Rides the swell: the roll deepens with the bass.
+    ctx.rotate(Math.sin(flowT * 0.45) * 0.026 * (1 + sound.bass * 1.6));
     ctx.scale(SHIP_SCALE, SHIP_SCALE);
     drawShip(ctx);
     ctx.restore();
@@ -746,7 +776,7 @@ export function createRenderer(canvas, world) {
 
       // The water piling up around it. Wide and faint — a bright collar is what made these look
       // like islands rather than like something barely breaking the surface.
-      ctx.globalAlpha = 0.12 + 0.04 * Math.sin(seaT * 1.1 + k.phase);
+      ctx.globalAlpha = 0.12 + 0.04 * Math.sin(flowT * 1.1 + k.phase) + 0.22 * sound.beat;
       ctx.strokeStyle = PALETTE.foam;
       ctx.lineWidth = 3;
       ctx.beginPath(); ctx.ellipse(x, y, k.r * 1.25, k.r * 1.05, 0, 0, 7); ctx.stroke();
@@ -789,6 +819,9 @@ export function createRenderer(canvas, world) {
   function drawSea(vw, vh, ox, oy, dtMs) {
     if (!seaNear) return;
     seaT += dtMs / 1000;
+    // The music's clock and push. See `sound` at the top of the renderer.
+    flowT += (dtMs / 1000) * (1 + sound.level * 1.7 + sound.beat * 1.1);
+    swell = 1 + sound.bass * 2.6 + sound.beat * 1.5;
 
     ctx.fillStyle = PALETTE.seaDeep;
     ctx.fillRect(0, 0, vw, vh);
@@ -830,7 +863,7 @@ export function createRenderer(canvas, world) {
       ctx.translate(vw / 2, vh / 2);
       ctx.rotate(current.angle);
       // Modulo the pattern size, so the offset never grows large enough to lose precision.
-      ctx.translate((seaT * d.sx) % 128, (seaT * d.sy) % 128);
+      ctx.translate((flowT * d.sx) % 128, (flowT * d.sy) % 128);
       ctx.fillStyle = pattern;
       ctx.fillRect(-reach, -reach, reach * 2, reach * 2);
       ctx.restore();
@@ -846,16 +879,29 @@ export function createRenderer(canvas, world) {
      * still for its whole short life and a new one appears somewhere else — no state, no
      * allocation, deterministic enough never to flicker as a group.
      */
+    /* The water lifts toward the light on the bass, and flashes on the beat.
+     *
+     * One translucent wash over the whole sea, under everything floating on it. The depth
+     * gradient means it reads as the swell rising rather than as the screen flashing. */
+    const lift = sound.bass * 0.09 + sound.beat * 0.08;
+    if (lift > 0.004) {
+      ctx.fillStyle = `rgba(48,128,186,${lift})`;
+      ctx.fillRect(0, 0, vw, vh);
+    }
+
     ctx.save();
     ctx.fillStyle = '#dff0ff';
-    for (let i = 0; i < GLINTS; i++) {
+    // The top end is the glitter: more glints, and brighter, while the hats are going.
+    const glints = GLINTS + Math.round(sound.high * GLINTS * 1.5);
+    const glow = 0.5 * (0.7 + sound.high * 1.4 + sound.beat * 0.5);
+    for (let i = 0; i < glints; i++) {
       const epoch = Math.floor(seaT / GLINT_LIFE_S + i * 0.37);
       const f = (seaT / GLINT_LIFE_S + i * 0.37) % 1;
       const hx = hash01(i * 7919 + epoch * 104729);
       const hy = hash01(i * 7919 + epoch * 104729 + 1);
       // A short rise and a long fall, so they twinkle out rather than blinking off.
       const life = f < 0.25 ? f / 0.25 : 1 - (f - 0.25) / 0.75;
-      ctx.globalAlpha = life * 0.5;
+      ctx.globalAlpha = Math.min(1, life * glow);
       const gx = hx * vw, gy = hy * vh;
       const len = 1.5 + hash01(i + epoch) * 3.5;
       ctx.fillRect(gx, gy, len, 1);
@@ -880,8 +926,50 @@ export function createRenderer(canvas, world) {
         }
       }
     };
-    shelf(2, 0.16, PALETTE.seaMid);     // the outer, deeper step
-    shelf(1, 0.42, PALETTE.seaLight);   // and the bright water right against the rock
+    /** One row of sea, exactly `n` tiles out from the rock all the way round. */
+    const shelfRow = (n, alpha) => {
+      if (n < 1 || alpha < 0.004) return;
+      ctx.globalAlpha = alpha;
+      for (const s of shoreline()) {
+        if (s.e & 1) ctx.fillRect((s.tx + n) * TILE_PX, s.ty * TILE_PX, TILE_PX, TILE_PX);
+        if (s.e & 4) ctx.fillRect((s.tx - n) * TILE_PX, s.ty * TILE_PX, TILE_PX, TILE_PX);
+        if (s.e & 2) ctx.fillRect(s.tx * TILE_PX, (s.ty - n) * TILE_PX, TILE_PX, TILE_PX);
+        if (s.e & 8) ctx.fillRect(s.tx * TILE_PX, (s.ty + n) * TILE_PX, TILE_PX, TILE_PX);
+      }
+    };
+
+    // Both bands breathe with the bass: the shallows glow on the kick.
+    shelf(2, 0.16 * (1 + sound.bass * 1.4 + sound.beat), PALETTE.seaMid);    // the outer, deeper step
+    shelf(1, Math.min(0.9, 0.42 * (1 + sound.bass * 0.7 + sound.beat * 0.6)), PALETTE.seaLight);
+
+    /* A swell rolling out from the coast on every beat.
+     *
+     * Built from the same thing the shallows are: bands of sea tiles stepped out from the
+     * shoreline. A beat lights the band one tile out and walks it outward to the edge of the
+     * board while it fades, blending between neighbouring rows so the motion is smooth rather
+     * than stepping. Because it is the coast's own contour it follows every bay and headland on
+     * every map, and it is drawn under the island, so whatever lands in a bay is simply covered.
+     *
+     * It started as a rounded ring around the island's bounding box. That moved four tiles in
+     * half a second, so it had left the two-tile strip of visible sea before anyone saw it, and
+     * on a round island it cut straight across the empty corners of the box.
+     */
+    if (pulses.length) {
+      const dt = dtMs / 1000;
+      ctx.fillStyle = PALETTE.foam;
+      for (let i = pulses.length - 1; i >= 0; i--) {
+        const p = pulses[i];
+        p.life -= dt / 1.25;
+        if (p.life <= 0) { pulses.splice(i, 1); continue; }
+        const out = 1 - p.life;
+        const at = 1 + 3.2 * (1 - (1 - out) * (1 - out));      // tiles from the rock, easing out
+        const n0 = Math.floor(at), fr = at - n0;
+        const peak = p.life * 0.34 * p.strength;
+        shelfRow(n0, peak * (1 - fr));
+        shelfRow(n0 + 1, peak * fr);
+        if (n0 > 1) shelfRow(n0 - 1, peak * 0.35 * (1 - fr));  // the trough behind the crest
+      }
+    }
 
     /* No caustics.
      *
@@ -908,17 +996,235 @@ export function createRenderer(canvas, world) {
       // A spreading ring rather than a filled blob. Foam is an edge, and an outline stays
       // readable at three times the size where a disc would just be a pale smear on the sea.
       const spread = s.r * (1 + (1 - s.life) * 2.2);
-      ctx.globalAlpha = s.life * s.life * 0.16;     // squared, so it fades out early and gently
+      const b = s.bright ?? 1;
+      ctx.globalAlpha = s.life * s.life * 0.16 * b;     // squared, so it fades out early and gently
       ctx.strokeStyle = PALETTE.foam;
       ctx.beginPath();
       ctx.arc(s.x, s.y, spread, 0, 7);
       ctx.stroke();
-      ctx.globalAlpha = s.life * s.life * 0.05;
+      ctx.globalAlpha = s.life * s.life * 0.05 * b;
       ctx.fillStyle = PALETTE.foam;
       ctx.fill();
     }
     ctx.restore();
     ctx.globalAlpha = 1;
+  }
+
+  // ─── melted ice ─────────────────────────────────────────────────────────────
+
+  /* Puddles, drawn as one pool rather than five squares.
+   *
+   * Each wet tile contributes three overlapping ellipses, and every tile's ellipses go into the
+   * SAME path, so neighbours fuse into one body of water with an organic edge instead of a plus
+   * sign of tiles. That union is drawn opaque into its own layer — rim, body, sheen — and the
+   * layer goes onto the board at partial alpha once, so overlaps never double up into darker
+   * patches.
+   *
+   * Presence is eased, not read off the tick. `vis` chases 1 while the puddle is fresh and
+   * chases its remaining life over the last PUDDLE_FADE_TICKS, so a puddle swells in fast and
+   * dries slowly from the edges inward, steaming as it goes — and it carries on drying for a
+   * moment after the simulation has dropped it, which is what makes the end look like
+   * evaporation rather than a delete. Pure presentation: the sim already stopped being wet.
+   */
+  const pools = new Map();         // "tx,ty" -> { tx, ty, vis, target, seed }
+  const ripples = [];              // rings on the water: rain-like idle ones, footsteps, the melt
+  const wisps = [];                // steam off a drying puddle
+  const shards = [];               // ice flying off a melt
+  const pops = [];                 // the bright burst at the moment of melting
+  let poolLayer = null, poolCtx = null, poolFor = null;
+
+  const POOL_RIM = '#9fcfe6', POOL_BODY = '#2a6c9e', POOL_SHEEN = '#3580b6';
+
+  /**
+   * One wet tile's share of the pool, plus a bridge to each wet neighbour right and below.
+   *
+   * The bridges are what make it a pool. Blobs sized to stay inside their own tile leave a waist
+   * between neighbours where the rim shows through, and five tiles read as five balloons; blobs
+   * sized to overlap without bridges bulge past the plus into the corners. A bridge at the shared
+   * edge, as thick as the thinner of the two, fills the waist and nothing else.
+   */
+  function poolBlobs(c, fx, scale, sx, sy, t) {
+    const S = TILE_PX;
+    const grow = 0.3 + 0.7 * fx.vis;
+    const wob = Math.sin(t * 1.6 + fx.seed * 6.28) * 0.7;
+    const cx = fx.tx * S + S / 2 + sx, cy = fx.ty * S + S / 2 + sy;
+    for (let k = 0; k < 3; k++) {
+      const a = fx.seed * 9 + k * 2.1;
+      const ex = cx + Math.cos(a) * 3 * grow, ey = cy + Math.sin(a) * 2.5 * grow;
+      const rx = (S * (0.64 - k * 0.06) + wob) * scale * grow;
+      const ry = rx * (0.84 + 0.1 * Math.sin(a * 1.3));
+      c.moveTo(ex + rx, ey);
+      c.ellipse(ex, ey, rx, ry, 0, 0, Math.PI * 2);
+    }
+    for (const [dx, dy] of [[1, 0], [0, 1]]) {
+      const n = pools.get(`${fx.tx + dx},${fx.ty + dy}`);
+      if (!n) continue;
+      const g = 0.3 + 0.7 * Math.min(fx.vis, n.vis);
+      const along = S * 0.62 * scale * g, across = S * 0.5 * scale * g;
+      const mx = cx + (dx * S) / 2, my = cy + (dy * S) / 2;
+      const rx = dx ? along : across, ry = dx ? across : along;
+      c.moveTo(mx + rx, my);
+      c.ellipse(mx, my, rx, ry, 0, 0, Math.PI * 2);
+    }
+  }
+
+  function drawPuddles(ox, oy, dtMs) {
+    const dt = dtMs / 1000;
+    const live = new Set();
+    for (const q of world.puddles) {
+      if (q.until <= world.tick) continue;
+      const key = `${q.tx},${q.ty}`;
+      live.add(key);
+      let fx = pools.get(key);
+      if (!fx) pools.set(key, fx = { tx: q.tx, ty: q.ty, vis: 0, target: 1, seed: hash01(q.tx * 977 + q.ty * 131) });
+      const left = q.until - world.tick;
+      fx.target = left >= PUDDLE_FADE_TICKS ? 1 : Math.max(0, left / PUDDLE_FADE_TICKS);
+    }
+    for (const [key, fx] of pools) {
+      if (!live.has(key)) fx.target = 0;
+      // In fast, out slow: a splash arrives, a puddle evaporates.
+      const tau = fx.target > fx.vis ? 90 : 320;
+      fx.vis += (fx.target - fx.vis) * (1 - Math.exp(-dtMs / tau));
+      if (fx.target === 0 && fx.vis < 0.03) { pools.delete(key); continue; }
+
+      // Idle ripples, and steam once it starts drying.
+      if (fx.vis > 0.5 && ripples.length < 18 && Math.random() < dtMs / 900) {
+        ripples.push({ x: fx.tx * TILE_PX + 6 + Math.random() * 20, y: fx.ty * TILE_PX + 6 + Math.random() * 20,
+          life: 1, max: 4 + Math.random() * 5, rate: 1.1, w: 1 });
+      }
+      if (fx.target < 1 && fx.vis > 0.08 && wisps.length < 48 && Math.random() < dtMs / 160) {
+        wisps.push({ x: fx.tx * TILE_PX + 5 + Math.random() * 22, y: fx.ty * TILE_PX + 8 + Math.random() * 18,
+          life: 1, ph: Math.random() * 6.28 });
+      }
+    }
+
+    // Wading. A ring at the feet of anyone moving through water, so you can see who is slowed.
+    if (pools.size) {
+      for (const p of world.players) {
+        if (!p || !p.alive || !p.moving || ripples.length >= 24) continue;
+        const tx = (p.rx ?? p.x) >> 8, ty = (p.ry ?? p.y) >> 8;
+        if (!pools.has(`${tx},${ty}`) || Math.random() > dtMs / 110) continue;
+        ripples.push({ x: ((p.rx ?? p.x) / UNITS_PER_TILE) * TILE_PX, y: ((p.ry ?? p.y) / UNITS_PER_TILE) * TILE_PX + 9,
+          life: 1, max: 7, rate: 1.6, w: 1.2 });
+      }
+    }
+
+    if (!pools.size && !ripples.length && !wisps.length && !shards.length && !pops.length) return;
+
+    if (pools.size) {
+      const map = world.map, S = TILE_PX;
+      if (poolFor !== map) {
+        poolLayer = document.createElement('canvas');
+        poolLayer.width = map.w * S; poolLayer.height = map.h * S;
+        poolCtx = poolLayer.getContext('2d');
+        poolFor = map;
+      }
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const fx of pools.values()) {
+        x0 = Math.min(x0, fx.tx); y0 = Math.min(y0, fx.ty);
+        x1 = Math.max(x1, fx.tx); y1 = Math.max(y1, fx.ty);
+      }
+      const bx = Math.max(0, (x0 - 1) * S), by = Math.max(0, (y0 - 1) * S);
+      const bw = Math.min(poolLayer.width, (x1 + 2) * S) - bx, bh = Math.min(poolLayer.height, (y1 + 2) * S) - by;
+      const pc = poolCtx;
+      pc.clearRect(bx, by, bw, bh);
+      // Rim, body, then a sheen lifted toward the top-left light.
+      for (const [scale, colour, sx, sy] of [[1, POOL_RIM, 0, 0], [0.9, POOL_BODY, 0, 0], [0.62, POOL_SHEEN, -2, -2]]) {
+        pc.fillStyle = colour;
+        pc.beginPath();
+        for (const fx of pools.values()) poolBlobs(pc, fx, scale, sx, sy, seaT);
+        pc.fill();
+      }
+      ctx.globalAlpha = 0.64;
+      ctx.drawImage(poolLayer, bx, by, bw, bh, ox + bx, oy + by, bw, bh);
+
+      // Light on the water: two small glints per puddle, circling slowly and breathing.
+      ctx.fillStyle = '#ffffff';
+      for (const fx of pools.values()) {
+        if (fx.vis < 0.25) continue;
+        for (let k = 0; k < 2; k++) {
+          const a = seaT * 0.7 + fx.seed * 10 + k * 3.1;
+          const gx = ox + fx.tx * S + S / 2 - 3 + Math.cos(a) * 6 * fx.vis;
+          const gy = oy + fx.ty * S + S / 2 - 3 + Math.sin(a) * 4 * fx.vis;
+          ctx.globalAlpha = 0.4 * fx.vis * (0.45 + 0.55 * Math.sin(seaT * 2.6 + fx.seed * 20 + k * 2));
+          if (ctx.globalAlpha <= 0.01) continue;
+          ctx.beginPath(); ctx.ellipse(gx, gy, 2.6, 1.1, -0.5, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    ctx.save();
+    ctx.translate(ox, oy);
+
+    for (let i = pops.length - 1; i >= 0; i--) {
+      const b = pops[i];
+      b.life -= dt / 0.28;
+      if (b.life <= 0) { pops.splice(i, 1); continue; }
+      ctx.globalAlpha = b.life * b.life * 0.5;
+      ctx.fillStyle = '#e9f8ff';
+      ctx.beginPath(); ctx.arc(b.x, b.y, TILE_PX * (0.45 + (1 - b.life) * 0.5), 0, Math.PI * 2); ctx.fill();
+    }
+
+    ctx.strokeStyle = '#d8f1ff';
+    for (let i = ripples.length - 1; i >= 0; i--) {
+      const r = ripples[i];
+      r.life -= dt * r.rate;
+      if (r.life <= 0) { ripples.splice(i, 1); continue; }
+      ctx.globalAlpha = r.life * r.life * 0.55;
+      ctx.lineWidth = r.w;
+      ctx.beginPath(); ctx.ellipse(r.x, r.y, 1.5 + (1 - r.life) * r.max, (1.5 + (1 - r.life) * r.max) * 0.7, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = '#e6f4fb';
+    for (let i = wisps.length - 1; i >= 0; i--) {
+      const s = wisps[i];
+      s.life -= dt / 1.2;
+      if (s.life <= 0) { wisps.splice(i, 1); continue; }
+      const up = (1 - s.life) * 16;
+      ctx.globalAlpha = Math.sin(s.life * Math.PI) * 0.22;     // in and out, never a pop
+      ctx.beginPath();
+      ctx.arc(s.x + Math.sin(s.ph + up * 0.3) * 2.5, s.y - up, 1.8 + (1 - s.life) * 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    for (let i = shards.length - 1; i >= 0; i--) {
+      const s = shards[i];
+      s.life -= dt / s.span;
+      if (s.life <= 0) { shards.splice(i, 1); continue; }
+      const drag = Math.exp(-dt * 5);
+      s.vx *= drag; s.vy *= drag;
+      s.x += s.vx * dt; s.y += s.vy * dt;
+      s.rot += s.vr * dt;
+      ctx.globalAlpha = Math.min(1, s.life * 1.6);
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.rot);
+      ctx.beginPath();
+      ctx.moveTo(0, -s.size); ctx.lineTo(s.size * 0.55, 0); ctx.lineTo(0, s.size); ctx.lineTo(-s.size * 0.55, 0);
+      ctx.closePath();
+      ctx.fillStyle = '#cdeefc'; ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 0.8; ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  /** Ice breaking: a flash, a ring of meltwater pushing out, and shards thrown off it. */
+  function addMelt(tx, ty) {
+    const x = tx * TILE_PX + TILE_PX / 2, y = ty * TILE_PX + TILE_PX / 2;
+    pops.push({ x, y, life: 1 });
+    ripples.push({ x, y, life: 1, max: TILE_PX * 0.9, rate: 1.4, w: 2.2 });
+    ripples.push({ x, y, life: 1, max: TILE_PX * 0.5, rate: 1.9, w: 1.4 });
+    for (let i = 0; i < 12 && shards.length < 60; i++) {
+      const a = (i / 12) * Math.PI * 2 + Math.random() * 0.4;
+      const v = 60 + Math.random() * 90;
+      shards.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, rot: a, vr: (Math.random() * 2 - 1) * 9,
+        size: 2 + Math.random() * 2.5, life: 1, span: 0.45 + Math.random() * 0.3 });
+    }
   }
 
   // ─── frame ──────────────────────────────────────────────────────────────────
@@ -993,6 +1299,14 @@ export function createRenderer(canvas, world) {
 
     const ox = -Math.round(cam.x) + Math.round(sx), oy = -Math.round(cam.y) + Math.round(sy);
 
+    // Listen before drawing a single wave, so everything this frame hears the same instant.
+    sound = soundOf ? soundOf(dtMs) : CALM;
+    if (sound.beats !== lastBeats) {
+      lastBeats = sound.beats;
+      if (pulses.length < 6) pulses.push({ life: 1, strength: 0.6 + sound.bass * 0.6 });
+      for (let i = 0; i < 4; i++) spawnSplash(true);
+    }
+
     drawSea(vw, vh, ox, oy, dtMs);
     // Both before the flow field, so the current runs ACROSS them rather than over the top.
     // Streaks of foam crossing a deck or a boulder read as the water being in front of the
@@ -1008,6 +1322,8 @@ export function createRenderer(canvas, world) {
         ctx.drawImage(chunkAt(cx, cy), ox + cx * CHUNK_PX, oy + cy * CHUNK_PX);
 
     drawSplashes(ox, oy, dtMs);
+    // On the floor, under the perks, bombs and everybody standing in it.
+    drawPuddles(ox, oy, dtMs);
 
     for (const k of world.perks) {
       const bob = Math.sin((world.tick + k.id * 7) / 6) * 2;
@@ -1458,7 +1774,9 @@ export function createRenderer(canvas, world) {
 
   resize();
   return {
-    frame, resize, invalidateAll, invalidateTile, mapChanged,
+    frame, resize, invalidateAll, invalidateTile, mapChanged, addMelt,
+    /** Where the sea gets its music from: `dtMs => analysis`, called once a frame. */
+    setSound(fn) { soundOf = fn; },
     /**
      * A line of text that floats up off a player and fades.
      *

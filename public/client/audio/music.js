@@ -491,7 +491,7 @@ async function createFileTrack({ bus, name, loop = false }) {
 }
 
 export function createMusic() {
-  let ctx = null, timer = null, tracks = null, musicGain = null, sidechain = null;
+  let ctx = null, timer = null, tracks = null, musicGain = null, sidechain = null, analyser = null;
   let step = 0, loops = 0, current = 0, nextTime = 0;
   /* Which track you can actually HEAR, as opposed to which one is being scheduled.
    *
@@ -551,6 +551,16 @@ export function createMusic() {
     sidechain = ctx.createGain();
     sidechain.gain.value = 1;
     sidechain.connect(musicGain);
+
+    /* The ear the sea listens with. See listen.js.
+     *
+     * After the duck and before the volume fader, on purpose. Before the fader so the water
+     * moves the same at 10% as at 100% — the slider is how loud, not how much. After the duck
+     * so an explosion that pulls the music down pulls the sea down with it, on the same beat. */
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.2;
+    sidechain.connect(analyser);
 
     /* Four slots, each a produced mix if its file is reachable and the synthesised version of
      * itself if it is not.
@@ -736,6 +746,12 @@ export function createMusic() {
      * `playing` is not. That window is exactly what the autostart in main.js is closing.
      */
     get wanted() { return wanted; },
+
+    /** The music as it sounds, before the volume fader. Null until the music has been built. */
+    get analyser() { return analyser; },
+
+    /** Is anybody hearing it? Paused or faded to zero, the sea should be still. */
+    get audible() { return playing && volume > 0; },
 
     /** True when what you are hearing is the produced file rather than the synth fallback. */
     get trackIsFile() { return !!tracks?.[sounding]?.file; },

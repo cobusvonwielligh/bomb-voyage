@@ -1,6 +1,6 @@
 # Bomb Voyage — Where We Stand
 
-Last updated: **2026-10-24**. Live on `bombvoyage.online`. 231 tests passing.
+Last updated: **2026-10-24**. Live on `bombvoyage.online`. 241 tests passing.
 
 This document replaces the "⬜ The game: not started" line in the README. The game is built, the
 whole plan in [PLAN.md](PLAN.md) has been walked through, and several decisions in it have since
@@ -69,11 +69,16 @@ is the only perk you might not want: it softens damage and makes you drunk, whic
 walk and rolls the camera. It is the only perk whose effect is visible to the person carrying
 it and nobody else — and the only one rare enough to be an event rather than a thing you have.
 
-### (d) Two new systems that were never in the plan
+### (d) New systems that were never in the plan
 
 - **Stamina.** Ten seconds of running empties it; empty means half pace until you have recovered
   a third. Regenerates twice as fast standing still, so stopping is a decision rather than a
   punishment. See [RULES.md](RULES.md) §9.
+- **Ice.** One soft wall in twenty. A blast melts it into water on its own tile and the four
+  beside it, for four seconds: half pace, and you slide when you let go. The water is in the
+  snapshot, not derived from events, because prediction reads it. See [RULES.md](RULES.md) §4.
+- **The sea listens to the music.** Bass swells the waves, energy speeds the current, the highs
+  glitter, and every beat rolls a swell out from the coast. See [ART-AUDIO.md](ART-AUDIO.md) §6.
 - **Powder kegs.** A destructible block that detonates at radius 7 on the tick it breaks. At most
   six a round, at least one guaranteed. They chain into each other and into bombs, because a keg
   *is* a bomb as far as the blast code is concerned. See [RULES.md](RULES.md) §10.

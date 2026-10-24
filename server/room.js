@@ -466,6 +466,8 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
     // Stamina rides along because the indicator is drawn beside EVERY player, not just you:
     // seeing that the pirate chasing you is limping is the whole point of showing it at all.
     sta: p.stamina, stl: p.staminaLevel, tr: p.tired ? 1 : 0,
+    // Only while sliding on water, which is almost never — absent means zero.
+    ...(p.slide ? { sl: p.slide } : null),
   });
 
   function emitSnapshot() {
@@ -479,6 +481,9 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       players,
       bombs: state.bombs,
       perks: state.perks,
+      // In the snapshot rather than derived from `melt` events: movement prediction reads them,
+      // and a client that joined mid-puddle or missed a snapshot must still agree with us.
+      puddles: state.puddles,
       ev,
     }));
   }
@@ -542,6 +547,7 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       players,
       bombs: state.bombs,
       perks: state.perks,
+      puddles: state.puddles,
       // Every rule constant the client needs, so a server tuning change needs no client deploy.
       config: {
         tickHz: TICK_HZ, snapEvery: SNAP_EVERY_TICKS, tileSize: TILE_PX,
