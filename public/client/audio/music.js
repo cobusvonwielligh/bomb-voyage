@@ -518,6 +518,24 @@ export function createMusic() {
     return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : VOLUME_MUSIC_DEFAULT;
   }
 
+  /* Does this person want music at all? Yes, unless they have said otherwise.
+   *
+   * Stored separately from the volume, because they answer different questions: the volume is
+   * how loud, this is whether. Muting to zero and pausing are not the same act and should not
+   * share a setting — see the mute button in main.js.
+   *
+   * Default TRUE, and the check is `!== '0'` rather than `=== '1'` so a browser with nothing
+   * stored, or with the key cleared, lands on playing. The music is the first impression; a
+   * silent landing page that needs a button press to become the thing it is supposed to be is
+   * a worse default than one somebody occasionally has to turn off.
+   */
+  const WANTED_KEY = 'bv.musicOn';
+  let wanted = localStorage.getItem(WANTED_KEY) !== '0';
+  const setWanted = v => {
+    wanted = v;
+    localStorage.setItem(WANTED_KEY, v ? '1' : '0');
+  };
+
   async function build() {
     // Shared with the sound effects. One context, so one user gesture unlocks both and turning
     // the music off cannot take the sound effects down with it.
@@ -695,6 +713,7 @@ export function createMusic() {
      * being hunted. Starting a round jumps straight to an ambient bed instead.
      */
     async start(from = 'theme') {
+      setWanted(true);
       if (!ctx) await build();
       if (!await unlock()) return false;
       const at = Math.max(0, tracks.findIndex(t => t.name === from));
@@ -708,6 +727,15 @@ export function createMusic() {
       timer = setInterval(scheduler, TIMER_MS);
       return true;
     },
+
+    /**
+     * Whether music is wanted at all, remembered across sessions and defaulting to yes.
+     *
+     * Separate from `playing`, which is whether it is running RIGHT NOW: a browser will not
+     * let anything start before a gesture, so there is always a window where this is true and
+     * `playing` is not. That window is exactly what the autostart in main.js is closing.
+     */
+    get wanted() { return wanted; },
 
     /** True when what you are hearing is the produced file rather than the synth fallback. */
     get trackIsFile() { return !!tracks?.[sounding]?.file; },
@@ -759,6 +787,7 @@ export function createMusic() {
     },
 
     stop() {
+      setWanted(false);
       clearInterval(timer);
       timer = null;
       playing = false;

@@ -221,6 +221,14 @@ the one thing a skip button must not be able to do. Both set `current = sounding
 is relative to what the person pressing it can hear, not to whatever the scheduler has queued
 minutes out.
 
+**Music is on by default.** No browser lets audio start before a user gesture, so that can
+only ever mean "starts at the first click or keypress" — the listener is on the **document**,
+capture phase, `once`. It was on `#menu`, which covers the common path and misses every other
+one. `music.wanted` is persisted separately from the volume (`bv.musicOn`, default true, read as
+`!== '0'` so a cleared key lands on playing) and consulted before autostarting, because a
+default is not the same thing as a decision somebody has already overridden. Volume answers how
+loud; this answers whether.
+
 **The theme plays on the dashboard, always, and nowhere else.** Its file track has `loop: true`,
 which gives it `repeats: Infinity` — so the sequencer can never reach a handover and it owns the
 rotation until something calls `jumpTo`. Starting a round is exactly that: `exclude('theme')`

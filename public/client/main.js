@@ -1048,17 +1048,31 @@ function leave() {
 
 // ─── menu ─────────────────────────────────────────────────────────────────────
 
-// The theme plays on the landing page, from the first gesture the browser will accept — a click
-// anywhere on the card, or the first keystroke in the name box. Audio cannot start before one.
+/* Music is ON by default, from the first gesture the browser will accept.
+ *
+ * No browser lets audio start before a user gesture, so "plays by default" can only ever mean
+ * "starts at the first click or keypress". Three things make that reliable:
+ *
+ *   1. **The listener is on the document, not the menu card.** It used to be on `#menu`, which
+ *      covers the common path and misses every other one — landing straight into a game from a
+ *      reconnect, or a first click that happens to be outside the card.
+ *   2. **`music.wanted` is consulted.** It is true unless this browser has explicitly paused
+ *      before, so somebody who turned the music off does not get it back every time they open
+ *      the page. A default is not the same thing as a decision overridden.
+ *   3. **`once: true` plus the guard.** Capture phase so nothing can swallow the gesture first.
+ */
 let menuAudioTried = false;
 function startMenuAudio() {
-  if (menuAudioTried || running) return;
+  if (menuAudioTried) return;
   menuAudioTried = true;
-  music.exclude('theme', false);
-  music.start('theme').then(syncAudio);
+  if (!music.wanted) { syncAudio(); return; }
+  // Only put the theme back when we are still on the menu; starting audio mid-round must not
+  // drag the landing-page tune into a firefight.
+  if (!running) music.exclude('theme', false);
+  music.start(running ? BEDS[(Math.random() * BEDS.length) | 0] : 'theme').then(syncAudio);
 }
-for (const ev of ['pointerdown', 'keydown']) {
-  $('menu').addEventListener(ev, startMenuAudio, { once: true });
+for (const ev of ['pointerdown', 'keydown', 'touchstart']) {
+  document.addEventListener(ev, startMenuAudio, { once: true, capture: true });
 }
 
 const nameInput = $('name');
