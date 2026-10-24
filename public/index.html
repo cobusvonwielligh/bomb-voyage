@@ -143,8 +143,22 @@
   <div id="side" class="edge">
     <div id="card">
       <span id="who" class="castSm"></span>
-      <span id="rank"></span>
-      <!-- Kills, deaths, gold. The round score used to be here and is not information: it is
+
+      <!-- The bar first, then the counts.
+           `lvl 4 · Rookie` is one fact in two halves, and it was split across two rows with the
+           stats wedged in between — so the tier read as a caption on your NAME rather than as
+           what it is: the name of the level sitting next to it. Joined, the head of the bar
+           says everything about where you are, and the counts sit under it as the detail. -->
+      <div id="xp">
+        <div class="xpHead">
+          <span id="xpLevel">lvl 0</span>
+          <span id="rank"></span>
+          <span id="xpNums">0 / 200</span>
+        </div>
+        <div id="xpTrack"><div id="xpFill"></div></div>
+      </div>
+
+      <!-- Kills, deaths, coins. The round score used to be here and is not information: it is
            a number you cannot act on, derived from the other two plus pickups, and it is
            already the thing the scoreboard ranks by. Hours played is tracked on the server and
            deliberately not shown — nobody needs to be told how long they have been here. -->
@@ -155,14 +169,6 @@
       </div>
       <!-- Lifetime podium finishes: the trophy cabinet. Filled from the scores broadcast. -->
       <div id="cardMedals" aria-label="medals"></div>
-
-      <div id="xp">
-        <div class="xpHead">
-          <span id="xpLevel">lvl 0</span>
-          <span id="xpNums">0 / 200</span>
-        </div>
-        <div id="xpTrack"><div id="xpFill"></div></div>
-      </div>
     </div>
 
     <div>
@@ -284,7 +290,13 @@
   <canvas id="menuViz" aria-hidden="true"></canvas>
   <div id="menuWrap">
     <div class="card edge">
-      <h1 id="title" class="cast">Bomb&nbsp;Voyage</h1>
+      <!-- The title and its version, as one block: `width: fit-content` on #title means the
+           box is exactly as wide as the word, so a marker positioned against it lands under the
+           final letter whatever the clamp() has done to the font size. -->
+      <div id="titleWrap">
+        <h1 id="title" class="cast">Bomb&nbsp;Voyage</h1>
+        <span id="version">v0.14</span>
+      </div>
       <p class="sub">Online multiplayer. Sixteen pirates, one island, nowhere to hide.</p>
       <label for="name">your name</label>
       <input id="name" type="text" placeholder="pick a name" autocomplete="off" autofocus>

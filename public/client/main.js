@@ -126,6 +126,39 @@ const BEDS = ['drift', 'suspend', 'undertow'];
 const menuViz = createMenuViz({ canvas: $('menuViz'), music });
 menuViz.start();
 
+/* The pointer, fed to the menu visualiser so the motes can get out of its way.
+ *
+ * On `#menu` rather than on the window: the motes only exist while the menu is up, and a
+ * listener on the window would keep firing all round. Coordinates are relative to the canvas,
+ * which is inset:0 inside #menu, so the menu's own box is the right frame.
+ */
+/* The version marker under the title.
+ *
+ * Fetched rather than baked in: baking it would need a build step, and this project does not
+ * have one. The markup carries a hard-coded fallback, so a failed fetch shows a stale number
+ * rather than an empty space — and the title is the one place on the site where an empty space
+ * would be more noticeable than a wrong digit.
+ *
+ * `title` carries the build sha, so "which version" and "which build" are both answerable from
+ * the landing page without opening devtools.
+ */
+fetch('/version')
+  .then(r => (r.ok ? r.json() : null))
+  .then(v => {
+    if (!v?.version) return;
+    const el = $('version');
+    el.textContent = `v${v.version}`;
+    if (v.build) el.title = `build ${v.build}`;
+  })
+  .catch(() => { /* the fallback in the markup is already correct enough */ });
+
+const menuBox = $('menu');
+menuBox.addEventListener('pointermove', e => {
+  const r = menuBox.getBoundingClientRect();
+  menuViz.pointer(e.clientX - r.left, e.clientY - r.top);
+});
+menuBox.addEventListener('pointerleave', () => menuViz.pointerOut());
+
 /* The in-game meter: the same spectrum, three bands, in the dock.
  *
  * Deliberately almost nothing. The menu can afford to be a light show because you are reading a

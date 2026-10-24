@@ -63,8 +63,12 @@ ssh_ "mkdir -p $PREV && rsync -a --delete --exclude node_modules --link-dest=$AP
 step "sync"
 # Stamp what is really going up. rsync does not touch .git, so without this /healthz would
 # report the last commit the box pulled rather than the tree now on disk.
-printf '%s%s\n' "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)" \
-  "$([ -n "$(git status --porcelain 2>/dev/null)" ] && echo '+local')" > .version
+# `git describe` gives the nearest tag plus how far past it we are — `v0.14-3-gaefe13f` — which
+# answers "which release, and how much drift" in one string. Falls back to the bare sha when
+# nothing has been tagged yet.
+printf '%s%s\n' \
+  "$(git describe --tags --always --dirty=+local 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || echo unknown)" \
+  "$([ -n "$(git status --porcelain 2>/dev/null)" ] && echo '')" > .version
 # .git and config.ini stay as they are on the server: one is how the box self-updates, the
 # other holds the deploy token and the production paths.
 # shellcheck disable=SC2086

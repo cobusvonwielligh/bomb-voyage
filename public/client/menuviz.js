@@ -32,7 +32,7 @@ import { createSpectrum } from './audio/spectrum.js';
 // look wants LINES: enough of them to form a shape, thin enough that the shape is the subject.
 const BANDS = 40;
 // Hard cap, so the bars stay lines on a tall monitor instead of growing into blocks.
-const MAX_BAR_PX = 7;
+const MAX_BAR_PX = 8;
 // The stack occupies the bottom of the window and leaves the top clear — that is where the
 // title is, and bass belongs low anyway.
 const STACK_TOP = 0.16;
@@ -42,16 +42,54 @@ const STACK_TOP = 0.16;
 // 0.11, down from 0.19. At a fifth of the window the two sides occupy the outer 40% of the
 // screen between them, which is not a frame any more — it is the background. The card has to
 // stay the subject.
-const REACH = 0.11;
+// 0.125. 0.11 was too shy and 0.145 put the two sides back to filling the outer third of the
+// screen between them — which is not a frame, it is a background, and the card has to stay the
+// subject. This is the 'slightly' in 'slightly more prominent'.
+const REACH = 0.125;
 const EMBERS = 28;
 
-/* The three golds from style.css — --gold-hi, --gold, --gold-low — hot at the edge and cooling
- * as the bar travels inward, which is the same ramp the cast type uses. Hard-coded rather than
- * read from CSS because this runs per frame on a canvas and a getComputedStyle call per bar is
- * a layout read inside an animation loop. Keep the three in step with the tokens by hand. */
-const HOT = '246, 231, 169';
-const MID = '237, 194, 78';
-const DEEP = '160, 106, 18';
+/* Motes drifting in the dark behind the card, which scatter when the pointer goes near them.
+ *
+ * The menu is a still page and the one thing a still page cannot do is respond. The bars respond
+ * to the music, which is somebody else's doing; this responds to YOU, before you have clicked
+ * anything, which is the cheapest way a page can feel like a place rather than a screenshot.
+ *
+ * They are not sparks and they are not snow — they are specks in a shaft of light, which is what
+ * the bloom at the bottom of the stack already implies is there.
+ */
+const MOTES = 70;
+// How far the pointer's push reaches, and how hard. Generous radius, gentle force: a tight hard
+// push reads as a collision, a wide soft one reads as air being moved.
+const MOUSE_R = 150;
+const MOUSE_FORCE = 0.55;
+
+/* The same six hues the animated panel borders run through, in the same order and turning at
+ * the same rate — see `.edge` in style.css.
+ *
+ * The borders already sweep this spectrum round every panel on the page. Having the bars sweep
+ * it too means the visualiser is not a separate decoration that happens to share a corner; the
+ * whole screen is running one light, and the bars are where it lands on the water. Matching the
+ * 28-second period matters more than matching the stops: two things cycling the same colours at
+ * different speeds read as two things.
+ *
+ * Hard-coded rather than read from CSS, because this runs per frame on a canvas and a
+ * getComputedStyle call per bar is a layout read inside an animation loop. Keep in step by hand.
+ */
+const EDGE_HUES = [
+  [199, 176, 87], [206, 140, 110], [196, 131, 126],
+  [180, 144, 218], [123, 173, 211], [120, 179, 155],
+];
+// Seconds for one full turn, matching `animation: spin 28s` on .edge.
+const EDGE_PERIOD_S = 28;
+
+/** The border colour at a point along the sweep, 0..1, wrapping. */
+function edgeHue(t) {
+  const n = EDGE_HUES.length;
+  const f = ((t % 1) + 1) % 1 * n;
+  const i = Math.floor(f), k = f - i;
+  const a = EDGE_HUES[i % n], b = EDGE_HUES[(i + 1) % n];
+  return `${Math.round(a[0] + (b[0] - a[0]) * k)}, ${Math.round(a[1] + (b[1] - a[1]) * k)}, ${Math.round(a[2] + (b[2] - a[2]) * k)}`;
+}
 
 export function createMenuViz({ canvas, music }) {
   const ctx = canvas.getContext('2d', { alpha: true });
@@ -63,6 +101,87 @@ export function createMenuViz({ canvas, music }) {
   // the exit, and the "music is off" state.
   let presence = 0;
   let running = false;
+  // Where the border sweep has got to, in turns. Advanced on real time so it stays locked to
+  // the CSS animation's 28-second period rather than to the frame rate.
+  let spin = 0;
+
+  /* The motes, and the pointer they run from.
+   *
+   * Seeded lazily on the first resize, because position is in pixels and there are none before
+   * the canvas has been measured.
+   */
+  const motes = [];
+  const mouse = { x: -9999, y: -9999, seen: false };
+
+  function seedMotes() {
+    motes.length = 0;
+    for (let i = 0; i < MOTES; i++) {
+      motes.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        // A slow prevailing drift up and to one side, different per mote, so they never look
+        // like a field being scrolled.
+        dx: (Math.random() - 0.5) * 0.012,
+        dy: -(0.004 + Math.random() * 0.014),
+        vx: 0, vy: 0,
+        r: 0.7 + Math.random() * 2.1,
+        // Depth, 0..1. Drives size, brightness AND how hard the pointer shoves it — a speck
+        // far away should barely notice, and that parallax is most of the illusion.
+        z: Math.random(),
+        phase: Math.random() * 7,
+      });
+    }
+  }
+
+  function stepMotes(dtMs) {
+    if (!motes.length) return;
+    const k = dtMs / 16.7;
+
+    for (const m of motes) {
+      // The pointer, as a force rather than a position: a push that falls off with distance,
+      // so a mote slides out of the way and keeps going instead of teleporting to the edge of
+      // a circle. Squared falloff, which is gentle at the rim and firm in the middle.
+      if (mouse.seen) {
+        const dx = m.x - mouse.x, dy = m.y - mouse.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < MOUSE_R * MOUSE_R && d2 > 0.01) {
+          const d = Math.sqrt(d2);
+          const fall = 1 - d / MOUSE_R;
+          // Nearer motes are shoved harder. The far ones barely stir.
+          const push = fall * fall * MOUSE_FORCE * (0.35 + m.z * 0.65);
+          m.vx += (dx / d) * push * k;
+          m.vy += (dy / d) * push * k;
+        }
+      }
+
+      // Drag, so a shoved mote coasts to a stop rather than flying off for ever, and settles
+      // back into its own drift.
+      const drag = Math.pow(0.94, k);
+      m.vx *= drag;
+      m.vy *= drag;
+
+      m.x += (m.dx + m.vx) * dtMs;
+      m.y += (m.dy + m.vy) * dtMs;
+
+      // Wrap. Cheaper than respawning and it keeps the density even.
+      if (m.x < -10) m.x = w + 10; else if (m.x > w + 10) m.x = -10;
+      if (m.y < -10) m.y = h + 10; else if (m.y > h + 10) m.y = -10;
+    }
+  }
+
+  function drawMotes(now) {
+    const hue = edgeHue(spin + 0.5);
+    for (const m of motes) {
+      // Twinkle, so a static field still has life in it when nothing is moving.
+      const tw = 0.55 + 0.45 * Math.sin(now / 900 + m.phase);
+      // Never fully absent when the music is off — these belong to the page, not to the track.
+      const a = (0.1 + m.z * 0.26) * tw * (0.45 + presence * 0.55);
+      ctx.fillStyle = `rgba(${hue}, ${a})`;
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, m.r * (0.55 + m.z * 0.75), 0, 7);
+      ctx.fill();
+    }
+  }
 
   // Embers: lit by treble transients, carried up and inward. Stateless would be cheaper and
   // would not look like anything — the point of an ember is that it remembers where it has been.
@@ -76,10 +195,14 @@ export function createMenuViz({ canvas, music }) {
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (!motes.length) seedMotes();
   }
 
   /** One side. `dir` is +1 for the left edge growing right, -1 for the right edge growing left. */
   function drawSide(dir, reach, rowH, bh) {
+    // Each bar sits a little further round the sweep than the one below it, so the stack is a
+    // slice of the same spectrum the borders are running — a rainbow standing on its end rather
+    // than forty bars that happen to be coloured.
     const x0 = dir > 0 ? 0 : w;
     const bottom = h * 0.97;
 
@@ -93,6 +216,9 @@ export function createMenuViz({ canvas, music }) {
       if (v < 0.09) continue;
 
       const len = v * reach;
+      // A third of a turn spread across the stack: enough that the top and bottom are plainly
+      // different hues, not so much that it becomes a novelty.
+      const hue = edgeHue(spin + (i / BANDS) * 0.34);
       const grad = ctx.createLinearGradient(x0, 0, x0 + dir * len, 0);
       /* Hot at the edge, cooling and vanishing inward. The alpha ramp is what keeps the inner
        * end from ever being a visible edge.
@@ -102,9 +228,12 @@ export function createMenuViz({ canvas, music }) {
        * forty at all times and the result was a venetian blind down each side of the screen,
        * with the loud ones somewhere inside it. A band with nothing in it should show nothing.
        * The shape comes from the bands that are doing something. */
-      grad.addColorStop(0, `rgba(${HOT}, ${0.52 * v * v + 0.06 * v})`);
-      grad.addColorStop(0.45, `rgba(${MID}, ${0.34 * v * v})`);
-      grad.addColorStop(1, `rgba(${DEEP}, 0)`);
+      // Brighter than before, and with a white-hot core at the edge where the bar meets the
+      // frame: the old version was legible and polite, and a VU meter should be neither.
+      grad.addColorStop(0, `rgba(255, 255, 255, ${0.22 * v * v})`);
+      grad.addColorStop(0.12, `rgba(${hue}, ${0.72 * v * v + 0.1 * v})`);
+      grad.addColorStop(0.5, `rgba(${hue}, ${0.4 * v * v})`);
+      grad.addColorStop(1, `rgba(${hue}, 0)`);
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.roundRect(dir > 0 ? x0 : x0 - len, y, len, bh, bh / 2);
@@ -114,7 +243,7 @@ export function createMenuViz({ canvas, music }) {
       const p = spectrum.peak[i] * presence;
       if (p > v + 0.02) {
         const px = x0 + dir * (p * reach);
-        ctx.fillStyle = `rgba(${HOT}, ${0.4 * p * p})`;
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.6 * p * p})`;
         ctx.beginPath();
         ctx.roundRect(dir > 0 ? px - 2 : px, y, 2, bh, 1);
         ctx.fill();
@@ -129,8 +258,11 @@ export function createMenuViz({ canvas, music }) {
     const cy = h * 0.9;
     const r = (0.09 + bass * 0.3) * w;
     const g = ctx.createRadialGradient(x0, cy, 0, x0, cy, r);
-    g.addColorStop(0, `rgba(${MID}, ${0.1 * bass * bass})`);
-    g.addColorStop(0.5, `rgba(${DEEP}, ${0.035 * bass * bass})`);
+    // The bloom takes the hue at the bottom of the stack, so the light under the bars is the
+    // same light that is in them.
+    const hue = edgeHue(spin);
+    g.addColorStop(0, `rgba(${hue}, ${0.17 * bass * bass})`);
+    g.addColorStop(0.5, `rgba(${hue}, ${0.06 * bass * bass})`);
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     ctx.fillRect(dir > 0 ? 0 : w - r, cy - r, r, r * 2);
@@ -164,7 +296,7 @@ export function createMenuViz({ canvas, music }) {
       e.vy -= 0.000004 * dtMs;
       if (e.life <= 0) continue;
       const a = Math.min(1, e.life * 1.6) * presence * 0.45;
-      ctx.fillStyle = `rgba(${HOT}, ${a})`;
+      ctx.fillStyle = `rgba(${edgeHue(spin + e.life * 0.2)}, ${a})`;
       ctx.beginPath();
       ctx.arc(e.x, e.y, e.r * (0.4 + e.life * 0.6), 0, 7);
       ctx.fill();
@@ -181,6 +313,7 @@ export function createMenuViz({ canvas, music }) {
 
     // Present only while the music is actually audible. Eased, so starting and stopping are
     // movements rather than cuts — and `presence` gates every layer, so one number does it all.
+    spin += (dtMs / 1000) / EDGE_PERIOD_S;
     const want = music.playing && music.volume > 0 && music.analyser ? 1 : 0;
     presence += (want - presence) * (1 - Math.pow(1 - 0.06, dtMs / 16.7));
 
@@ -188,6 +321,15 @@ export function createMenuViz({ canvas, music }) {
     else spectrum.rest(dtMs);
 
     ctx.clearRect(0, 0, w, h);
+
+    /* The motes run whatever the music is doing — they are the page responding to YOU, and a
+     * page that stops responding when the music is off is a page with a bug in it. Drawn under
+     * everything else and in `lighter`, like the rest of this canvas. */
+    ctx.globalCompositeOperation = 'lighter';
+    stepMotes(dtMs);
+    drawMotes(now);
+    ctx.globalCompositeOperation = 'source-over';
+
     if (presence < 0.003) return;
 
     const rowH = (h * (1 - STACK_TOP)) / BANDS;
@@ -208,6 +350,14 @@ export function createMenuViz({ canvas, music }) {
 
   return {
     /** Only runs while the menu is up: there is no point analysing audio nobody is looking at. */
+    /** The pointer, in canvas pixels. Passed in rather than listened for here, so the module
+     *  owns no global state and a second instance could never fight the first. */
+    pointer(x, y) {
+      mouse.x = x; mouse.y = y; mouse.seen = true;
+    },
+
+    pointerOut() { mouse.seen = false; },
+
     start() {
       if (running) return;
       // Honour the system setting. Everything here is decoration and none of it is information.
