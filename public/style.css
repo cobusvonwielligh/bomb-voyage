@@ -211,6 +211,13 @@ canvas#game {
  * and the word turns to mush. Checked at 17px and it is unreadable. Small display type stays
  * flat `var(--gold)` with `--rim`, which is what it was always for. */
 .cast {
+  /* Flat gold first — see `.castSm` below for why every cast rule is built this way. */
+  color: var(--gold);
+  text-shadow: var(--rim);
+}
+
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+.cast {
   background: var(--cast);
   /* The sweep layer is three times the width of the text so it can travel across it; the metal
      underneath is fixed. Order matches the two layers in --cast. */
@@ -222,6 +229,7 @@ canvas#game {
   text-shadow: none;
   filter: var(--cast-edge) drop-shadow(0 2px 1px #0009) drop-shadow(0 0 16px #edc24e3d);
   animation: castShine 7s linear infinite;
+}
 }
 
 /* -120% to 120% rather than 0 to 100%: the band has to start and finish entirely OFF the text,
@@ -250,20 +258,40 @@ canvas#game {
  * something is always moving behind them. The thin edge stays, because without it pale gold on
  * a translucent panel over bright water is not type, it is a suggestion. */
 .castSm {
-  background:
-    linear-gradient(104deg,
-      #ffffff00 43%, #ffffff00 47%, #ffffffe0 50%, #ffffff00 53%, #ffffff00 57%),
-    linear-gradient(180deg, #a06a12 0%, var(--gold-hi) 34%, var(--gold) 62%, #8a5a10 100%);
-  background-size: 240% 100%, 100% 100%;
-  background-repeat: no-repeat;
-  -webkit-background-clip: text; background-clip: text;
-  -webkit-text-fill-color: transparent; color: transparent;
-  text-shadow: none;
-  filter:
-    drop-shadow(0.8px 0 0 #140d02) drop-shadow(-0.8px 0 0 #140d02)
-    drop-shadow(0 0.8px 0 #140d02) drop-shadow(0 -0.8px 0 #140d02)
-    drop-shadow(0 1px 0 #0009);
-  animation: castShine 9s linear infinite;
+  /* FLAT GOLD FIRST. This is the whole point of the rule's shape.
+   *
+   * Everything below upgrades it to metal, and every one of those upgrades can fail
+   * independently — an engine without `background-clip: text`, a compositor that gives up on
+   * text-clipping under a filter, a font that has not loaded yet. When the old version failed
+   * it failed to a BLACK SMUDGE: the fill was already transparent, so all that survived was
+   * five near-black drop-shadows of glyphs nobody could see.
+   *
+   * Set the colour before taking it away and the worst case is plain gold text, which is what
+   * this was a month ago and is perfectly fine. Never leave a rule whose failure mode is worse
+   * than not having written it. */
+  color: var(--gold);
+  text-shadow: var(--rim);
+}
+
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .castSm {
+    background: linear-gradient(180deg, #a06a12 0%, var(--gold-hi) 34%, var(--gold) 62%, #8a5a10 100%);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent; color: transparent;
+    /* The thin edge as a text STROKE, not as four drop-shadows.
+     *
+     * A filter forces the element onto its own compositing layer, and a text-clipped gradient
+     * that then gets composited is where this broke: in a real browser the name came out as a
+     * dark blur even though every computed style was correct and a headless render was fine.
+     * `-webkit-text-stroke` needs no layer and no filter at all.
+     *
+     * `paint-order: stroke fill` puts the stroke UNDER the fill. Without it the stroke is
+     * centred on the glyph outline and eats half a pixel off every stem, which at this size is
+     * most of the stem. */
+    -webkit-text-stroke: 0.9px #140d02;
+    paint-order: stroke fill;
+    text-shadow: none;
+  }
 }
 
 .edge {
