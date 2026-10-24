@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { VOLUME_TRIM_SFX, VOLUME_TRIM_MUSIC } from '../shared/constants.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = p => fs.readFileSync(path.join(ROOT, p), 'utf8');
@@ -362,10 +363,19 @@ test('the master trim lives in engine.js, where a stored slider value cannot bea
   const sfxSrc = read('public/client/audio/sfx.js');
   assert.ok(!sfxSrc.includes('VOLUME_MASTER'), 'sfx.js should get the trim from createBus');
   assert.match(sfxSrc, /createBus\(volume\)/);
+  // Each bus now carries its own trim on top of the shared master — effects are transients and
+  // sit too low, the music is a mastered mix and arrives too hot — so the call takes a third
+  // argument. What must stay true is that BOTH go through trimmedOutput, which is the only
+  // place downstream of the sliders.
   for (const factory of ['createBus', 'createMusicBus']) {
     const from = engineSrc.indexOf(`export function ${factory}`);
     assert.ok(from > 0, `${factory} not found`);
     const body = engineSrc.slice(from, engineSrc.indexOf('\n}', from));
-    assert.match(body, /trimmedOutput\(c, \w+\)/, `${factory} does not apply the master trim`);
+    assert.match(body, /trimmedOutput\(c, \w+(, \w+)?\)/, `${factory} does not apply the master trim`);
   }
+
+  // The per-bus trims are constants, not inline numbers, and they point the right way.
+  assert.ok(VOLUME_TRIM_SFX > 1, 'the effects trim should lift, not cut');
+  assert.ok(VOLUME_TRIM_MUSIC < 1, 'the music trim should cut, not lift');
+  assert.match(engineSrc, /VOLUME_MASTER \* trim/, 'the per-bus trim is not applied on top of the master');
 });

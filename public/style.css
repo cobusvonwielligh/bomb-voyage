@@ -7,37 +7,44 @@
  * things you read WHILE PLAYING. A pixel font at 12px in a kill feed is a puzzle, not a message.
  */
 
+/* The display face. 16 KB against the 136 KB this replaced, and it covers every character the
+ * interface puts through it — upper, lower, digits and the punctuation in `!?.,:'-/()&`, checked
+ * against the cmap rather than assumed. A display font missing one glyph does not error: the
+ * browser substitutes silently from the next family in the stack, so a single character in a
+ * headline comes out in a different typeface and reads as a rendering bug.
+ *
+ * Licence lives beside it in assets/fonts/clegan-LICENSE.txt: free for personal use, which is
+ * what this is. */
 @font-face {
-  font-family: 'Shotling';
-  src: url('/assets/fonts/shotling.ttf') format('truetype');
+  font-family: 'Clegan';
+  src: url('/assets/fonts/clegan.ttf') format('truetype');
   font-display: block;        /* no flash of fallback on the title; it is the first thing seen */
 }
 
 :root {
   color-scheme: dark;
-  /* The accent: the mascot's bandana.
+  /* The accent: fire.
    *
-   * Sampled off `mascot.png` — the dominant cloth pixel is #b81020, hsl(354 84% 39%). The one
-   * used here keeps the hue and the saturation and lifts only the lightness, to hsl(356 85% 62%),
-   * because #b81020 against `--panel` is 2.4:1 and a clock nobody can read is not a clock. Hue
-   * and saturation are what the eye matches on; lightness is what legibility needs. So this is
-   * the bandana, turned up.
+   * #ff9b3d is not "an orange" — it is `PALETTE.fireMid` from art.js, the exact middle tone of
+   * every explosion on the board. 7.8:1 on the panel, 9:1 on the page.
    *
-   * `--gold-deep` is very nearly the sampled colour itself, which means the bottom of every
-   * filled button genuinely is the bandana.
+   * It has been gold, baby blue and the mascot's bandana red. The argument against orange used
+   * to be that it would fight the fire; the answer, chosen deliberately, is to stop fighting and
+   * BE the fire. The HUD is now the same hue as the thing the whole game is about, and the two
+   * never appear in the same place — fire is on the board, the accent is on the chrome around
+   * it. Named `--gold` throughout for historical reasons. Treasure gold still exists for actual
+   * treasure: the pirate's tooth, the keg hoops.
    *
-   * It has been gold and it has been baby blue. Gold fought the fire, blue sat in the same
-   * family as the sea and read as scenery. Named `--gold` throughout for historical reasons.
-   * Treasure gold still exists for actual treasure: the pirate's tooth, the keg hoops.
-   *
-   * CAREFUL: this is within 1.2:1 of `--bad`. Anything that needs to read as an alarm NEXT to
-   * the accent cannot do it with hue — see `#clock.low` and `#conn`, which both use brightness
-   * or a different hue entirely for exactly that reason. */
-  --gold: #f04a56;
-  --gold-lit: #ff8793;      /* the top of a filled button */
-  --gold-deep: #b01f2c;     /* the bottom of one */
-  --gold-shadow: #6e1119;   /* and the hard shadow under it */
-  --on-gold: #2e0710;       /* text that sits on a filled accent */
+   * CAREFUL on two counts:
+   *   - within 1.6:1 of `--bad` and 1.2:1 of `--warn`. Anything that has to read as an alarm
+   *     beside the accent cannot do it with hue — see `#clock.low`, which uses brightness.
+   *   - fire is the brightest thing on the board by design. Keep the accent to the chrome; an
+   *     orange marker ON the board would be indistinguishable from a blast at a glance. */
+  --gold: #ff9b3d;
+  --gold-lit: #ffc98a;      /* the top of a filled button */
+  --gold-deep: #d9711f;     /* the bottom of one */
+  --gold-shadow: #8a3f0c;   /* and the hard shadow under it */
+  --on-gold: #2b1402;       /* text that sits on a filled accent */
   --panel: #1a2029;
   --ink: #e8eef7;
   --dim: #92a0b4;
@@ -46,7 +53,7 @@
   --good: #5ad1a0;
 
   /* The display face, for large type only. */
-  --display: 'Shotling', ui-monospace, monospace;
+  --display: 'Clegan', ui-monospace, monospace;
   /* Condensed humanist sans for anything you read mid-round. Falls back the whole way down. */
   --text: 'Bahnschrift', 'DIN Alternate', 'Avenir Next Condensed', 'Segoe UI Semibold',
           'Helvetica Neue', system-ui, sans-serif;
@@ -157,7 +164,7 @@ canvas#game {
  * place to land. Safari below 16.4 is the realistic case. */
 @supports not (background: conic-gradient(from 0deg, red, blue)) {
   .edge {
-    border-color: #f04a5666;
+    border-color: #ff9b3d66;
     background: var(--weave) padding-box,
       linear-gradient(var(--panel-fill, #11161ee6), var(--panel-fill, #11161ee6)) padding-box;
   }
@@ -236,7 +243,7 @@ canvas#game {
 /* The round clock. The single most-glanced-at number on screen, so it is the biggest one. */
 #clock { display: flex; align-items: baseline; gap: 6px; }
 #clock .v {
-  /* Monospace, not the display face: Shotling has no tabular figures, so 07:05 and 08:88 are
+  /* Monospace, not the display face: Clegan has no tabular figures, so 07:05 and 08:88 are
      different widths and the whole bar jumps once a second. The clock is a number you read, not
      a title, and it is the one place where legibility beats character. */
   font-family: var(--nums); font-weight: 700;
@@ -297,14 +304,14 @@ body.observing #who { color: var(--dim); }
 /* Carrying at least one. The glow is the part that reads without being looked at; the number is
    there for when you do look. */
 .pip.on { color: var(--gold); }
-.pip.on svg { filter: drop-shadow(0 0 6px #f04a5688); }
+.pip.on svg { filter: drop-shadow(0 0 6px #ff9b3d88); }
 .pip:not(.on) { opacity: .5; }
 
 /* The flash a value does when it changes. Colour plus a little scale: motion catches the eye in
  * peripheral vision in a way a colour change alone does not. */
 @keyframes bump {
-  0%   { transform: scale(1);    color: var(--gold); text-shadow: 0 0 10px #f04a56; }
-  35%  { transform: scale(1.45); color: #fff;        text-shadow: 0 0 16px #f04a56; }
+  0%   { transform: scale(1);    color: var(--gold); text-shadow: 0 0 10px #ff9b3d; }
+  35%  { transform: scale(1.45); color: #fff;        text-shadow: 0 0 16px #ff9b3d; }
   100% { transform: scale(1);    color: inherit;     text-shadow: none; }
 }
 .bump { display: inline-block; animation: bump .45s cubic-bezier(.2,1.4,.4,1); }
@@ -347,7 +354,6 @@ body.observing #who { color: var(--dim); }
   backdrop-filter: blur(10px) saturate(1.3);
   -webkit-backdrop-filter: blur(10px) saturate(1.3);
   border: 1px solid #ffffff12;
-  box-shadow: 0 4px 18px #0007;
   /* Collapsed it is two icons and a few words. It has to stay out of the way of the board, so
      nothing in here is allowed to grow it past about a sixth of a 1080-wide window. */
   max-width: min(42vw, 340px);
@@ -380,18 +386,32 @@ body.observing #who { color: var(--dim); }
   background: currentColor;
   transform-origin: bottom;
 }
-/* Three bars, three different periods, none a multiple of another — so the pattern never
-   visibly repeats and it reads as level rather than as an animation. */
-#dock.playing .eq b { animation: eq 1.1s ease-in-out infinite; }
-#dock.playing .eq b:nth-child(2) { animation-duration: .74s; animation-delay: -.3s; }
-#dock.playing .eq b:nth-child(3) { animation-duration: 1.37s; animation-delay: -.7s; }
-@keyframes eq { 0%, 100% { height: 3px; } 50% { height: 11px; } }
+/* The bars are driven from the ANALYSER, not from a keyframe — see syncMeter() in main.js.
+ *
+ * They were three canned animations on periods that did not divide into each other, which is
+ * the standard trick for faking a level, and it is convincing for about four seconds. The
+ * difference between a loop pretending to be a level and an actual level is the entire reason
+ * this exists, and you can tell instantly without being able to say why: real bars land on the
+ * beat. The transition is what fills the gap between frames at low refresh rates. */
+.eq b { transition: height .06s linear; }
 
 /* Stopped: the bars hold at their shortest and the whole readout steps back. */
 #dock:not(.playing) #nowPlaying { opacity: .55; }
 
+/* The dock breathes with the kick. `--bass` is 0..1, written once a frame by syncMeter().
+ *
+ * This is the only part of the in-game visualiser that is not inside the readout, and it is
+ * deliberately almost nothing: a glow that reaches eighteen pixels at its loudest, in the
+ * corner you already look at for the track name. A round is not the place for a light show. */
+#dock {
+  box-shadow:
+    0 4px 18px #0007,
+    0 0 calc(8px + var(--bass, 0) * 20px) rgba(255, 155, 61, calc(var(--bass, 0) * 0.3));
+}
+
 @media (prefers-reduced-motion: reduce) {
-  #dock.playing .eq b { animation: none; height: 7px; }
+  .eq b { transition: none; }
+  #dock { box-shadow: 0 4px 18px #0007; }
 }
 
 /* Narrow windows lose the side panel and the board takes the lot, so the words go and the two
@@ -403,7 +423,7 @@ body.observing #who { color: var(--dim); }
 
 button {
   font: inherit; font-size: 12px; color: var(--gold); background: transparent;
-  border: 1px solid #f04a5677; border-radius: 5px; padding: 5px 12px; cursor: pointer;
+  border: 1px solid #ff9b3d77; border-radius: 5px; padding: 5px 12px; cursor: pointer;
   letter-spacing: .1em; text-transform: uppercase;
   transition: background .12s, color .12s;
 }
@@ -609,7 +629,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
      the leave button and the volume sliders underneath it. */
   z-index: 9;
   pointer-events: none;
-  filter: drop-shadow(0 6px 14px #000c) drop-shadow(0 0 18px #f04a5644);
+  filter: drop-shadow(0 6px 14px #000c) drop-shadow(0 0 18px #ff9b3d44);
   animation: bob 6s ease-in-out infinite;
 }
 @media (max-width: 1080px) { #avatar { display: none; } }
@@ -627,7 +647,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   padding: 9px 14px;
   border-radius: 12px;
   background: #11161ef2;
-  border: 1.5px solid #f04a5666;
+  border: 1.5px solid #ff9b3d66;
   box-shadow: 0 10px 28px #000b;
   color: var(--ink); font-size: 14px; line-height: 1.35;
   text-wrap: balance;
@@ -644,7 +664,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   position: absolute; right: -7px; top: 50%;
   width: 12px; height: 12px;
   background: #11161ef2;
-  border-right: 1.5px solid #f04a5666; border-top: 1.5px solid #f04a5666;
+  border-right: 1.5px solid #ff9b3d66; border-top: 1.5px solid #ff9b3d66;
   transform: translateY(-50%) rotate(45deg);
 }
 #say.show { visibility: visible; animation: sayIn .9s cubic-bezier(.2, 1.5, .4, 1) forwards; }
@@ -662,7 +682,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   #say.show { animation: none; opacity: 1; transform: none; visibility: visible; }
 }
 /* The text face, not the display one. This is a name read at a glance beside the mascot, and
-   Shotling turns anything with a lowercase 'rn' or a '1' in it into a puzzle at 17px. */
+   A display face turns anything with a lowercase 'rn' or a '1' in it into a puzzle at 17px. */
 #who {
   font-family: var(--text); font-weight: 700; font-size: 17px; color: var(--gold);
   text-shadow: var(--rim), 0 2px 0 #0008; letter-spacing: .03em; display: block;
@@ -861,8 +881,8 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 
 /* Anything that is about you, picked out of a log that never stops scrolling. */
 #chatList li.feed { color: var(--dim); }
-#chatList li.mine { background: #f04a5612; box-shadow: inset 2px 0 0 var(--gold); padding-left: 6px; }
-#chatList li.mention { background: #f04a560d; }
+#chatList li.mine { background: #ff9b3d12; box-shadow: inset 2px 0 0 var(--gold); padding-left: 6px; }
+#chatList li.mention { background: #ff9b3d0d; }
 #chatList li.feed.kill {
   color: var(--gold); font-weight: 600;
   box-shadow: inset 2px 0 0 var(--gold); padding-left: 6px;
@@ -900,27 +920,86 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 #streak, #deadBanner {
   grid-area: 1 / 1;
   text-align: center;
-  font-family: var(--display); letter-spacing: .08em;
+  /* See @keyframes streakIn: letter-spacing is added after the LAST glyph too, so a centred
+     line needs a matching text-indent or it sits half the spacing left of centre. */
+  font-family: var(--display); letter-spacing: .08em; text-indent: .08em;
   text-shadow: var(--rim);
   opacity: 0;
 }
-#streak.show { animation: streakIn 1.9s ease-out forwards; }
+/* A streak is the one moment the game is allowed to interrupt you, so it gets four layers:
+ * a band that whips across behind the type, the type itself landing with a punch, a rule that
+ * expands out from under it, and the name. The old version was the type alone, which at 52px
+ * on a board full of explosions was just more orange. */
+#streak { position: relative; }
+#streak.show { animation: streakIn 2.6s cubic-bezier(.16, 1, .3, 1) forwards; }
+
+/* The band. Skewed, wider than the screen, wiping out from the centre — it is what separates
+   the announcement from the board behind it, and the reason the type reads over fire. */
+#streak::before {
+  content: '';
+  position: absolute; left: 50%; top: 50%;
+  /* px, not em: `#streak` has no font-size of its own, so `1.25em` resolved against the
+     inherited 16px and drew a 20px ribbon behind 118px type — a pinstripe, not a band. */
+  width: 150vw; height: 92px;
+  margin-left: -75vw;
+  transform: translateY(-62%) skewX(-13deg) scaleX(0);
+  background: linear-gradient(90deg,
+    #ff9b3d00 0%, #ff9b3d26 18%, #ff9b3d4d 50%, #ff9b3d26 82%, #ff9b3d00 100%);
+  z-index: -1;
+  animation: streakBand 2.6s cubic-bezier(.16, 1, .3, 1) forwards;
+}
+/* The rule under it, expanding outward. Two moving parts reading as one event. */
+#streak::after {
+  content: '';
+  position: absolute; left: 50%; bottom: -6px;
+  width: 0; height: 2px; margin-left: 0;
+  background: linear-gradient(90deg, #ff9b3d00, var(--gold), #ff9b3d00);
+  animation: streakRule 2.6s cubic-bezier(.16, 1, .3, 1) forwards;
+}
+
 #streak .big, #deadBanner .big {
-  display: block; font-size: 52px; color: var(--gold);
-  text-shadow: 0 0 28px #f04a56, 0 5px 0 #0009;
+  display: block; font-size: 66px; color: var(--gold);
+  text-shadow: 0 0 28px #ff9b3d, 0 5px 0 #0009;
 }
 #streak .who, #deadBanner .who {
   display: block; font-size: 16px; color: var(--ink); margin-top: 8px; opacity: .85;
   font-family: var(--text); letter-spacing: .14em; text-transform: uppercase;
 }
-/* Each rung is bigger and hotter than the last, so the escalation is visible as well as audible. */
-#streak.s2 .big { font-size: 52px; }
-#streak.s3 .big { font-size: 64px; color: #ffe98a; text-shadow: 0 0 34px #f04a56, 0 6px 0 #0009; }
-#streak.s4 .big { font-size: 76px; color: #fff; text-shadow: 0 0 40px #ff9a3d, 0 0 80px #e8655a; }
-#streak.ace .big {
-  font-size: 88px; color: #fff;
-  text-shadow: 0 0 44px #b36bff, 0 0 90px #b36bff, 0 0 140px #7badd3;
+/* The name gets the accent and some weight: it is the half of the message that says whether
+   this is a thing to celebrate or a thing to worry about. */
+#streak .who { font-size: 19px; font-weight: 700; color: var(--gold); opacity: 1; }
+
+/* Each rung is bigger and hotter than the last, so the escalation is visible as well as audible.
+   Every step is a real jump — 66, 82, 100, 118 — because two sizes eight pixels apart are the
+   same size to anybody who is not comparing them side by side. */
+/* clamp() rather than fixed pixels, because the banner is centred on the BOARD — the window
+   minus the 340px side panel — not on the window. At a fixed 118px, "RAMPAGE!!" is about 830px
+   of type inside a 910px board on a 1280 screen: one narrow window away from wrapping, and a
+   kill streak that wraps onto two lines is a paragraph. The middle term does the work; the
+   outer two stop it from vanishing or exploding. */
+#streak.s2 .big { font-size: clamp(40px, 5.2vw, 66px); }
+#streak.s3 .big {
+  font-size: clamp(46px, 6.4vw, 82px); color: #ffe08a;
+  text-shadow: 0 0 36px #ff9b3d, 0 0 70px #ff9b3d66, 0 6px 0 #0009;
 }
+#streak.s4 .big {
+  font-size: clamp(52px, 7.8vw, 100px); color: #fff;
+  text-shadow: 0 0 44px #ff9b3d, 0 0 90px #e8655a, 0 7px 0 #0009;
+}
+#streak.ace .big {
+  font-size: clamp(58px, 9.2vw, 118px); color: #fff;
+  text-shadow: 0 0 48px #ffc98a, 0 0 100px #ff9b3d, 0 0 170px #b36bff, 0 8px 0 #0009;
+}
+/* The top two rungs get a hotter band and a wider rule as well, or the escalation lives entirely
+   in the font size and stops being felt somewhere around the third one. */
+#streak.s3::before { height: 110px; }
+#streak.s4::before, #streak.ace::before { height: 134px; filter: brightness(1.4); }
+#streak.ace::before {
+  background: linear-gradient(90deg,
+    #ff9b3d00 0%, #b36bff33 15%, #ff9b3d66 50%, #b36bff33 85%, #ff9b3d00 100%);
+}
+
+
 
 #deadBanner .big { color: var(--bad); text-shadow: 0 0 30px #e8655a, 0 5px 0 #0009; }
 /* 4.4s, up from 1.4. The old one was gone before you had finished reading who killed you, which
@@ -934,12 +1013,52 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   100% { opacity: 0; transform: scale(.96); }
 }
 
+/* The `translateX(-50%)` every one of these keyframes used to carry was left over from when
+ * this was absolutely positioned. In the centring grid it does nothing but shove the banner
+ * half its own width to the LEFT of the middle — on an ace, about 150px off centre. */
+/* `text-indent` tracks `letter-spacing` on every frame, and that pairing is not optional.
+ *
+ * Letter spacing is added AFTER each glyph including the last one, so a centred line with
+ * `letter-spacing: .5em` is laid out half an em wider than it looks and the visible text sits
+ * half of that to the LEFT of centre. On the ace tier at 118px that is about 30px of drift that
+ * appears and disappears during the animation — the banner slides sideways as it lands, which
+ * looks like a bug because it is one. An equal `text-indent` pushes the line back. */
 @keyframes streakIn {
-  0%   { opacity: 0; transform: translateX(-50%) scale(.6)  rotate(-3deg); }
-  12%  { opacity: 1; transform: translateX(-50%) scale(1.14) rotate(1deg); }
-  22%  { opacity: 1; transform: translateX(-50%) scale(1)    rotate(0); }
-  75%  { opacity: 1; transform: translateX(-50%) scale(1); }
-  100% { opacity: 0; transform: translateX(-50%) scale(.95) translateY(-18px); }
+  0%   { opacity: 0; transform: scale(.55) rotate(-4deg); filter: blur(7px);
+         letter-spacing: .42em; text-indent: .42em; }
+  9%   { opacity: 1; transform: scale(1.22) rotate(1.5deg); filter: blur(0);
+         letter-spacing: .04em; text-indent: .04em; }
+  16%  { opacity: 1; transform: scale(.96) rotate(-.5deg); }
+  23%  { opacity: 1; transform: scale(1.03) rotate(0); }
+  30%  { opacity: 1; transform: scale(1);
+         letter-spacing: .08em; text-indent: .08em; }
+  82%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.06) translateY(-26px); }
+}
+
+/* The band arrives a frame BEFORE the type and leaves before it too, so the announcement reads
+   as something hitting the screen rather than as several things fading in together. */
+@keyframes streakBand {
+  0%   { transform: translateY(-62%) skewX(-13deg) scaleX(0); opacity: 0; }
+  7%   { transform: translateY(-62%) skewX(-13deg) scaleX(1.1); opacity: 1; }
+  14%  { transform: translateY(-62%) skewX(-13deg) scaleX(1); opacity: 1; }
+  70%  { opacity: .8; }
+  100% { transform: translateY(-62%) skewX(-13deg) scaleX(1); opacity: 0; }
+}
+
+@keyframes streakRule {
+  0%   { width: 0; margin-left: 0; opacity: 0; }
+  12%  { width: 0; margin-left: 0; opacity: 1; }
+  34%  { width: 420px; margin-left: -210px; opacity: 1; }
+  80%  { width: 420px; margin-left: -210px; opacity: .7; }
+  100% { width: 520px; margin-left: -260px; opacity: 0; }
+}
+
+/* Reduced motion: it still announces, it just stops moving. The information is the point. */
+@media (prefers-reduced-motion: reduce) {
+  #streak.show { animation: streakHold 2.6s steps(1) forwards; }
+  #streak::before, #streak::after { animation: none; opacity: .6; transform: translateY(-62%) skewX(-13deg); }
+  @keyframes streakHold { 0%, 92% { opacity: 1; } 100% { opacity: 0; } }
 }
 
 /* ─── toast ───────────────────────────────────────────────────────────────────
@@ -948,7 +1067,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 
 #toast {
   position: fixed; top: 54px; left: 50%; transform: translateX(-50%); z-index: 20;
-  background: #1a2029ee; border: 1px solid #f04a5666; border-radius: 6px;
+  background: #1a2029ee; border: 1px solid #ff9b3d66; border-radius: 6px;
   padding: 7px 16px; color: var(--gold); opacity: 0; transition: opacity .25s;
   pointer-events: none; font-size: 12px; letter-spacing: .08em;
 }
@@ -990,10 +1109,16 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 /* Only the round-over card has a heading now. The death card leads with the respawn button,
    because the banner on the board has already said what happened and a second announcement
    just pushes the one control you want further down the screen. */
+/* The text face, not the display one. The rule in this stylesheet is that the pixel face is for
+   things you READ ONCE — the title, a streak — and the text face is for everything you read while
+   playing. A round-over card is a scoreboard you actually read, and the display face on it was
+   decoration sitting on top of information. */
 #deadTitle {
-  font-family: var(--display); color: var(--gold); font-size: 30px;
+  font-family: var(--text); font-weight: 700;
+  color: var(--gold); font-size: 26px;
+  letter-spacing: .1em; text-transform: uppercase;
   margin: 4px 0 16px;
-  text-shadow: var(--rim);
+  text-shadow: 0 2px 0 #0008;
   display: none;
 }
 .card.round #deadTitle { display: block; }
@@ -1028,19 +1153,19 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   color: var(--on-gold);
   background: linear-gradient(180deg, var(--gold-lit), var(--gold) 55%, var(--gold-deep));
   border: none; border-radius: 10px;
-  box-shadow: 0 4px 0 var(--gold-shadow), 0 10px 26px #f04a5633;
+  box-shadow: 0 4px 0 var(--gold-shadow), 0 10px 26px #ff9b3d33;
   text-shadow: 0 1px 0 #fff6;
   transition: filter .12s, box-shadow .12s, opacity .12s;
 }
 #respawn:hover:not(:disabled) {
   filter: brightness(1.08);
-  box-shadow: 0 4px 0 var(--gold-shadow), 0 12px 34px #f04a5655;
+  box-shadow: 0 4px 0 var(--gold-shadow), 0 12px 34px #ff9b3d55;
 }
 /* Counting down: dimmed and flat, so it reads as "not yet" rather than as "broken". */
 #respawn:disabled {
   opacity: .5;
-  background: linear-gradient(180deg, #4a2a32, #371d24);
-  box-shadow: none; color: #e8c3c9;
+  background: linear-gradient(180deg, #4a3826, #37291b);
+  box-shadow: none; color: #e8d6c3;
 }
 /* Counting down, not broken: dimmed but still legible, and the number keeps moving. */
 
@@ -1056,7 +1181,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 #roundTable th {
   color: var(--dim); font-weight: normal; text-align: left; font-size: 9.5px;
   text-transform: uppercase; letter-spacing: .16em;
-  padding-bottom: 6px; border-bottom: 1px solid #f04a5633;
+  padding-bottom: 6px; border-bottom: 1px solid #ff9b3d33;
 }
 #roundTable td { padding: 4px 10px 4px 0; white-space: nowrap; }
 #roundTable td.dimcell { color: var(--dim); }
@@ -1066,7 +1191,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 /* Your row. Gold rule down the left and a lift off the background — on a sixteen-row table the
    only question anyone is asking is "where am I". */
 #roundTable tr.me {
-  background: #f04a5614; font-weight: 700;
+  background: #ff9b3d14; font-weight: 700;
   box-shadow: inset 3px 0 0 var(--gold);
 }
 #roundTable tr.me td:first-child { padding-left: 8px; }
@@ -1081,14 +1206,14 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 #scores table { width: 100%; border-collapse: collapse; font-size: 13px; }
 #scores th {
   color: var(--dim); font-weight: normal; text-align: left; padding-bottom: 7px;
-  border-bottom: 1px solid #f04a5633; font-size: 10px;
+  border-bottom: 1px solid #ff9b3d33; font-size: 10px;
   text-transform: uppercase; letter-spacing: .14em;
 }
 #scores td { padding: 4px 12px 4px 0; white-space: nowrap; }
 #scores td.dimcell { color: var(--dim); }
 #scores td.num { font-family: var(--nums); font-variant-numeric: tabular-nums; }
 #scores .sub { margin: 14px 0 0; text-align: center; }
-#allTime { display: none; margin-top: 18px; padding-top: 14px; border-top: 1px solid #f04a5633; }
+#allTime { display: none; margin-top: 18px; padding-top: 14px; border-top: 1px solid #ff9b3d33; }
 #allTime h2 {
   margin: 0 0 8px; font-size: 11px; font-weight: normal; color: var(--gold);
   letter-spacing: .2em; text-transform: uppercase; font-family: var(--display);
@@ -1100,6 +1225,18 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 #menu {
   position: fixed; inset: 0; display: grid; place-items: center; z-index: 10;
   background: radial-gradient(120% 90% at 50% 0%, #1b1430 0%, #0d1117 60%);
+}
+
+/* The visualiser, behind everything on the menu and out of the centring grid.
+ *
+ * `position: absolute` rather than a grid cell: in the grid it would be centred and sized to its
+ * content like the card is, and what it wants is the whole window. Auto z-index with
+ * `#menuWrap > .card` at 1 means DOM order decides, and this is first. */
+#menuViz {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  display: block;
+  pointer-events: none;
 }
 
 /* The mascot floats, unframed, half in front of the card's top-right corner.
@@ -1159,7 +1296,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   content: '';
   position: absolute; inset: 0;
   background: conic-gradient(from var(--spin) at 100% 100%,
-    #f04a56, #ff9a5c, #ff7a9a, #b78bff, #5cc6ff, #5ce0b0, #f04a56);
+    #ff9b3d, #ff9a5c, #ff7a9a, #b78bff, #5cc6ff, #5ce0b0, #ff9b3d);
   -webkit-mask-image: url('/assets/img/bomb-barrels.png');
   mask-image: url('/assets/img/bomb-barrels.png');
   -webkit-mask-size: contain; mask-size: contain;
@@ -1206,7 +1343,7 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   content: '';
   position: absolute; inset: 0;
   background: conic-gradient(from var(--spin) at 100% 100%,
-    #f04a56, #ff9a5c, #ff7a9a, #b78bff, #5cc6ff, #5ce0b0, #f04a56);
+    #ff9b3d, #ff9a5c, #ff7a9a, #b78bff, #5cc6ff, #5ce0b0, #ff9b3d);
   -webkit-mask-image: url('/assets/img/mascot.png');
   mask-image: url('/assets/img/mascot.png');
   -webkit-mask-size: contain; mask-size: contain;
@@ -1271,7 +1408,7 @@ h1 {
   color: var(--gold); line-height: 1; letter-spacing: .05em;
   text-transform: uppercase;
   margin: 0 0 10px;
-  text-shadow: var(--rim), 0 4px 0 #0009, 0 0 34px #f04a5655;
+  text-shadow: var(--rim), 0 4px 0 #0009, 0 0 34px #ff9b3d55;
 }
 
 /* The title on the landing page: one line, never wrapped, and always flowing.
@@ -1290,7 +1427,7 @@ h1 {
   margin-inline: auto;
   white-space: nowrap;
   background: conic-gradient(from var(--spin) at 100% 100%,
-    #f04a56, #ffb45c, #ff9a7a, #c79bf0, #7fc6ff, #6fe0b8, #f04a56);
+    #ff9b3d, #ffb45c, #ff9a7a, #c79bf0, #7fc6ff, #6fe0b8, #ff9b3d);
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; color: transparent;
   text-shadow: none;
@@ -1307,7 +1444,7 @@ h1 {
     drop-shadow(0 1.5px 0 #000) drop-shadow(0 -1.5px 0 #000)
     drop-shadow(0 0 10px #000c)
     drop-shadow(0 4px 0 #000a)
-    drop-shadow(0 0 26px #f04a5644);
+    drop-shadow(0 0 26px #ff9b3d44);
 }
 
 .sub { color: var(--dim); margin: 0 0 24px; font-size: 14.5px; letter-spacing: .04em; }
@@ -1328,7 +1465,7 @@ input[type=text] {
 input[type=text]::placeholder { color: #5c6a7d; }
 input[type=text]:focus {
   outline: none; border-color: var(--gold);
-  box-shadow: 0 0 0 3px #f04a561f;
+  box-shadow: 0 0 0 3px #ff9b3d1f;
 }
 
 /* PLAY is the only thing on this page anyone needs to find, so it is the only filled control. */
@@ -1341,11 +1478,11 @@ input[type=text]:focus {
   text-shadow: 0 1px 0 #fff6, 0 0 2px #0006, 0 2px 5px #0004;
   background: linear-gradient(180deg, var(--gold-lit), var(--gold) 55%, var(--gold-deep));
   border: none; border-radius: 10px;
-  box-shadow: 0 4px 0 var(--gold-shadow), 0 10px 26px #f04a5633;
+  box-shadow: 0 4px 0 var(--gold-shadow), 0 10px 26px #ff9b3d33;
   transition: transform .08s, box-shadow .12s, filter .12s;
 }
-#play:hover { filter: brightness(1.08); box-shadow: 0 4px 0 var(--gold-shadow), 0 12px 34px #f04a5655; }
-#play:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--gold-shadow), 0 5px 16px #f04a5633; }
+#play:hover { filter: brightness(1.08); box-shadow: 0 4px 0 var(--gold-shadow), 0 12px 34px #ff9b3d55; }
+#play:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--gold-shadow), 0 5px 16px #ff9b3d33; }
 #play:disabled { filter: grayscale(.7) brightness(.8); box-shadow: none; transform: none; }
 
 label { margin-bottom: 9px; }
@@ -1393,7 +1530,7 @@ label { margin-bottom: 9px; }
 .keys .or { color: #5c6a7d; font-size: 11px; margin: 0 2px; }
 .keys code {
   font-family: var(--nums); font-size: 12.5px; color: var(--gold);
-  background: #f04a5614; padding: 1px 5px; border-radius: 4px;
+  background: #ff9b3d14; padding: 1px 5px; border-radius: 4px;
 }
 
 kbd {

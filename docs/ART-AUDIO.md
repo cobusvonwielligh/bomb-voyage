@@ -234,6 +234,41 @@ which gives it `repeats: Infinity` — so the sequencer can never reach a handov
 rotation until something calls `jumpTo`. Starting a round is exactly that: `exclude('theme')`
 then `playFrom`, straight into a bed.
 
+### Seeing the music
+
+An `AnalyserNode` hangs off `musicGain` **in parallel** — a dangling analyser is a pure observer,
+so the audio path is untouched and nothing the drawing code does can go wrong with the sound. It
+is POST-volume on purpose: turn the music down and the bars should stop, because what is drawn
+has to be what you can hear.
+
+`audio/spectrum.js` turns the FFT into something worth looking at. Four problems, all of them
+independent, all of them why a raw `getByteFrequencyData` dump looks cheap:
+
+| Problem | Fix |
+|---|---|
+| Bins are linear, hearing is not — at 1024 points the whole bottom two octaves land in two bins | log-spaced bands, 40 Hz to 14 kHz |
+| Treble is always quieter than bass, so the right half barely moves | a +5 dB/decade tilt |
+| One smoothing constant cannot serve both directions | snap up, sag down — the asymmetry *is* the look |
+| No memory of the hit | peak caps that fall under gravity |
+
+A band reports its **loudest** bin, not its average: an average drags every peak toward the quiet
+bins beside it, which is why so many visualisers look muffled.
+
+**Menu** (`client/menuviz.js`): bars grow inward from both edges, mirrored, bass at the bottom.
+Not along the bottom, because the card is centred and the one place a visualiser must not be is
+underneath the thing you came to look at — the edges are dead screen, and the symmetry frames
+the card instead of flooring it. Plus a bass bloom, embers lit by treble *transients* (a rise,
+not a level, or a sustained hi-hat pours them out forever), and an entrance that sweeps the
+whole thing out of the edge when the music starts.
+
+Two numbers earned the hard way: **no alpha floor** on a bar, and a 0.09 cutoff. A floor is right
+for three bars in a dock and badly wrong for forty — it draws all forty at all times, and the
+result is a venetian blind with the loud ones somewhere inside it.
+
+**In game**: almost nothing, deliberately. Three real bands in the dock meter — replacing three
+canned keyframes that were a loop pretending to be a level — and a glow on the dock pill that
+reaches eighteen pixels at its loudest. A round is not the place for a light show.
+
 ### Explosions
 
 Five layers, in sequence, because a blast is a sequence and that is what carries size:

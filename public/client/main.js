@@ -17,6 +17,7 @@ import { createRenderer } from './render.js';
 import { createMusic } from './audio/music.js';
 import { createSfx } from './audio/sfx.js';
 import { createQuips, MENU_QUIPS } from './quips.js';
+import { createMenuViz } from './menuviz.js';
 import { bombTile } from '/shared/sim/bombs.js';
 
 const $ = id => document.getElementById(id);
@@ -108,6 +109,37 @@ $('play').addEventListener('blur', hideMenuQuip);
 /* The three in-game beds, in rotation order. The theme is not one of them: it belongs to the
  * landing page and is excluded for the whole of a round. */
 const BEDS = ['drift', 'suspend', 'undertow'];
+
+// The landing page listening to itself. Its own rAF loop, started with the menu and stopped the
+// moment a round begins — there is no point analysing audio nobody is looking at.
+const menuViz = createMenuViz({ canvas: $('menuViz'), music });
+menuViz.start();
+
+/* The in-game meter: the same spectrum, three bands, in the dock.
+ *
+ * Deliberately almost nothing. The menu can afford to be a light show because you are reading a
+ * card; in a round the only acceptable visualiser is one you never look at directly, and three
+ * bars in the corner you already glance at for the track name is the whole budget.
+ *
+ * It drives CSS custom properties rather than touching geometry, so the browser never relayouts
+ * for it — and it REPLACES the canned keyframe animation, which was a loop pretending to be a
+ * level. The difference between the two is the entire point: one of them is the music.
+ */
+const eqBars = [...document.querySelectorAll('#nowPlaying .eq b')];
+function syncMeter(dtMs) {
+  const live = music.playing && music.volume > 0 && music.analyser;
+  if (live) menuViz.spectrum.read(music.analyser, dtMs);
+  else menuViz.spectrum.rest(dtMs);
+
+  const s = menuViz.spectrum;
+  const v = [s.bass, s.mid, s.treble];
+  for (let i = 0; i < eqBars.length; i++) {
+    // 3px floor so a silent bar is still a bar. Zero-height is a missing element, not a quiet one.
+    eqBars[i].style.height = `${(3 + v[i] * 8).toFixed(1)}px`;
+  }
+  // One number for everything that wants to breathe with the kick.
+  $('dock').style.setProperty('--bass', s.bass.toFixed(3));
+}
 
 /**
  * The now-playing readout, bottom left.
@@ -232,6 +264,7 @@ const net = createNet({
     if (!m.mapOnly) {
       $('menu').style.display = 'none';
       $('hud').classList.add('on');
+      menuViz.stop();                 // the menu is gone; stop drawing to a hidden canvas
       if (!running) {
         running = true;
         last = performance.now();
@@ -405,9 +438,17 @@ const net = createNet({
     el.classList.add('show');
 
     sfx.play('streak', undefined, undefined, { step });
+    // Duck the music under the announcement, scaled by the rung. The top of the ladder takes a
+    // big bite and comes back over a second — the same trick a film uses when something lands.
+    music.dip(0.35 + step * 0.4, 0.8 + step * 0.7);
     if (m.i === world.you) {
-      renderer?.addFlash(0.22 + step * 0.3, m.ace ? '179,107,255' : '134,217,255');
-      renderer?.addShake(0.2 + step * 0.4);
+      // Fire, not blue: the accent is the fire now and a streak is the hottest moment in it.
+      renderer?.addFlash(0.26 + step * 0.34, m.ace ? '255,201,138' : '255,155,61');
+      renderer?.addShake(0.26 + step * 0.5);
+    } else {
+      // Somebody ELSE is on a run. A small shake, because the thing worth knowing is that it is
+      // happening at all — and no flash, which would read as something having hit you.
+      renderer?.addShake(0.08 + step * 0.16);
     }
     killFeed(`${m.i === world.you ? 'you' : m.name}: ${m.kind}!!`,
       { youKilled: m.i === world.you });
@@ -598,6 +639,9 @@ function loop(now) {
   // Five times a second is plenty for a clock, a loadout and a track name, and it keeps a
   // pile of DOM writes out of the frame that has to draw sixteen players.
   if (now - hudAt > 200) { hudAt = now; drawHud(); syncNowPlaying(); }
+  // The meter, every frame. Three style writes, no layout, and a level that only updates five
+  // times a second does not read as a level — it reads as a progress bar.
+  syncMeter(dt);
   quips.tick();
   quips.idle();
 }

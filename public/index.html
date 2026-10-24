@@ -4,7 +4,7 @@
 <title>Bomb Voyage</title>
 <link rel="icon" href="/assets/img/favicon.ico" sizes="16x16 32x32 48x48">
 <link rel="apple-touch-icon" href="/assets/img/icon-180.png">
-<link rel="preload" href="/assets/fonts/shotling.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="preload" href="/assets/fonts/clegan.ttf" as="font" type="font/ttf" crossorigin>
 <link rel="stylesheet" href="/style.css">
 
 <!-- One SVG sprite sheet, defined once and referenced by <use>. Repeating the paths per pip would
@@ -256,6 +256,9 @@
 <div id="toast"></div>
 
 <div id="menu">
+  <!-- The music, drawn. Absolutely placed so it escapes the centring grid, and first in the
+       markup so the card paints over it. See client/menuviz.js. -->
+  <canvas id="menuViz" aria-hidden="true"></canvas>
   <div id="menuWrap">
     <div class="card edge">
       <h1 id="title">Bomb&nbsp;Voyage</h1>

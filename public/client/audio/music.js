@@ -491,7 +491,7 @@ async function createFileTrack({ bus, name, loop = false }) {
 }
 
 export function createMusic() {
-  let ctx = null, timer = null, tracks = null, musicGain = null, sidechain = null;
+  let ctx = null, timer = null, tracks = null, musicGain = null, sidechain = null, analyser = null;
   let step = 0, loops = 0, current = 0, nextTime = 0;
   /* Which track you can actually HEAR, as opposed to which one is being scheduled.
    *
@@ -551,6 +551,28 @@ export function createMusic() {
     sidechain = ctx.createGain();
     sidechain.gain.value = 1;
     sidechain.connect(musicGain);
+
+    /* The tap the visualisers read, hung off the bus in PARALLEL.
+     *
+     * An AnalyserNode is a pass-through, but only if you connect its output — left dangling it
+     * is a pure observer. So the audio path is untouched, and nothing the drawing code does can
+     * go wrong with the sound.
+     *
+     * POST-volume on purpose. Tapping the sidechain instead would read the music's content
+     * regardless of how loud it is set, which sounds more "correct" and is wrong in practice:
+     * turn the music down to nothing and the bars would keep dancing, which reads as broken.
+     * What is drawn should be what you can hear.
+     *
+     * The decibel window is narrow — most of a mastered mix lives between -78 and -14 dBFS, and
+     * the default -100..-30 wastes most of the range on silence, which is why naive
+     * visualisers look like they are barely moving.
+     */
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.72;
+    analyser.minDecibels = -78;
+    analyser.maxDecibels = -14;
+    musicGain.connect(analyser);
 
     /* Four slots, each a produced mix if its file is reachable and the synthesised version of
      * itself if it is not.
@@ -736,6 +758,15 @@ export function createMusic() {
      * `playing` is not. That window is exactly what the autostart in main.js is closing.
      */
     get wanted() { return wanted; },
+
+    /**
+     * The frequency tap, or null before the first gesture has built the graph.
+     *
+     * Handed out rather than wrapped: a visualiser wants the raw node so it can pick its own
+     * bin count and read on its own frame clock. Nothing in here should be deciding how often
+     * somebody else's animation runs.
+     */
+    get analyser() { return analyser; },
 
     /** True when what you are hearing is the produced file rather than the synth fallback. */
     get trackIsFile() { return !!tracks?.[sounding]?.file; },
