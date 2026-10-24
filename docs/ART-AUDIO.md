@@ -454,19 +454,42 @@ after the last note, and moving the slider must not un-mute that tail once the m
 
 ### The sea listens
 
-The ocean moves to the music. `audio/listen.js` turns an `AnalyserNode` into five numbers a
-frame — `bass`, `mid`, `high`, `level`, and a `beat` pulse with a counter — and `render.js` uses
-them to turn dials the sea already had. Nothing new is drawn while the music is off.
+The ocean moves to the music. `audio/listen.js` turns an `AnalyserNode` into a handful of numbers
+a frame and `render.js` uses them to turn dials the sea already had. Nothing new is drawn while
+the music is off. Two layers:
+
+**Rhythm — it keeps time.** Detected beats feed a tempo (the mean of recent spacings that agree
+with their median, folded into 71–143 BPM) and a phase-locked metronome: `phase` runs 0→1 once a
+beat on its own, and every detected beat pulls both its position and its rate back into line.
+Once the spacings are regular enough to trust (`lock` ≥ 0.5), swells leave the coast on the
+metronome's downbeat — on the beat, every beat, including kicks the detector missed, and never on a
+false hit between them. Until then, on each detected beat. The metronome also drives a concentric
+wave through the current, centred on the island, one crest per beat, so the streaks breathe in
+rings in time with the music between the kicks as well as on them.
+
+**Colour — each band does a different thing.**
 
 | Music | Sea |
 |---|---|
 | overall level | the clock the water runs on (`flowT`): current, waves and surface texture all speed up together |
-| bass | wave trains push harder; the shallows glow; the ship rolls deeper; the whole sea lifts toward the light |
+| bass | wave trains push harder; the shallows glow; the ship rolls deeper; the sea lifts toward the light |
 | mids | the current streaks stretch |
-| highs | more sun glints, and brighter — the hats are the glitter |
-| each beat | a band of swell travels out from the coast along its own contour, and foam bursts off the rocks |
+| highs | glints come on a few at a time (each has its own threshold) and brighten |
+| hat and snare onsets | bioluminescence: a handful of cold green-blue points flare in the shallows |
+| brightness (spectral centroid) | the tint of the water: indigo for dark passages, teal for bright ones |
+| each beat | a band of swell walks out from the coast along its own contour; foam bursts off the rocks |
 
-Three decisions carry it:
+The continuous couplings are curved: the listener puts "usual" at 0.4, and the renderer's
+`lifted()` maps that to nearly zero, so the music doing its ordinary thing barely moves the water
+and only real lifts do. Linear coupling twitches constantly and is the commonest way this looks
+cheap. The rhythm layer is what carries constant musical motion instead.
+
+**What you see lands when you hear it.** The analyser hears audio as it is processed, which is the
+output latency — tens of milliseconds — before the speakers do. Everything the listener reports
+goes through a short delay line of that length (`outputLatency + baseLatency`), with the
+metronome's phase advanced across the gap so frame jitter cannot make it stutter.
+
+The decisions underneath:
 
 - **Tapped after the duck, before the fader** (`music.js`, `build`). The slider is how loud, not
   how much, so the sea moves the same at 10% as at 100%; and an explosion that ducks the music
@@ -485,8 +508,15 @@ it. The beat swell is drawn as rows of sea tiles stepped out from the shoreline 
 construction as the shallows — so it follows every bay and headland; an earlier ring round the
 island's bounding box left the visible strip of sea before anybody saw it.
 
+Measured on the real mp3s, offline through a real analyser: the theme (116 BPM) locks at 114, and
+every track holds a lock for 57–88% of a 40-second stretch. Brightness separates the tracks on its
+own — the theme and `suspend` sit around 0.75, `drift` and `undertow` around 0.28 — so each bed
+gets its own light.
+
 `test/listen.test.js` holds it to that with a fake analyser: beats at 90, 116 and 140 BPM land
-within 12%, a beatless bed is not a beat, and paused is still.
+within 12%; the tempo is learned within 5% and trusted; the metronome stays within 8% of a beat of
+the kicks with one kick in four missing; a beatless bed builds no tempo; hats are their own event;
+output is delayed by the latency; and paused is still.
 
 ---
 

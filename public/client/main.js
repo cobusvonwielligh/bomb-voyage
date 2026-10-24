@@ -1103,7 +1103,13 @@ function play(observe = false) {
   renderer = createRenderer($('game'), world);
   // The sea dances to the music. The renderer asks once a frame; see audio/listen.js.
   const listen = createListener();
-  renderer.setSound(dtMs => listen(music.analyser, music.audible, dtMs));
+  renderer.setSound(dtMs => {
+    // How far the speakers are behind the analyser. The listener delays everything by this, so
+    // a swell lands when the kick is heard rather than a few frames before it.
+    const c = music.analyser?.context;
+    const latencyS = c ? (c.outputLatency || 0) + (c.baseLatency || 0) : 0;
+    return listen(music.analyser, music.audible, dtMs, latencyS);
+  });
   sfx.start().then(() => sfx.play('click'));
   /* Out of the theme and into a bed, immediately and at random.
    *

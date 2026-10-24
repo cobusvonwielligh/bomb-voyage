@@ -35,26 +35,48 @@ export function createRenderer(canvas, world) {
   const floaters = [];         // "+1 BOMB" rising off a player — see addFloater
   let seaT = 0;
 
-  /* The sea listens to the music.
+  /* The sea, set to music.
    *
-   * `sound` is a snapshot of audio/listen.js's analysis, refreshed once a frame: bass, mid, high
-   * and overall level as 0..1 above-usual, and a beat pulse. Every way the water moves already
-   * existed; the music only turns the dials on it, so it never looks like a visualiser bolted
-   * onto a sea — it looks like a sea that is being played.
+   * The ocean is the one surface in this game that can carry a visualiser without costing
+   * anything: it surrounds the island, nothing is ever played on it, and it is already in
+   * constant motion — so audio-reactive water reads as water that happens to be alive rather
+   * than as a meter that happens to be wet. Two layers, and the split between them is the design:
    *
-   *   flowT   the clock the water runs on. It advances faster when the music is busy, so the
-   *           current, the waves and the surface texture all speed up together and slow back
-   *           down together. Accumulated rather than scaled, so a change of pace never jumps.
-   *   swell   how hard the wave trains push. The bass, and every beat on top of it.
-   *   pulses  one per beat: a ring of swell rolling out from the coast, and foam breaking on the
-   *           rocks at the same instant. The thing you can point at and say "that was the kick".
+   *   RHYTHM  keeps time. A metronome locked to the music's tempo (audio/listen.js) sends a
+   *           swell out from the coast on every beat — on the beat, every beat, including the
+   *           ones the detector missed — and drives a concentric wave through the current, one
+   *           crest per beat. This is what makes it look PLAYED rather than merely reactive.
+   *   COLOUR  follows the bands, each to a different thing, so it never reads as one thing
+   *           pulsing: bass is the swell, mids stretch the streaks, highs are the glints, hats
+   *           and snares light bioluminescence in the shallows, and the brightness of the mix
+   *           tints the water from deep indigo toward teal.
    *
-   * With the music off every multiplier is 1 and every pulse is gone — the sea it was before.
+   * `sound` is the listener's analysis, refreshed once a frame and already delayed by the
+   * output latency, so what is drawn lands when it is heard. Derived from it:
+   *
+   *   flowT   the clock the water runs on. Faster when the music is busy, so current, waves and
+   *           surface texture speed up and slow down together. Accumulated, so it never jumps.
+   *   swell   how hard the wave trains push: the bass, curved, and every beat on top of it.
+   *   tempoA  how hard the metronome's concentric wave pushes — zero until the tempo is trusted.
+   *   pulses  one per beat: a band of swell walking out from the coast, foam on the rocks.
+   *   glow    bioluminescence, lit by hats and snares.
+   *
+   * Every coupling multiplies something that already moves, and the continuous ones are curved
+   * (`lifted`) so the music doing its usual thing barely moves the water: linear coupling
+   * twitches constantly. Music off, every multiplier is 1 and every pulse is gone.
    */
-  const CALM = { bass: 0, mid: 0, high: 0, level: 0, beat: 0, beats: 0 };
-  let soundOf = null, sound = CALM, lastBeats = 0;
-  let flowT = 0, swell = 1;
+  const CALM = {
+    bass: 0, mid: 0, high: 0, level: 0, beat: 0, beats: 0,
+    bpm: 0, phase: 0, lock: 0, spark: 0, sparks: 0, tone: 0.5,
+  };
+  let soundOf = null, sound = CALM, lastBeats = 0, lastSparks = 0, lastPhase = 0;
+  let flowT = 0, swell = 1, tempoA = 0;
+  const tempoAt = { x: 0, y: 0, r0: 0 };    // where the concentric wave starts: the coast
+  const TEMPO_WAVELENGTH = TILE_PX * 5;      // crest to crest, one beat apart
   const pulses = [];
+  const glow = [];
+  /** Above-usual, curved. The listener puts "usual" at 0.4; this puts it near zero. */
+  const lifted = v => { const e = Math.max(0, (v - 0.35) / 0.65); return e * Math.sqrt(e); };
   let drunk = 0;                       // 0..1, eased, so it fades in and out rather than snapping
 
   /* Where the aim bracket is DRAWN, in tiles, as a float.
@@ -207,6 +229,7 @@ export function createRenderer(canvas, world) {
   const invalidateAll = () => {
     chunks = new Map(); shore = null; splashes.length = 0; dropsFor = null;
     pools.clear(); ripples.length = 0; wisps.length = 0; shards.length = 0; pops.length = 0; poolFor = null;
+    pulses.length = 0; glow.length = 0;
     rollCurrent();          // a new island sits in a different sea
   };
   const mapChanged = () => { recomputeZoom(); };
@@ -480,7 +503,23 @@ export function createRenderer(canvas, world) {
       const a = s.amp * swell * envelopeAt(s, x, y, t);
       v += Math.sin((x * s.dx + y * s.dy) * s.k - t * s.w + s.phase) * a * -s.dy;
     }
-    return v;
+    return v + tempoPush(x, y, 0);
+  };
+
+  /* The metronome in the water.
+   *
+   * A concentric wave centred on the island, pushing the current outward and back once per
+   * beat. Its phase IS the listener's beat phase, so a crest leaves the coast on every downbeat
+   * and the next one follows exactly a beat later — the streaks visibly breathe in rings, in
+   * time, between the kicks as well as on them. Radial rather than another plane wave because
+   * the island is the source of everything else here: the swells and the foam both start at
+   * the coast, and so does this. */
+  const tempoPush = (x, y, axis) => {
+    if (tempoA < 0.05) return 0;
+    const dx = x - tempoAt.x, dy = y - tempoAt.y;
+    const d = Math.sqrt(dx * dx + dy * dy) || 1;
+    const w = Math.sin(Math.PI * 2 * (sound.phase - (d - tempoAt.r0) / TEMPO_WAVELENGTH));
+    return (axis ? dy : dx) / d * w * tempoA;
   };
   const flowY = (x, y, t) => {
     // rockPush was filled by the flowX call for this same point, one line earlier in drawDrops.
@@ -489,7 +528,7 @@ export function createRenderer(canvas, world) {
       const a = s.amp * swell * envelopeAt(s, x, y, t);
       v += Math.sin((x * s.dx + y * s.dy) * s.k - t * s.w + s.phase) * a * s.dx;
     }
-    return v;
+    return v + tempoPush(x, y, 1);
   };
 
   function drawDrops(vw, vh, ox, oy, dt) {
@@ -503,8 +542,8 @@ export function createRenderer(canvas, world) {
     ctx.lineCap = 'round';
     ctx.strokeStyle = PALETTE.foam;
     // The streaks brighten with the top end and stretch with the mids: busy music, busy water.
-    const bright = Math.min(2.4, 0.8 + sound.high * 1.3 + sound.beat * 0.7);
-    const stretch = 1 + sound.mid * 1.4 + sound.beat * 0.9;
+    const bright = Math.min(2.4, 0.85 + lifted(sound.high) * 1.4 + sound.beat * 0.8);
+    const stretch = 1 + lifted(sound.mid) * 1.8 + sound.beat * 0.9;
     for (const d of drops) {
       const fx = flowX(d.x, d.y, flowT), fy = flowY(d.x, d.y, flowT);
       // Ease toward the current rather than snapping to it, so particles have momentum and the
@@ -637,7 +676,7 @@ export function createRenderer(canvas, world) {
     // A slow roll at anchor. Tiny — a degree and a half — but a ship perfectly still on water
     // that is not reads as a sprite rather than as a boat.
     // Rides the swell: the roll deepens with the bass.
-    ctx.rotate(Math.sin(flowT * 0.45) * 0.026 * (1 + sound.bass * 1.6));
+    ctx.rotate(Math.sin(flowT * 0.45) * 0.026 * (1 + lifted(sound.bass) * 2.2));
     ctx.scale(SHIP_SCALE, SHIP_SCALE);
     drawShip(ctx);
     ctx.restore();
@@ -820,8 +859,15 @@ export function createRenderer(canvas, world) {
     if (!seaNear) return;
     seaT += dtMs / 1000;
     // The music's clock and push. See `sound` at the top of the renderer.
-    flowT += (dtMs / 1000) * (1 + sound.level * 1.7 + sound.beat * 1.1);
-    swell = 1 + sound.bass * 2.6 + sound.beat * 1.5;
+    flowT += (dtMs / 1000) * (1 + lifted(sound.level) * 2.2 + sound.beat * 1.2);
+    swell = 1 + lifted(sound.bass) * 3.2 + sound.beat * 1.6;
+    tempoA = sound.lock * (10 + lifted(sound.bass) * 26);
+    {
+      const [lx, ly, lw, lh] = landBounds();
+      tempoAt.x = (lx + lw / 2) * TILE_PX;
+      tempoAt.y = (ly + lh / 2) * TILE_PX;
+      tempoAt.r0 = Math.min(lw, lh) * TILE_PX * 0.5;
+    }
 
     ctx.fillStyle = PALETTE.seaDeep;
     ctx.fillRect(0, 0, vw, vh);
@@ -883,25 +929,36 @@ export function createRenderer(canvas, world) {
      *
      * One translucent wash over the whole sea, under everything floating on it. The depth
      * gradient means it reads as the swell rising rather than as the screen flashing. */
-    const lift = sound.bass * 0.09 + sound.beat * 0.08;
+    // Tinted by the brightness of the mix: dark, bass-heavy passages pull the water toward deep
+    // indigo, bright ones toward teal. Slow — `tone` has a 700 ms release — so it reads as the
+    // light changing over the sea, never as a flash.
+    const lift = lifted(sound.bass) * 0.11 + sound.beat * 0.07 + (soundOf ? 0.025 : 0);
     if (lift > 0.004) {
-      ctx.fillStyle = `rgba(48,128,186,${lift})`;
+      const t = sound.tone;
+      ctx.fillStyle = `rgba(${(52 - 22 * t) | 0},${(92 + 70 * t) | 0},${(196 - 14 * t) | 0},${lift})`;
       ctx.fillRect(0, 0, vw, vh);
     }
 
     ctx.save();
     ctx.fillStyle = '#dff0ff';
-    // The top end is the glitter: more glints, and brighter, while the hats are going.
-    const glints = GLINTS + Math.round(sound.high * GLINTS * 1.5);
-    const glow = 0.5 * (0.7 + sound.high * 1.4 + sound.beat * 0.5);
+    /* The top end is the glitter.
+     *
+     * More glints exist the more treble there is, and each has its own hash threshold so they
+     * come on a few at a time rather than the whole field switching at once — a given glint
+     * always needs the same amount of top end, so which ones appear is stable, not random. */
+    const hi = lifted(sound.high);
+    const glints = GLINTS * 2;
+    const lit = Math.min(1, 0.5 + hi * 0.6 + sound.spark * 0.25);
+    const shine = 0.5 * (0.75 + hi * 1.3 + sound.beat * 0.4);
     for (let i = 0; i < glints; i++) {
+      if (hash01(i * 31 + 7) > lit) continue;
       const epoch = Math.floor(seaT / GLINT_LIFE_S + i * 0.37);
       const f = (seaT / GLINT_LIFE_S + i * 0.37) % 1;
       const hx = hash01(i * 7919 + epoch * 104729);
       const hy = hash01(i * 7919 + epoch * 104729 + 1);
       // A short rise and a long fall, so they twinkle out rather than blinking off.
       const life = f < 0.25 ? f / 0.25 : 1 - (f - 0.25) / 0.75;
-      ctx.globalAlpha = Math.min(1, life * glow);
+      ctx.globalAlpha = Math.min(1, life * shine);
       const gx = hx * vw, gy = hy * vh;
       const len = 1.5 + hash01(i + epoch) * 3.5;
       ctx.fillRect(gx, gy, len, 1);
@@ -939,8 +996,9 @@ export function createRenderer(canvas, world) {
     };
 
     // Both bands breathe with the bass: the shallows glow on the kick.
-    shelf(2, 0.16 * (1 + sound.bass * 1.4 + sound.beat), PALETTE.seaMid);    // the outer, deeper step
-    shelf(1, Math.min(0.9, 0.42 * (1 + sound.bass * 0.7 + sound.beat * 0.6)), PALETTE.seaLight);
+    const kickLift = lifted(sound.bass);
+    shelf(2, 0.16 * (1 + kickLift * 1.8 + sound.beat), PALETTE.seaMid);      // the outer, deeper step
+    shelf(1, Math.min(0.9, 0.42 * (1 + kickLift * 0.9 + sound.beat * 0.6)), PALETTE.seaLight);
 
     /* A swell rolling out from the coast on every beat.
      *
@@ -969,6 +1027,33 @@ export function createRenderer(canvas, world) {
         shelfRow(n0 + 1, peak * fr);
         if (n0 > 1) shelfRow(n0 - 1, peak * 0.35 * (1 - fr));  // the trough behind the crest
       }
+    }
+
+    /* Bioluminescence, lit by the hats and snares.
+     *
+     * The top end's transients — not its level — set off a handful of cold green-blue points in
+     * the shallows, a tile or two out from the rock, that flare and fade in under a second. One
+     * of the beds is literally called Bioluminescent Seas. Additive, so overlapping specks
+     * brighten each other the way light in water does, and small, so a busy hat pattern reads as
+     * the sea glittering rather than as fireworks. */
+    if (glow.length) {
+      const dt = dtMs / 1000;
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = glow.length - 1; i >= 0; i--) {
+        const g = glow[i];
+        g.life -= dt / g.span;
+        if (g.life <= 0) { glow.splice(i, 1); continue; }
+        // Fast in, slow out: a flare, not a blink.
+        const a = g.life > 0.85 ? (1 - g.life) / 0.15 : g.life / 0.85;
+        g.y -= dt * 3;
+        ctx.globalAlpha = a * 0.3;
+        ctx.fillStyle = '#3fd9c4';
+        ctx.beginPath(); ctx.arc(g.x, g.y, g.r * 3.2, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = a * 0.75;
+        ctx.fillStyle = '#b8fff0';
+        ctx.beginPath(); ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalCompositeOperation = 'source-over';
     }
 
     /* No caustics.
@@ -1301,10 +1386,38 @@ export function createRenderer(canvas, world) {
 
     // Listen before drawing a single wave, so everything this frame hears the same instant.
     sound = soundOf ? soundOf(dtMs) : CALM;
-    if (sound.beats !== lastBeats) {
-      lastBeats = sound.beats;
-      if (pulses.length < 6) pulses.push({ life: 1, strength: 0.6 + sound.bass * 0.6 });
-      for (let i = 0; i < 4; i++) spawnSplash(true);
+
+    /* When does a swell leave the coast?
+     *
+     * On the metronome's downbeat, once the tempo is trusted: then it is on the beat every beat,
+     * including the ones the detector missed, and never on a false hit between them. Until
+     * then — an ambient bed, the first bars of a track — on each detected beat, as it comes. */
+    const heard = sound.beats !== lastBeats;
+    const downbeat = sound.phase < lastPhase - 0.5;
+    lastBeats = sound.beats;
+    lastPhase = sound.phase;
+    const locked = sound.lock >= 0.5;
+    if ((locked && downbeat) || (!locked && heard)) {
+      const k = lifted(sound.bass);
+      if (pulses.length < 6) pulses.push({ life: 1, strength: 0.65 + k * 0.7 });
+      const foam = locked ? 2 + Math.round(k * 4) : 4;
+      for (let i = 0; i < foam; i++) spawnSplash(true);
+    }
+
+    if (sound.sparks !== lastSparks) {
+      lastSparks = sound.sparks;
+      const shore = world.map ? shoreline() : [];
+      for (let i = 0; i < 5 && shore.length && glow.length < 90; i++) {
+        const s = shore[(Math.random() * shore.length) | 0];
+        const dx = (s.e & 1 ? 1 : 0) - (s.e & 4 ? 1 : 0), dy = (s.e & 8 ? 1 : 0) - (s.e & 2 ? 1 : 0);
+        if (!dx && !dy) continue;
+        const out = 1 + Math.random() * 1.6;
+        glow.push({
+          x: (s.tx + 0.5 + dx * out + (Math.random() - 0.5) * 0.8) * TILE_PX,
+          y: (s.ty + 0.5 + dy * out + (Math.random() - 0.5) * 0.8) * TILE_PX,
+          r: 1.4 + Math.random() * 1.4, life: 1, span: 0.6 + Math.random() * 0.5,
+        });
+      }
     }
 
     drawSea(vw, vh, ox, oy, dtMs);
