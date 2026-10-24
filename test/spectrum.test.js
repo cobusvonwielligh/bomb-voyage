@@ -160,33 +160,33 @@ test('reading nothing is safe, and the sea has something to fall back to', () =>
   }
 });
 
-test('the sea modulates its FIELD gently and its APPEARANCE freely', () => {
-  /* The distinction this guards cost eight hundred jittering streaks to learn.
-   *
-   * The flow field decides where every particle is HEADING. Swing it hard and the target
-   * velocity under each streak changes faster than the streak can ease toward it, so instead of
-   * water moving to the music you get arrows changing their minds. Appearance — length,
-   * brightness, foam — can swing as far as it likes, because nothing is navigating by it.
-   *
-   * So: the two field drivers are smoothed and have small coefficients, and no particle may be
-   * shoved independently of the field it is following.
-   */
+test('the sea rests to itself, and its clock is a multiplier from 1', () => {
+  // Silence must leave the water exactly as it was: a resting state, and a surface clock that
+  // the music only ever speeds up from its normal rate.
   const src = readFileSync(new URL('../public/client/render.js', import.meta.url), 'utf8');
+  assert.match(src, /const CALM = \{/, 'there is no resting state for the sea');
+  assert.match(src, /setSound\(fn\)/, 'the renderer no longer takes the music');
+  const clock = src.match(/flowT \+= \(dtMs \/ 1000\) \* \(([^;]+)\);/);
+  assert.ok(clock, 'the surface clock is gone');
+  assert.match(clock[1], /^1 \+/, `flowT advances at ${clock[1]}, not a multiplier from 1`);
+});
 
-  // The field clock and amplitude are eased rather than assigned.
-  for (const name of ['flowRate', 'swell']) {
-    const eased = new RegExp(`${name} \\+= \\(want\\w+ - ${name}\\) \\* ease`);
-    assert.match(src, eased, `${name} is written straight from the music instead of eased toward it`);
-  }
-
-  // And their coefficients stay small. A field that triples on a beat is the bug.
-  const want = src.match(/const wantT = [^;]+;\s*const wantS = [^;]+;/);
-  assert.ok(want, 'the field drivers are not where this test expects them');
-  for (const n of want[0].match(/\d+\.\d+/g).map(Number)) {
-    assert.ok(n <= 1, `a flow-field coefficient of ${n} is big enough to make the streaks jitter`);
-  }
-
-  // No per-particle shove. `d.x +=` must be the plain step.
-  assert.match(src, /d\.x \+= d\.vx \* dt;/, 'a particle is being moved independently of the field');
-  assert.ok(!/d\.x \+= d\.vx \* dt \* /.test(src), 'a per-particle surge is back');
+test('the flow lines never listen to the music', () => {
+  /* Two lessons, learned separately and the hard way.
+   *
+   * First: the flow field decides where every streak is HEADING. Swing it on a beat and the
+   * target under each streak changes faster than the streak can ease toward it — eight hundred
+   * arrows changing their minds. Second, and stricter: even with the field calm, streaks that
+   * stretched, brightened and surged with the music turned the whole ocean into flicker. They
+   * are what says which way the water is going, so they now follow the plain current on the
+   * plain clock and the music lives in the coast and the bioluminescence. */
+  const src = readFileSync(new URL('../public/client/render.js', import.meta.url), 'utf8');
+  const code = s => s.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+  const body = code(src.slice(src.indexOf('function drawDrops('), src.indexOf('const MAX_SPLASHES')));
+  assert.ok(body.length > 100, 'drawDrops not found');
+  assert.doesNotMatch(body, /\bsound\.|flowT/, 'drawDrops reads the music');
+  // No per-particle shove: each streak moves by the field, and only the field.
+  assert.match(body, /d\.x \+= d\.vx \* dt;/, 'a particle is being moved independently of the field');
+  const field = code(src.slice(src.indexOf('const flowX = '), src.indexOf('function drawDrops(')));
+  assert.doesNotMatch(field, /\bsound\.|swell|tempo/, 'the flow field reads the music');
 });
