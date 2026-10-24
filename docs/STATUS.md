@@ -1,6 +1,6 @@
 # Bomb Voyage — Where We Stand
 
-Last updated: **2026-10-24**. Live on `bombvoyage.online`. 230 tests passing.
+Last updated: **2026-10-24**. Live on `bombvoyage.online`. 231 tests passing.
 
 This document replaces the "⬜ The game: not started" line in the README. The game is built, the
 whole plan in [PLAN.md](PLAN.md) has been walked through, and several decisions in it have since
@@ -18,7 +18,7 @@ accurate; the parts that describe *what is not built yet* are not.
 |---|---|
 | Playable end to end | ✅ |
 | Deployed, TLS, auto-restart, rollback | ✅ |
-| Bots | ✅ 15 of them, pathfinding and fleeing |
+| Bots | ✅ 15 of them, pathfinding and fleeing; `npm run botbench` measures them |
 | Maps | ✅ 5 |
 | Art and audio | ✅ art in code; music is four produced files (see §2e) |
 | Transport | ✅ **WebTransport over QUIC, with WebSocket as the fallback** |
@@ -208,11 +208,13 @@ Ordered by how much it would change a Friday session.
 
 ### Worth doing
 
-1. **Bot suicides.** Down from about 1.9 to about 1.4 deaths per bot per minute, but still the
-   largest single source of deaths on the board. Two causes were found and fixed — unlit powder
-   kegs were missing from the danger map, and a bot that had committed to a walk would not break
-   it when the tile ahead caught fire. What is left is commitment on long routes; a bot that
-   starts a four-tile dash still finishes it.
+1. **Bots are competent at not dying; they are not yet good at killing.** `npm run botbench`
+   (15 bots, every map, headless, ~3 s for 20 simulated minutes each) measures 0.17 suicides and
+   0.45 kills per bot per minute. It was 2.3 and 0.33 — 87% of deaths self-inflicted — and the
+   biggest cause was not the reasoning at all: a bot turning into a gap from just past the corner
+   assist window pushed flat into the wall and froze there until its own fuse ran out (see
+   `steer` in `ai.js`). Next: hunting. Bots bomb walls and wander toward the nearest player;
+   nothing tries to trap anyone.
 2. **A browser-side confirmation of WebTransport.** Verified with a real QUIC client from
    outside AWS (8/8 sessions, ~50 ms to ready) and from the box, but not yet read off a Chrome
    session. The console logs `transport: webtransport` on connect; somebody needs to look.

@@ -16,7 +16,8 @@
     "deploy:fast": "SKIP_TESTS=1 ./infra/deploy.sh",
     "rollback": "./infra/rollback.sh",
     "logs": "./infra/logs.sh",
-    "bots": "node server/bots.js"
+    "bots": "node server/bots.js",
+    "botbench": "node server/botbench.js"
   },
   "dependencies": {
     "@fails-components/webtransport": "^1.6.11",
