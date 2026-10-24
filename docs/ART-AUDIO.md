@@ -195,6 +195,12 @@ Strip ID3 cover art before committing a track. It is about 25% of the file and n
 
 Bottom left, one pill: `prev`, play/pause, `next`, the sfx control, and what is playing.
 
+Every part of the fader is drawn by hand — appearance stripped, track and thumb rebuilt. This
+is not polish: `accent-color` alone leaves the native control's own geometry, and a native thumb
+is a ~40px lozenge that, stood on its end in a 30px column, looks like a rendering bug rather
+than like a fader. The track carries the level as a hard-stop gradient driven by `--lvl`, which
+`syncAudio()` sets on the `.vol` and inherits down into the pseudo-elements.
+
 The faders open **upward** out of their buttons, not sideways. Sideways they pushed everything
 to their right along, so opening the music fader moved the sfx button and the track name under
 the pointer — and in a corner, growing sideways is the one direction that costs layout. The

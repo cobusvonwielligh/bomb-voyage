@@ -411,6 +411,8 @@ button:hover { background: var(--gold); color: #11161e; }
 button:disabled { opacity: .4; cursor: default; }
 button:disabled:hover { background: transparent; color: var(--gold); }
 
+/* Only the fader uses a range input, and it draws every part of itself below. This is the
+   fallback for any engine that ignores the ::-webkit / ::-moz pseudo-elements. */
 input[type=range] { width: 64px; accent-color: var(--gold); }
 
 /* Volume: one control, not three widgets.
@@ -463,38 +465,85 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 }
 .vol.muted .volBtn::after { background: #ffffff1f; }
 
-/* The fader slides UP out of the button, not sideways out of it.
+/* ─── the fader ───────────────────────────────────────────────────────────────
+ * Slides UP out of its button, not sideways.
  *
- * Horizontally it had to push everything to its right along, so opening the music fader moved
- * the sfx button and the track name under the pointer — and the dock is in a corner, where
- * growing sideways is the one direction that costs layout. Upward it grows into empty screen
- * and nothing else in the pill moves at all.
+ * Sideways it pushed everything to its right along, so opening the music fader moved the sfx
+ * button and the track name under the pointer — and the dock is in a corner, where growing
+ * sideways is the one direction that costs layout. Upward it grows into empty screen and
+ * nothing else in the pill moves.
  *
- * Height, not display: an element that is display:none cannot animate. */
+ * Height, not display: an element that is display:none cannot animate.
+ */
 .slot {
-  position: absolute; left: 0; right: 0; bottom: 100%;
+  position: absolute; left: 50%; bottom: 100%;
+  width: 30px; margin-left: -15px;
   height: 0; opacity: 0; overflow: hidden;
-  display: grid; place-items: center;
-  border-radius: 9px 9px 0 0;
-  background: #0d1117e6;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 8px 8px 0 0;
+  background: #0d1117f2;
+  border: 1px solid #ffffff14; border-bottom: 0;
   pointer-events: none;
   transition: height .16s ease, opacity .16s ease;
 }
-/* `bottom: 100%` with no gap on purpose: a few pixels of space between the button and the
+/* `bottom: 100%` with no gap, on purpose: a few pixels of space between the button and the
    fader is a dead zone the pointer crosses on the way up, and crossing it closes the thing you
-   were reaching for. Flush, it reads as one fader strip. */
+   were reaching for. Flush, the two read as one strip. */
 .vol:hover .slot, .vol:focus-within .slot {
-  height: 86px; opacity: 1; pointer-events: auto;
+  height: 78px; opacity: 1; pointer-events: auto;
 }
 
-/* Laid out horizontally and then turned, which is the one approach that behaves the same in
-   every engine: `appearance: slider-vertical` is deprecated in Chrome and the
-   `writing-mode`/`direction` replacement is not in Safari yet. Rotating about its own centre
-   inside a grid-centred box means the 76px track becomes 76px of height in the same place. */
+/* Laid out horizontally and turned, which is the one approach that behaves the same in every
+ * engine: `appearance: slider-vertical` is deprecated in Chrome and the
+ * `writing-mode`/`direction` replacement is not in Safari yet.
+ *
+ * EVERY part is drawn by hand. `accent-color` alone leaves the native control's own geometry,
+ * and a native thumb is a ~40px lozenge that, stood on its end in a 30px column, looks like a
+ * bug rather than like a fader. Appearance is stripped and the track and thumb are rebuilt at
+ * the size this actually wants. */
 .slot input[type=range] {
-  width: 76px; margin: 0;
+  -webkit-appearance: none; appearance: none;
+  width: 62px; height: 12px; margin: 0; padding: 0;
+  background: transparent;
   transform: rotate(-90deg);
+  cursor: pointer;
 }
+.slot input[type=range]:focus { outline: none; }
+.slot input[type=range]:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; }
+
+/* The track carries the level as a hard-stop gradient, so the filled part below the thumb is
+   the accent and the rest is a groove. `--lvl` is set on the .vol by syncAudio(). */
+.slot input[type=range]::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px;
+  background: linear-gradient(90deg,
+    var(--gold) 0 calc(var(--lvl, .5) * 100%),
+    #ffffff26 calc(var(--lvl, .5) * 100%) 100%);
+}
+.slot input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 11px; height: 11px; margin-top: -3.5px;
+  border-radius: 50%;
+  background: var(--gold);
+  border: 2px solid #0d1117;
+  box-shadow: 0 0 0 1px #0006;
+}
+.slot input[type=range]::-moz-range-track {
+  height: 4px; border-radius: 2px; background: #ffffff26;
+}
+.slot input[type=range]::-moz-range-progress {
+  height: 4px; border-radius: 2px; background: var(--gold);
+}
+.slot input[type=range]::-moz-range-thumb {
+  width: 11px; height: 11px;
+  border-radius: 50%;
+  background: var(--gold);
+  border: 2px solid #0d1117;
+}
+/* Muted: the fader is still usable, it just stops claiming to be carrying anything. */
+.vol.muted .slot input[type=range]::-webkit-slider-runnable-track { background: #ffffff26; }
+.vol.muted .slot input[type=range]::-webkit-slider-thumb { background: #7b8698; }
+.vol.muted .slot input[type=range]::-moz-range-progress { background: #7b8698; }
+.vol.muted .slot input[type=range]::-moz-range-thumb { background: #7b8698; }
 
 @media (prefers-reduced-motion: reduce) {
   .slot { transition: none; }
