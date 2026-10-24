@@ -614,6 +614,8 @@ export function createRoom({ onKick, onBroadcast, adminName = '', maxPlayers = M
       playerId: seats[seat]?.playerId ?? null,
       tick: state.tick,
       roundEndsAtTick: roundTicks,
+      // A reconnect during the intermission must not be mistaken for the next round starting.
+      between,
       color: playerColor(seat),
       map: welcomePayloadBase().map,
       players,

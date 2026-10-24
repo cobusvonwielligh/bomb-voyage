@@ -133,6 +133,7 @@ Send every 2 s. See [NETCODE.md](NETCODE.md) §4.
   "playerId": "p_8f2a...",        // store this in localStorage
   "tick": 10401,                  // current server tick
   "roundEndsAtTick": 28800,
+  "between": false,              // true when joining during the intermission
   "map": {
     "id": "arena",
     "w": 31, "h": 25,

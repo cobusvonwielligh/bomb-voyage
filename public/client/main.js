@@ -21,6 +21,7 @@ import { createListener } from './audio/listen.js';
 import { createQuips, MENU_QUIPS } from './quips.js';
 import { createMenuViz } from './menuviz.js';
 import { bombTile } from '/shared/sim/bombs.js';
+import { MAPS } from '/shared/maps.js';
 
 const $ = id => document.getElementById(id);
 
@@ -323,6 +324,9 @@ const toast = msg => {
 const net = createNet({
   onWelcome: m => {
     world.applyWelcome(m);
+    // A full welcome outside an intermission IS the next round — on time, or early because the
+    // host typed /restart or /map — so the standings go the moment it lands, not on a timer.
+    if (roundOverUntil && !m.mapOnly && !m.between) endIntermission();
     renderer?.invalidateAll();
     renderer?.mapChanged();          // a different map size means a different scale
     if (!m.mapOnly) {
@@ -483,15 +487,9 @@ const net = createNet({
     music.dip(won ? 0.7 : 0.4, won ? 3.6 : 1.1);
     $('respawn').style.display = 'none';
     roundOverUntil = performance.now() + m.startsInMs;
-    setTimeout(() => {
-      roundOverUntil = 0;
-      $('dead').style.display = 'none';
-      $('respawn').style.display = '';
-      $('deadTitle').textContent = 'you died';
-      $('dead').firstElementChild.classList.remove('round', 'won');
-      $('roundRows').textContent = '';
-      $('roundNext').textContent = '';
-    }, m.startsInMs);
+    startIntermission(m.startsInMs);
+    clearTimeout(roundOverTimer);
+    roundOverTimer = setTimeout(endIntermission, m.startsInMs);
   },
   // Lifetime rank, once a second. See the comment on emitScores in server/room.js for why this
   // is not in the snapshot.
@@ -834,7 +832,8 @@ function loop(now) {
     // A spectator still advances the clock — the interpolator is driven from it — but has
     // nothing to predict and nothing to send. The server ignores input from a watcher anyway;
     // not sending it is the difference between ignored and never asked.
-    if (observing) continue;
+    // Between rounds the server simulates nothing, so predicting would walk you off on your own.
+    if (observing || roundOverUntil) continue;
     const mask = input.mask;
     localBombFeedback(mask);
     world.predict(tick, mask);
@@ -844,14 +843,19 @@ function loop(now) {
   // Fell badly behind: drop it rather than catching up — and resync, for the same reason.
   if (acc > step * 5) { acc = 0; net.resync(); }
 
-  idlePing(now);
-  fuseTicks();
-  world.updateFires();
-  world.interpolate(net.serverTickNow(), dt);
   // BEFORE the renderer, not after: it reads the analyser and hands the result to the sea, and
   // doing it afterwards would draw this frame's water with last frame's music.
   syncMeter(dt);
-  renderer.frame(dt);
+  if (roundOverUntil) {
+    // The board is hidden and frozen; draw nothing on it until the next round's welcome.
+    syncCountdown(now);
+  } else {
+    idlePing(now);
+    fuseTicks();
+    world.updateFires();
+    world.interpolate(net.serverTickNow(), dt);
+    renderer.frame(dt);
+  }
 
   // Five times a second is plenty for a clock, a loadout and a track name, and it keeps a
   // pile of DOM writes out of the frame that has to draw sixteen players.
@@ -1169,10 +1173,50 @@ function renderRoundTable(m) {
     if (you) { tr.classList.add('me'); mine = tr; }
     body.append(tr);
   }
-  $('roundNext').textContent = `next map: ${m.nextMap}`;
+  $('nextMapName').textContent = MAPS.find(x => x.id === m.nextMap)?.name ?? m.nextMap ?? '';
   $('roundEmpty').style.display = body.children.length ? 'none' : '';
   // Sixteen rows can overflow the card on a short window; make sure yours is the one on screen.
   mine?.scrollIntoView({ block: 'nearest' });
+}
+
+/**
+ * Between rounds: the board goes, the standings stay, and a bar fills until the next round.
+ *
+ * The simulation is paused on the server for the whole intermission, but the board used to keep
+ * drawing — players frozen mid-stride or still walking on their own prediction, the sea rolling,
+ * banners firing — behind a translucent card. Now `body.intermission` hides the field outright
+ * and `loop` stops predicting and drawing until the round is back.
+ */
+let roundOverTimer = 0;
+
+function startIntermission(ms) {
+  document.body.classList.add('intermission');
+  input.clear();
+  const fill = $('roundBar').firstElementChild;
+  fill.style.animation = 'none';
+  void fill.offsetWidth;                 // restart, or a second intermission starts full
+  fill.style.animation = `roundFill ${ms}ms linear forwards`;
+  syncCountdown(performance.now());
+}
+
+function endIntermission() {
+  clearTimeout(roundOverTimer);
+  roundOverUntil = 0;
+  document.body.classList.remove('intermission');
+  $('dead').style.display = 'none';
+  $('respawn').style.display = '';
+  $('deadTitle').textContent = 'you died';
+  $('dead').firstElementChild.classList.remove('round', 'won');
+  $('roundRows').textContent = '';
+  $('nextMapName').textContent = '';
+  $('roundCountdown').textContent = '';
+}
+
+function syncCountdown(now) {
+  const s = Math.max(0, Math.ceil((roundOverUntil - now) / 1000));
+  const text = s > 0 ? `next round in ${s}s` : 'here we go';
+  const el = $('roundCountdown');
+  if (el.textContent !== text) el.textContent = text;     // called every frame; write once a second
 }
 
 /** YOU DIED, across the middle of the board. Separate from the card, which is the controls. */
@@ -1424,7 +1468,7 @@ function leave() {
   $('dead').style.display = 'none';
   $('scores').classList.remove('on');
   scoresOpen = false;
-  roundOverUntil = 0;
+  endIntermission();
   clearTimeout(idleTimer);
   hiddenSince = 0;
   input.clear();

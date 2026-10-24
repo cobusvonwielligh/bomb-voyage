@@ -15,6 +15,8 @@ them in the first playtest. They all live in one file so that is a two-minute jo
 - Internal position unit: **1 tile = 256 units**, integers only. Never store a float position.
 - Simulation: **30 ticks/second**, fixed step. 1 tick = 33.333 ms.
 - Rounds last **10 minutes** = 18 000 ticks, then a 20-second scoreboard, then the next map.
+  During the scoreboard the board is hidden and nothing on it moves; the card names the next map
+  and a gold-to-green bar fills until it starts.
   The host can change the length live with `/roundtime N`, in tenths of a minute.
 - Maps rotate in order, starting from a random one — the server restarts on every deploy, and
   always starting at index 0 meant nobody ever saw the later maps.

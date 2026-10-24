@@ -2825,11 +2825,89 @@ body.dead #rank { color: #8a5a5a; }
   font-weight: 700;
   box-shadow: inset 3px 0 0 var(--gold);
 }
+/* Next map and the bar that counts down to it. Gold running into green: the gold of the rest of
+ * the interface, arriving at "go". The fill is one CSS animation the length of the intermission,
+ * started by main.js, so it moves smoothly with nothing in the frame loop driving it. */
 #roundNext {
-  margin: 12px 0 0;
+  margin: 18px 0 2px;
   text-align: center;
+}
+#roundNext .nextMap {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 10px;
+}
+#roundNext .k {
   color: var(--dim);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+#nextMapName {
+  font-family: var(--display);
+  font-size: 22px;
+  letter-spacing: 0.05em;
+  color: var(--gold);
+  text-shadow: 0 2px 0 #0009, 0 0 18px #edc24e44;
+}
+#roundBar {
+  position: relative;
+  height: 12px;
+  margin: 12px 4px 8px;
+  border-radius: 7px;
+  background: #0b1017;
+  border: 1px solid #edc24e40;
+  box-shadow: inset 0 2px 4px #000a;
+  overflow: hidden;
+}
+/* Full width and revealed by a clip, not grown: the gradient stays pinned to the track, so the
+ * bar is gold while you wait and turns green only as the round gets close. */
+#roundBar .fill {
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, #ffffff55, #ffffff00 55%),
+    linear-gradient(90deg, #b8892e, #edc24e 38%, #9fd85a 74%, #3fbf6a);
+  clip-path: inset(0 100% 0 0 round 6px);
+}
+/* A glint that runs along the fill, so a bar that only crawls still reads as alive. */
+#roundBar .fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, #ffffff70 50%, transparent 70%);
+  background-size: 200% 100%;
+  animation: roundGlint 1.6s linear infinite;
+}
+@keyframes roundFill {
+  from { clip-path: inset(0 100% 0 0 round 6px); }
+  to { clip-path: inset(0 0 0 0 round 6px); }
+}
+@keyframes roundGlint {
+  from { background-position: 150% 0; }
+  to { background-position: -50% 0; }
+}
+#roundCountdown {
+  font-family: var(--nums);
+  font-variant-numeric: tabular-nums;
   font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #9fd85a;
+}
+
+/* Between rounds the board is gone, not dimmed. Everything on it — the sprites mid-stride, the
+ * sea, the banners — is hidden, and the frame loop stops drawing it (see `loop` in main.js), so
+ * the standings are the only thing on screen and nothing behind them is still moving. */
+body.intermission canvas#game,
+body.intermission #deadBanner,
+body.intermission #streak {
+  visibility: hidden;
+}
+body.intermission #dead {
+  background: radial-gradient(ellipse at 50% 40%, #16202b, #0b0f15 75%);
 }
 
 /* Centred on the BOARD, not the window — the same correction the kill-streak banner got.

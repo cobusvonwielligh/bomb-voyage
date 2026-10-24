@@ -350,7 +350,13 @@
         <tbody id="roundRows"></tbody>
       </table>
       <p class="sub" id="roundEmpty">no scores</p>
-      <p class="sub" id="roundNext"></p>
+      <!-- What comes next, and when. The bar fills over the whole intermission, so "how long
+           until we play" is a glance rather than a number to read. -->
+      <div id="roundNext">
+        <div class="nextMap"><span class="k">next map</span><span id="nextMapName"></span></div>
+        <div id="roundBar"><div class="fill"></div></div>
+        <div class="nextWhen" id="roundCountdown"></div>
+      </div>
     </div>
     <!-- Three choices, in the order you are likely to want them. No heading: the respawn
          countdown IS the message, and "you died" over the top of a banner that just said so is
