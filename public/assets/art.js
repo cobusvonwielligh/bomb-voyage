@@ -437,7 +437,10 @@ function outlineTile(c) {
  *
  * Water and floor are flat, and iron is the one thing deliberately kept visually quiet, so none
  * of those get one. */
-const CASTS_SHADOW = new Set([
+/* Solid things with height. The baked edge shading below uses it, and so does the sun in
+ * render.js — a block that looks three-dimensional and throws no shadow is the one that gives
+ * the trick away, so the two lists have to be the same list. */
+export const CASTS_SHADOW = new Set([
   BLOCK.SOFT, BLOCK.REINFORCED, BLOCK.MONOLITH, BLOCK.POWDER, BLOCK.COLUMN, BLOCK.SHRUB_SOLID,
   BLOCK.ICE,
 ]);
@@ -1561,7 +1564,9 @@ function outlined(c, drawShape, drawArt = drawShape, { width = 1, colour = '#0b0
 }
 
 export function bake({ playerCount = 16 } = {}) {
-  const out = { tiles: {}, players: [], bombs: [], perks: {} };
+  // `playerShadows` is one flat black silhouette per frame of the FIRST colour's set — a
+  // shadow has no colour and all sixteen players are the same shape, so one set covers them.
+  const out = { tiles: {}, players: [], bombs: [], perks: {}, playerShadows: [] };
 
   for (const type of Object.values(BLOCK)) {
     out.tiles[type] = [0, 0.33, 0.66, 0.95].map(d => {
@@ -1578,6 +1583,21 @@ export function bake({ playerCount = 16 } = {}) {
           cc => drawPlayer(cc, { dir, frame, colorIndex: i, shadow: false }),
           cc => drawPlayer(cc, { dir, frame, colorIndex: i }));
         set.push(el);
+        /* The same figure as a flat black silhouette, for the sun to throw.
+         *
+         * Baked once rather than built per frame: a silhouette needs a scratch canvas and a
+         * `source-in` fill, which is two allocations and a composite — fine at boot, absurd
+         * sixteen times a frame. Only the first colour's set is kept, because a shadow has no
+         * colour and all sixteen players are the same shape. */
+        if (i === 0) {
+          const sh = canvas();
+          const sc = sh.getContext('2d');
+          sc.drawImage(el, 0, 0);
+          sc.globalCompositeOperation = 'source-in';
+          sc.fillStyle = '#000';
+          sc.fillRect(0, 0, sh.width, sh.height);
+          out.playerShadows.push(sh);
+        }
       }
     out.players.push(set);
     // One body per owner. Everything that changes with the fuse is drawn live — see drawBombLive.

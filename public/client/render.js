@@ -13,7 +13,7 @@ import {
 import { cellType, cellHp } from '/shared/maps.js';
 import {
   drawTile, drawFire, drawPerk, drawRock, drawShip, playerShades, PALETTE, bake, bakeSea,
-  PERK_GLOWS, drawBombLive,
+  PERK_GLOWS, drawBombLive, CASTS_SHADOW,
 } from '/assets/art.js';
 import { bombTile } from '/shared/sim/bombs.js';
 
@@ -257,6 +257,42 @@ export function createRenderer(canvas, world) {
     }
   }
 
+/* The sun, which you never see.
+ *
+ * An actual sun in the corner of a top-down board is a bright thing competing with the fire for
+ * the brightest-thing-on-screen slot, and it would have to be somewhere — which on a square
+ * board means one of four corners, which means it stops being a choice. What you get instead is
+ * everything it implies: one light direction, and every solid thing on the island throwing a
+ * shadow the same way.
+ *
+ * ANGLE 0 to 180 degrees, deterministic in the map name, so a given map always has the same
+ * light and nothing has to travel on the wire. Only the upper half: the sun is somewhere
+ * overhead and ahead, never behind the camera, so shadows always fall DOWN the screen — a board
+ * lit from below reads as though you are looking at it upside down.
+ *
+ * The length is deliberately short, about two thirds of a tile. Long shadows are prettier and
+ * they obscure the floor, and the floor is where you walk.
+ */
+  const SHADOW_LEN = TILE_PX * 0.62;
+  const SHADOW_ALPHA = 0.3;
+  let sunFor = null, sun = { dx: 0, dy: 0 };
+
+  function sunVec() {
+    const map = world.map;
+    if (!map) return sun;
+    if (sunFor === map) return sun;
+    sunFor = map;
+    // Hash the map's identity rather than Math.random(): the sun is part of what a map LOOKS
+    // like, and a light that moved every time you loaded the same island would read as a bug.
+    let h = 2166136261;
+    for (const ch of String(map.id ?? map.name ?? 'map')) {
+      h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+    }
+    const angle = ((h >>> 0) / 4294967295) * Math.PI;   // 0..180 degrees
+    sun = { dx: Math.cos(angle) * SHADOW_LEN, dy: Math.sin(angle) * SHADOW_LEN };
+    return sun;
+  }
+
   function chunkAt(cx, cy) {
     const key = `${cx},${cy}`;
     let c = chunks.get(key);
@@ -273,6 +309,35 @@ export function createRenderer(canvas, world) {
       // so the animated sea drawn underneath shows through. The sea is the background now.
       cc.clearRect(0, 0, CHUNK_PX, CHUNK_PX);
       const map = world.map;
+      const { dx: sdx, dy: sdy } = sunVec();
+
+      /* The shadow pass, first, so every tile paints over its neighbours' shadows.
+       *
+       * Baked into the chunk rather than drawn per frame: the sun does not move, so a block's
+       * shadow is as static as the block is, and a thousand offset rects a frame for something
+       * that never changes would be the most expensive thing on screen.
+       *
+       * It overruns the chunk edge by design. A shadow near the boundary spills into the next
+       * chunk and is simply clipped — the neighbouring chunk draws its own, so the only thing
+       * lost is the sliver one block casts across the seam. At 0.62 of a tile against an
+       * eight-tile chunk, that is a few pixels every sixty-four.
+       */
+      cc.save();
+      cc.globalAlpha = SHADOW_ALPHA;
+      cc.fillStyle = '#000';
+      for (let j = 0; j < CHUNK_TILES; j++) {
+        for (let i = 0; i < CHUNK_TILES; i++) {
+          const tx = cx * CHUNK_TILES + i, ty = cy * CHUNK_TILES + j;
+          if (tx < 0 || ty < 0 || tx >= map.w || ty >= map.h) continue;
+          const t = cellType(map.cells[ty * map.w + tx]);
+          if (!CASTS_SHADOW.has(t)) continue;
+          cc.beginPath();
+          cc.roundRect(i * TILE_PX + sdx, j * TILE_PX + sdy, TILE_PX, TILE_PX, 3);
+          cc.fill();
+        }
+      }
+      cc.restore();
+
       for (let j = 0; j < CHUNK_TILES; j++) {
         for (let i = 0; i < CHUNK_TILES; i++) {
           const tx = cx * CHUNK_TILES + i, ty = cy * CHUNK_TILES + j;
@@ -682,6 +747,17 @@ export function createRenderer(canvas, world) {
      * because a hull displaces water along its length: a circular collar round a boat reads as a
      * buoy. Breathes with the music exactly as much as the rocks' collars do, which is barely:
      * see the note there. */
+    // The hull's shadow, cast the same way as everything on the island. Drawn before the wake,
+    // so the foam rings sit on top of it rather than under.
+    const sv = sunVec();
+    ctx.save();
+    ctx.globalAlpha = SHADOW_ALPHA * 0.45;
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(sv.dx / SHIP_SCALE, 6 + sv.dy / SHIP_SCALE * 0.7, 26, 9, 0, 0, 7);
+    ctx.fill();
+    ctx.restore();
+
     const lap = mood.beat * 0.55 + mood.bass * 0.3;
     ctx.save();
     ctx.strokeStyle = PALETTE.foam;
@@ -827,6 +903,24 @@ export function createRenderer(canvas, world) {
       // Everything below is drawn inside this one alpha, so the rock sits at the same distance
       // from the eye as the ship does.
       ctx.globalAlpha = ROCK_ALPHA;
+
+      /* The rock's own shadow, on the water, before anything else it draws.
+       *
+       * Out here it reads less as shade and more as the dark of deep water beside something
+       * solid — which is right either way, and it is the thing that stops the boulders looking
+       * like decals laid on the surface. Half the strength of the shadows on land, because
+       * water scatters light and a hard shadow on it looks like a hole. */
+      const sv = sunVec();
+      ctx.save();
+      ctx.globalAlpha = SHADOW_ALPHA * 0.45;
+      ctx.fillStyle = '#000';
+      for (const l of k.lumps) {
+        ctx.beginPath();
+        ctx.ellipse(x + l.dx + sv.dx, y + l.dy + sv.dy * 0.7,
+          l.r, l.r * l.squash * 0.8, l.turn, 0, 7);
+        ctx.fill();
+      }
+      ctx.restore();
 
       /* The water piling up around it, and one of the three places the music still shows.
        *
@@ -1732,6 +1826,12 @@ export function createRenderer(canvas, world) {
     // Y-sorted so someone below overlaps someone above.
     const alive = world.players.filter(Boolean).sort((a, b) => a.ry - b.ry);
     for (const p of alive) drawTracer(ctx, p, ox, oy);
+    /* Every shadow before every player, not a shadow-then-player pair each.
+     *
+     * Two passes, because with one pass a player standing below another would paint over the
+     * other's shadow — and a shadow that disappears when somebody walks past it is worse than
+     * no shadow. All the shadows belong to the floor; all the players stand on top of them. */
+    drawSunShadows(alive, ox, oy);
     for (const p of alive) drawOne(ctx, p, ox, oy, p.i === world.you);
 
     drawAim(ox, oy, dtMs);
@@ -1845,6 +1945,38 @@ export function createRenderer(canvas, world) {
 
     c.restore();
     c.globalAlpha = 1;
+  }
+
+  /* Players, in the sun. The rocks and the boat get theirs where they are drawn.
+   *
+   * The silhouette is baked (see `playerShadows` in art.js) and simply blitted at the sun's
+   * offset — no filter, no per-frame compositing, one drawImage each. Squashed vertically on
+   * the way down, because a shadow on the ground is a projection of an upright thing and an
+   * unsquashed copy reads as a second player lying underneath the first.
+   */
+  function drawSunShadows(alive, ox, oy) {
+    const set = baked.playerShadows;
+    if (!set || !set.length) return;
+    const { dx, dy } = sunVec();
+    ctx.save();
+    ctx.globalAlpha = SHADOW_ALPHA * 0.8;
+    for (const p of alive) {
+      if (!p.alive) continue;
+      if ((p.status & STATUS.INVISIBLE) && p.i !== world.you) continue;
+      const frame = p.moving ? ((world.tick >> 2) & 1) : 0;
+      const img = set[p.dir * 2 + frame];
+      if (!img) continue;
+      const px = ox + (p.rx / UNITS_PER_TILE) * TILE_PX - TILE_PX / 2;
+      const py = oy + (p.ry / UNITS_PER_TILE) * TILE_PX - TILE_PX / 2;
+      ctx.save();
+      // Anchored at the feet — a shadow is attached to where the thing touches the ground, so
+      // the squash has to happen about that point rather than about the sprite's middle.
+      ctx.translate(px + dx, py + TILE_PX * 0.72 + dy);
+      ctx.scale(1, 0.55);
+      ctx.drawImage(img, 0, -TILE_PX * 0.72);
+      ctx.restore();
+    }
+    ctx.restore();
   }
 
   function drawOne(c, p, ox, oy, isMe) {
