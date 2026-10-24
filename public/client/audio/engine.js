@@ -7,7 +7,7 @@
 //
 // So: one context, created lazily, unlocked once, and two independent buses on top of it.
 
-import { VOLUME_MASTER } from '/shared/constants.js';
+import { VOLUME_MASTER, VOLUME_TRIM_SFX, VOLUME_TRIM_MUSIC } from '/shared/constants.js';
 
 let ctx = null;
 
@@ -36,9 +36,9 @@ export async function unlock() {
  * squashed now pass through untouched, so the mix gets quieter by rather less than the trim says;
  * trimming last is the only way "half as loud" is actually half as loud.
  */
-function trimmedOutput(c, limiter) {
+function trimmedOutput(c, limiter, trim = 1) {
   const master = c.createGain();
-  master.gain.value = VOLUME_MASTER;
+  master.gain.value = VOLUME_MASTER * trim;
   limiter.connect(master);
   master.connect(c.destination);
 }
@@ -61,7 +61,7 @@ export function createBus(volume = 1) {
   limiter.release.value = 0.2;
 
   gain.connect(limiter);
-  trimmedOutput(c, limiter);
+  trimmedOutput(c, limiter, VOLUME_TRIM_SFX);
   return gain;
 }
 
@@ -83,7 +83,7 @@ export function createMusicBus(volume = 1) {
   const gain = c.createGain();
   gain.gain.value = volume;
   gain.connect(comp);
-  trimmedOutput(c, comp);
+  trimmedOutput(c, comp, VOLUME_TRIM_MUSIC);
   return gain;
 }
 

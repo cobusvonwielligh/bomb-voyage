@@ -33,7 +33,7 @@ const DEFAULT_MAX_PER_FRAME = 4;
 // Sounds that are about you, not about a place. Never panned, never attenuated.
 const CLOSE_UP = new Set([
   'kill', 'ownDeath', 'ownSpawn', 'fanfare', 'click', 'warn', 'tick', 'streak',
-  'hiccup', 'chat', 'mention', 'ready',
+  'hiccup', 'chat', 'mention', 'ready', 'playoff', 'levelup',
 ]);
 
 // Sounds whose whole job is to say WHERE. Panned to the full width of the field rather than the
@@ -626,19 +626,142 @@ export function createSfx({ listener }) {
     },
 
     /** C E G C. The only unsubtle thing in the project, and it plays once a round. */
+    /* The round is over and you won it.
+     *
+     * Four and a half seconds, which is a long time for a sound effect and exactly right for
+     * this one: it is the only moment in the game that is purely a reward, there is nothing to
+     * react to while it plays, and the scoreboard is going up in front of you anyway. Short
+     * would be throwing it away.
+     *
+     * Built like an actual fanfare rather than an arpeggio with a long last note:
+     *
+     *   1. a three-note PICKUP in quick triplets, so the arrival has somewhere to arrive from
+     *   2. the ARRIVAL on the tonic, held, with the fifth and the octave stacked under it
+     *   3. a rising answer that climbs past where the arrival landed
+     *   4. the FINAL chord, a bar later, with a timpani thump under it and the longest note in
+     *      the game on top
+     *
+     * Three detuned oscillators per note throughout — square for the body, triangle for the
+     * sweetness and sawtooth for the bite — which is the brass section of a machine that has
+     * no brass. */
     fanfare(c, out, t) {
-      for (const [i, n] of [72, 76, 79, 84].entries()) {
-        const at = i * 0.13;
-        const d = i === 3 ? 0.7 : 0.17;
-        const g = voiceGain(c, out, t + at, { a: 0.006, d, peak: 0.26, send: 0.5 });
-        for (const [type, detune] of [['square', 0], ['triangle', 6], ['sawtooth', -8]]) {
+      const voice = (n, at, d, peak, send = 0.5) => {
+        const g = voiceGain(c, out, t + at, { a: 0.008, d, peak, send });
+        for (const [type, detune] of [['square', 0], ['triangle', 7], ['sawtooth', -9]]) {
           const o = c.createOscillator();
           o.type = type;
-          o.frequency.value = hz(n);
+          o.frequency.value = jit(hz(n), 0.002);
+          o.detune.value = detune;
+          o.connect(g);
+          o.start(t + at); o.stop(t + at + d + 0.25);
+        }
+      };
+
+      // 1. the pickup — G A B, fast, straight into the downbeat
+      voice(67, 0.00, 0.11, 0.17);
+      voice(69, 0.09, 0.11, 0.18);
+      voice(71, 0.18, 0.11, 0.19);
+
+      // 2. the arrival. C major, stacked, held.
+      for (const [n, p] of [[60, 0.14], [67, 0.13], [72, 0.26]]) voice(n, 0.28, 0.62, p);
+
+      // 3. the answer, climbing past it
+      voice(76, 0.62, 0.15, 0.2);
+      voice(79, 0.76, 0.15, 0.21);
+      voice(84, 0.90, 0.34, 0.26);
+
+      // 4. the final chord, after a beat of air. The pause is what makes it an ending rather
+      //    than a run of notes that stopped.
+      const END = 1.42;
+      for (const [n, p, d] of [[48, 0.15, 2.6], [60, 0.13, 2.4], [67, 0.12, 2.3],
+        [76, 0.14, 2.2], [84, 0.24, 2.9]]) voice(n, END, d, p, 0.7);
+
+      // The timpani under it: a sine dropping an octave, which is the only part of this you
+      // feel rather than hear.
+      const tg = voiceGain(c, out, t + END, { a: 0.004, d: 1.1, peak: 0.34, send: 0.3 });
+      const boom = c.createOscillator();
+      boom.type = 'sine';
+      boom.frequency.setValueAtTime(96, t + END);
+      boom.frequency.exponentialRampToValueAtTime(44, t + END + 0.5);
+      boom.connect(tg);
+      boom.start(t + END); boom.stop(t + END + 1.4);
+
+      // And a cymbal, because every fanfare ever written has one.
+      const cg = voiceGain(c, out, t + END, { a: 0.004, d: 1.9, peak: 0.12, send: 0.6 });
+      const crash = noiseSource();
+      crash.playbackRate.value = jit(1.3, 0.1);
+      const hp = c.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.setValueAtTime(4200, t + END);
+      hp.frequency.exponentialRampToValueAtTime(1600, t + END + 1.6);
+      crash.connect(hp); hp.connect(cg);
+      crash.start(t + END); crash.stop(t + END + 2.1);
+    },
+
+    /**
+     * You levelled up, mid-round.
+     *
+     * The opening figure of the fanfare and nothing else — the pickup and the arrival, under a
+     * second. It used to play the WHOLE fanfare, which is four and a half seconds of brass over
+     * a firefight for a thing that happens every few rounds. Sharing the opening is deliberate:
+     * it is recognisably the same family as winning, just not the whole of it.
+     */
+    levelup(c, out, t) {
+      const voice = (n, at, d, peak) => {
+        const g = voiceGain(c, out, t + at, { a: 0.006, d, peak, send: 0.4 });
+        for (const [type, detune] of [['square', 0], ['triangle', 7]]) {
+          const o = c.createOscillator();
+          o.type = type;
+          o.frequency.value = jit(hz(n), 0.002);
           o.detune.value = detune;
           o.connect(g);
           o.start(t + at); o.stop(t + at + d + 0.2);
         }
+      };
+      voice(67, 0.00, 0.10, 0.14);
+      voice(71, 0.08, 0.10, 0.15);
+      voice(74, 0.16, 0.10, 0.16);
+      for (const [n, p] of [[79, 0.17], [84, 0.2]]) voice(n, 0.25, 0.5, p);
+    },
+
+    /**
+     * The round is over and you did not win it.
+     *
+     * A second and a bit, against the winner's four and a half, and that difference is the
+     * point — length is the reward, so the consolation cannot have it. What it CAN have is a
+     * tune, and it gets a better one than the fanfare does: five notes with a hook in them,
+     * falling to a minor sixth that does not resolve.
+     *
+     * Not sad. A sad sound after every losing round is a sound you learn to dread, and most
+     * rounds are losing rounds for fifteen out of sixteen people. This is wry — it lands on a
+     * note that says "again?" rather than one that says "oh dear", and it is short enough that
+     * the next round starts before you have finished hearing it.
+     */
+    playoff(c, out, t) {
+      // E D C — a quick fall — then up to A and settling on G. The leap back up is what makes
+      // it a phrase instead of a sigh.
+      const NOTES = [[76, 0.00, 0.12], [74, 0.11, 0.12], [72, 0.22, 0.14],
+        [81, 0.38, 0.16], [79, 0.56, 0.55]];
+      for (const [n, at, d] of NOTES) {
+        const g = voiceGain(c, out, t + at, { a: 0.006, d, peak: n === 79 ? 0.22 : 0.19, send: 0.4 });
+        for (const [type, detune] of [['triangle', 0], ['square', -7]]) {
+          const o = c.createOscillator();
+          o.type = type;
+          o.frequency.value = jit(hz(n), 0.002);
+          o.detune.value = detune;
+          o.connect(g);
+          o.start(t + at); o.stop(t + at + d + 0.2);
+        }
+      }
+      // A minor sixth underneath the last note: the interval that makes it unresolved rather
+      // than final, so it reads as an interval in a longer game rather than as a full stop.
+      const bg = voiceGain(c, out, t + 0.56, { a: 0.01, d: 0.7, peak: 0.1, send: 0.4 });
+      for (const n of [55, 63]) {
+        const o = c.createOscillator();
+        o.type = 'triangle';
+        o.frequency.value = hz(n);
+        o.connect(bg);
+        o.start(t + 0.56); o.stop(t + 1.4);
       }
     },
 

@@ -85,7 +85,7 @@ public/
   assets/
     art.js                     everything in the game, drawn from shapes
     img/*.png                  four decorative images: mascot, face, kegs, icon
-    fonts/shotling.ttf         the display face
+    fonts/clegan.ttf           the display face, plus its licence
     audio/*.mp3                theme, drift, suspend, undertow — named after their slots
 
 infra/

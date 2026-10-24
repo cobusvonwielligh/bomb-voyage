@@ -550,8 +550,12 @@ export function createRenderer(canvas, world) {
       // field reads as water being pushed rather than as dots teleporting along a curve.
       d.vx += (fx - d.vx) * 0.08;
       d.vy += (fy - d.vy) * 0.08;
-      d.x += d.vx * dt;
-      d.y += d.vy * dt;
+      // The surge. A kick pushes the whole field along for a moment, which is the one coupling
+      // you feel rather than see — the water visibly gets ahead of itself on a downbeat. From
+      // the beat pulse, which decays in a fifth of a second, so it is a shove and not a speed.
+      const surge = 1 + sound.beat * 0.8;
+      d.x += d.vx * dt * surge;
+      d.y += d.vy * dt * surge;
 
       // Wrap round the visible sea. Cheaper than respawning and keeps the density even.
       if (d.x < -M) d.x += W + M * 2; else if (d.x > W + M) d.x -= W + M * 2;
@@ -960,7 +964,7 @@ export function createRenderer(canvas, world) {
       const life = f < 0.25 ? f / 0.25 : 1 - (f - 0.25) / 0.75;
       ctx.globalAlpha = Math.min(1, life * shine);
       const gx = hx * vw, gy = hy * vh;
-      const len = 1.5 + hash01(i + epoch) * 3.5;
+      const len = (1.5 + hash01(i + epoch) * 3.5) * (1 + hi * 0.6);
       ctx.fillRect(gx, gy, len, 1);
       ctx.fillRect(gx + len / 2 - 0.5, gy - 1, 1, 3);
     }

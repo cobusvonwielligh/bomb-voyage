@@ -492,6 +492,7 @@ async function createFileTrack({ bus, name, loop = false }) {
 
 export function createMusic() {
   let ctx = null, timer = null, tracks = null, musicGain = null, sidechain = null, analyser = null;
+  let seaAnalyser = null;
   let step = 0, loops = 0, current = 0, nextTime = 0;
   /* Which track you can actually HEAR, as opposed to which one is being scheduled.
    *
@@ -552,15 +553,52 @@ export function createMusic() {
     sidechain.gain.value = 1;
     sidechain.connect(musicGain);
 
-    /* The ear the sea listens with. See listen.js.
+    /* The ear the sea listens with — a second tap, separate from the visualisers' below. See
+     * audio/listen.js.
      *
-     * After the duck and before the volume fader, on purpose. Before the fader so the water
-     * moves the same at 10% as at 100% — the slider is how loud, not how much. After the duck
-     * so an explosion that pulls the music down pulls the sea down with it, on the same beat. */
+     * Two analysers because they want opposite things. A bar display wants heavy smoothing
+     * (0.72) and post-volume levels; beat detection wants transients, which smoothing that heavy
+     * blurs into mush, so this one runs at 0.2. And it sits after the duck but BEFORE the volume
+     * fader: the water should move the same at 10% as at 100% — the slider is how loud, not how
+     * much — while an explosion that ducks the music still ducks the sea on the same beat. The
+     * renderer is told separately whether anyone can hear it (`audible`), so at zero the sea
+     * still goes calm. A dangling analyser is a pure observer; the audio path is untouched. */
+    seaAnalyser = ctx.createAnalyser();
+    seaAnalyser.fftSize = 2048;
+    seaAnalyser.smoothingTimeConstant = 0.2;
+    sidechain.connect(seaAnalyser);
+
+    /* The tap the visualisers read, hung off the bus in PARALLEL.
+     *
+     * An AnalyserNode is a pass-through, but only if you connect its output — left dangling it
+     * is a pure observer. So the audio path is untouched, and nothing the drawing code does can
+     * go wrong with the sound.
+     *
+     * POST-volume on purpose. Tapping the sidechain instead would read the music's content
+     * regardless of how loud it is set, which sounds more "correct" and is wrong in practice:
+     * turn the music down to nothing and the bars would keep dancing, which reads as broken.
+     * What is drawn should be what you can hear.
+     *
+     * The decibel window is narrow — most of a mastered mix lives between -78 and -14 dBFS, and
+     * the default -100..-30 wastes most of the range on silence, which is why naive
+     * visualisers look like they are barely moving.
+     */
     analyser = ctx.createAnalyser();
-    analyser.fftSize = 2048;
-    analyser.smoothingTimeConstant = 0.2;
-    sidechain.connect(analyser);
+    /* 4096, not 1024.
+     *
+     * At 1024 the bins are 46.9 Hz wide, and log-spaced bands below about 500 Hz then round to
+     * the SAME bin — twenty-two of forty bands had one bin or less, so half the visualiser was
+     * pairs of bars moving in perfect lockstep. That reads as a rendering fault and is really
+     * an arithmetic one. 4096 brings it down to six, which is as good as it gets without
+     * spending four times the FFT on frequencies nothing reproduces anyway.
+     *
+     * Cost is one 4096-point FFT per read, once a frame, on a thread that is otherwise drawing
+     * sixteen players. It does not register. */
+    analyser.fftSize = 4096;
+    analyser.smoothingTimeConstant = 0.72;
+    analyser.minDecibels = -78;
+    analyser.maxDecibels = -14;
+    musicGain.connect(analyser);
 
     /* Four slots, each a produced mix if its file is reachable and the synthesised version of
      * itself if it is not.
@@ -747,11 +785,20 @@ export function createMusic() {
      */
     get wanted() { return wanted; },
 
-    /** The music as it sounds, before the volume fader. Null until the music has been built. */
-    get analyser() { return analyser; },
+    /** The sea's ear: before the volume fader, lightly smoothed. Null until the music is built. */
+    get seaAnalyser() { return seaAnalyser; },
 
     /** Is anybody hearing it? Paused or faded to zero, the sea should be still. */
     get audible() { return playing && volume > 0; },
+
+    /**
+     * The frequency tap, or null before the first gesture has built the graph.
+     *
+     * Handed out rather than wrapped: a visualiser wants the raw node so it can pick its own
+     * bin count and read on its own frame clock. Nothing in here should be deciding how often
+     * somebody else's animation runs.
+     */
+    get analyser() { return analyser; },
 
     /** True when what you are hearing is the produced file rather than the synth fallback. */
     get trackIsFile() { return !!tracks?.[sounding]?.file; },

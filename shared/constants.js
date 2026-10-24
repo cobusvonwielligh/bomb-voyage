@@ -494,6 +494,18 @@ export const VOLUME_SFX_DEFAULT = 0.75;
 // user's stored preference cannot override.
 export const VOLUME_MASTER = 0.5;
 
+/* Per-bus trim, on top of VOLUME_MASTER.
+ *
+ * The two buses carried the identical master trim, which is only right if the two want the
+ * same headroom — and they do not. Effects are transients with a 12:1 limiter on them and sit
+ * under the music more than they should; the music is a continuous mastered mix and arrives
+ * hotter than anything synthesised next to it.
+ *
+ * These multiply the ceiling, not the default: somebody with a stored slider value gets the
+ * change too, which a default could never do. */
+export const VOLUME_TRIM_SFX = 1.2;     // +20%
+export const VOLUME_TRIM_MUSIC = 0.75;  // -25%
+
 export const SFX_MAX_DISTANCE_TILES = 12;
 
 // ─── Kill streaks ─────────────────────────────────────────────────────────────

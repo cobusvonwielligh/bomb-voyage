@@ -18,6 +18,7 @@ import { createMusic } from './audio/music.js';
 import { createSfx } from './audio/sfx.js';
 import { createListener } from './audio/listen.js';
 import { createQuips, MENU_QUIPS } from './quips.js';
+import { createMenuViz } from './menuviz.js';
 import { bombTile } from '/shared/sim/bombs.js';
 
 const $ = id => document.getElementById(id);
@@ -108,6 +109,39 @@ $('play').addEventListener('blur', hideMenuQuip);
 /* The three in-game beds, in rotation order. The theme is not one of them: it belongs to the
  * landing page and is excluded for the whole of a round. */
 const BEDS = ['drift', 'suspend', 'undertow'];
+
+// The landing page listening to itself. Its own rAF loop, started with the menu and stopped the
+// moment a round begins — there is no point analysing audio nobody is looking at.
+const menuViz = createMenuViz({ canvas: $('menuViz'), music });
+menuViz.start();
+
+/* The in-game meter: the same spectrum, three bands, in the dock.
+ *
+ * Deliberately almost nothing. The menu can afford to be a light show because you are reading a
+ * card; in a round the only acceptable visualiser is one you never look at directly, and three
+ * bars in the corner you already glance at for the track name is the whole budget.
+ *
+ * It drives CSS custom properties rather than touching geometry, so the browser never relayouts
+ * for it — and it REPLACES the canned keyframe animation, which was a loop pretending to be a
+ * level. The difference between the two is the entire point: one of them is the music.
+ */
+const eqBars = [...document.querySelectorAll('#nowPlaying .eq b')];
+function syncMeter(dtMs) {
+  const live = music.playing && music.volume > 0 && music.analyser;
+  if (live) menuViz.spectrum.read(music.analyser, dtMs);
+  else menuViz.spectrum.rest(dtMs);
+
+  const s = menuViz.spectrum;
+  // The sea is NOT driven from here: it has its own ear (audio/listen.js, via renderer.setSound),
+  // because it wants beats and tempo, which these smoothed bars blur away.
+  const v = [s.bass, s.mid, s.treble];
+  for (let i = 0; i < eqBars.length; i++) {
+    // 3px floor so a silent bar is still a bar. Zero-height is a missing element, not a quiet one.
+    eqBars[i].style.height = `${(3 + v[i] * 8).toFixed(1)}px`;
+  }
+  // One number for everything that wants to breathe with the kick.
+  $('dock').style.setProperty('--bass', s.bass.toFixed(3));
+}
 
 /**
  * The now-playing readout, bottom left.
@@ -232,6 +266,7 @@ const net = createNet({
     if (!m.mapOnly) {
       $('menu').style.display = 'none';
       $('hud').classList.add('on');
+      menuViz.stop();                 // the menu is gone; stop drawing to a hidden canvas
       if (!running) {
         running = true;
         last = performance.now();
@@ -356,10 +391,23 @@ const net = createNet({
   },
   onRoundEnd: m => {
     renderRoundTable(m);
-    $('deadTitle').textContent = 'round over';
+    /* Two different endings, and the difference between them is length.
+     *
+     * Winning gets four and a half seconds of actual fanfare; everybody else gets a second of
+     * something catchier. That asymmetry IS the reward — there is nothing else the game can
+     * give you at this moment, and a win that sounds the same as fifteenth place is not a win.
+     *
+     * The consolation is deliberately not sad. Most rounds are losing rounds for fifteen out of
+     * sixteen people, and a sound you hear that often had better not be one you learn to dread.
+     */
+    const won = (m.standings || [])[0]?.i === world.you;
+    $('deadTitle').textContent = won ? 'you won the round' : 'round over';
+    $('dead').firstElementChild.classList.toggle('won', won);
     $('dead').firstElementChild.classList.add('round');
     $('dead').style.display = 'grid';
-    sfx.play('fanfare');
+    sfx.play(won ? 'fanfare' : 'playoff');
+    // Get the music out of the way of it, for as long as it runs.
+    music.dip(won ? 0.7 : 0.4, won ? 3.6 : 1.1);
     $('respawn').style.display = 'none';
     roundOverUntil = performance.now() + m.startsInMs;
     setTimeout(() => {
@@ -367,7 +415,7 @@ const net = createNet({
       $('dead').style.display = 'none';
       $('respawn').style.display = '';
       $('deadTitle').textContent = 'you died';
-      $('dead').firstElementChild.classList.remove('round');
+      $('dead').firstElementChild.classList.remove('round', 'won');
       $('roundRows').textContent = '';
       $('roundNext').textContent = '';
     }, m.startsInMs);
@@ -412,9 +460,17 @@ const net = createNet({
     el.classList.add('show');
 
     sfx.play('streak', undefined, undefined, { step });
+    // Duck the music under the announcement, scaled by the rung. The top of the ladder takes a
+    // big bite and comes back over a second — the same trick a film uses when something lands.
+    music.dip(0.35 + step * 0.4, 0.8 + step * 0.7);
     if (m.i === world.you) {
-      renderer?.addFlash(0.22 + step * 0.3, m.ace ? '179,107,255' : '134,217,255');
-      renderer?.addShake(0.2 + step * 0.4);
+      // The accent golds, so the flash is the same light the banner is cast in.
+      renderer?.addFlash(0.26 + step * 0.34, m.ace ? '246,231,169' : '237,194,78');
+      renderer?.addShake(0.26 + step * 0.5);
+    } else {
+      // Somebody ELSE is on a run. A small shake, because the thing worth knowing is that it is
+      // happening at all — and no flash, which would read as something having hit you.
+      renderer?.addShake(0.08 + step * 0.16);
     }
     killFeed(`${m.i === world.you ? 'you' : m.name}: ${m.kind}!!`,
       { youKilled: m.i === world.you });
@@ -600,6 +656,9 @@ function loop(now) {
   fuseTicks();
   world.updateFires();
   world.interpolate(net.serverTickNow(), dt);
+  // BEFORE the renderer, not after: it reads the analyser and hands the result to the sea, and
+  // doing it afterwards would draw this frame's water with last frame's music.
+  syncMeter(dt);
   renderer.frame(dt);
 
   // Five times a second is plenty for a clock, a loadout and a track name, and it keeps a
@@ -708,7 +767,9 @@ function drawXp(p) {
   box.classList.remove('levelup');
   void box.offsetWidth;
   box.classList.add('levelup');
-  sfx.play('fanfare');
+  // Its own sound, not the win fanfare: that is four and a half seconds of brass, which is
+  // right for a round ending and absurd over a firefight.
+  sfx.play('levelup');
   killFeed(`level ${p.level} \u00b7 ${p.tier}`, { youKilled: true });
 
   setTimeout(() => {
@@ -1106,9 +1167,9 @@ function play(observe = false) {
   renderer.setSound(dtMs => {
     // How far the speakers are behind the analyser. The listener delays everything by this, so
     // a swell lands when the kick is heard rather than a few frames before it.
-    const c = music.analyser?.context;
+    const c = music.seaAnalyser?.context;
     const latencyS = c ? (c.outputLatency || 0) + (c.baseLatency || 0) : 0;
-    return listen(music.analyser, music.audible, dtMs, latencyS);
+    return listen(music.seaAnalyser, music.audible, dtMs, latencyS);
   });
   sfx.start().then(() => sfx.play('click'));
   /* Out of the theme and into a bed, immediately and at random.
