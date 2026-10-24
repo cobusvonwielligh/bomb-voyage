@@ -136,6 +136,21 @@ function handle(req, res) {
 
   if (url === '/deploy' && handleDeploy(req, res)) return;
 
+  /* What build is this?
+   *
+   * A tiny endpoint rather than a string baked into index.html, because baking it in needs a
+   * build step and this project does not have one — the deploy is an rsync of the working tree.
+   * One fetch on the menu, and the marker under the title is always the truth.
+   *
+   * `version` is the semantic one from package.json, bumped and tagged by `npm run tag`.
+   * `build` is the sha actually on disk, which is what you want when the answer to "which
+   * version" is "the same one, but with your fix in it".
+   */
+  if (url === '/version') {
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ version: pkgVersion(), build: version() }));
+  }
+
   if (url === '/healthz') {
     const body = JSON.stringify(hub.health({
       uptimeS: Math.round((Date.now() - started) / 1000),
@@ -211,6 +226,16 @@ function range416(res, size) {
  * tree without touching `.git` — reading the git sha alone would report the last *pulled*
  * commit, not the code on disk. Falls back to .git/HEAD for a self-update, and to null locally.
  */
+/** The semantic version, read once out of package.json. `npm run tag` is what moves it. */
+let cachedPkg;
+function pkgVersion() {
+  if (cachedPkg !== undefined) return cachedPkg;
+  try {
+    cachedPkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version || null;
+  } catch { cachedPkg = null; }
+  return cachedPkg;
+}
+
 let cachedVersion;
 function version() {
   if (cachedVersion !== undefined) return cachedVersion;

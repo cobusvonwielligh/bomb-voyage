@@ -906,8 +906,8 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 #rank {
-  display: block; color: var(--dim); font-size: 10px;
-  text-transform: uppercase; letter-spacing: .2em; margin-top: 3px;
+  display: inline; color: var(--dim); font-size: 10px;
+  text-transform: uppercase; letter-spacing: .14em; margin-top: 0;
 }
 /* Where a passive upgrade announces itself: directly under the loadout pips, in the bar above
  * the board.
@@ -986,12 +986,20 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
    left a gap that read as a broken layout rather than as breathing room. Pull it back out to the
    full panel width. */
 #xp { margin-top: 11px; margin-right: -76px; }
+/* `lvl 4 · Rookie` on the left, `3 093 / 26 957` on the right. The tier used to live two rows
+   up next to the name; it belongs here, because it is the name of the level beside it. */
 .xpHead {
-  display: flex; justify-content: space-between; align-items: baseline;
+  display: flex; align-items: baseline; gap: 6px;
   margin-bottom: 5px; font-size: 10px;
   text-transform: uppercase; letter-spacing: .14em;
 }
 #xpLevel { color: var(--gold); font-weight: 700; }
+/* The dot is a pseudo-element rather than text, so the gap closes cleanly on the one frame
+   before a tier has arrived from the server — a stranded "·" is worse than no separator. */
+#rank:not(:empty)::before { content: '·'; color: var(--dim); margin-right: 6px; }
+/* Pushes the numbers to the right edge whatever the tier's length. `justify-content` cannot do
+   it any more now that there are three children rather than two. */
+#xpNums { margin-left: auto; }
 #xpNums { color: var(--dim); font-family: var(--nums); font-variant-numeric: tabular-nums; }
 #xpTrack {
   height: 7px; border-radius: 4px; background: #00000066;
@@ -1814,6 +1822,30 @@ h1 {
 /* The two lines that introduce the game are centred; everything below them is a form and stays
    left-aligned, so the eye still has one edge to run down. */
 #title, #menu > #menuWrap .sub { text-align: center; }
+
+/* The version, under the right-hand end of the title.
+ *
+ * Inside a wrapper that is itself `fit-content`, so it tracks the title's actual rendered width
+ * rather than the card's — the title is clamp()ed against the viewport, so the two are only the
+ * same at one window size, and anchoring to the card would leave the marker drifting away from
+ * the word on every other.
+ *
+ * Quiet on purpose. It is here so that "which build am I on" is answerable without opening
+ * devtools, and that question is asked about once a month. */
+#titleWrap {
+  position: relative;
+  width: fit-content; max-width: 100%;
+  margin-inline: auto;
+}
+#version {
+  position: absolute; right: 0; top: 100%;
+  margin-top: -4px;
+  font-family: var(--nums); font-size: 9.5px;
+  letter-spacing: .16em;
+  color: var(--dim); opacity: .72;
+  pointer-events: none;
+  white-space: nowrap;
+}
 
 label {
   display: block; color: var(--dim); font-size: 11px; letter-spacing: .2em;

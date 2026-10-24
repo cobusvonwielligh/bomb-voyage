@@ -160,22 +160,33 @@ test('reading nothing is safe, and the sea has something to fall back to', () =>
   }
 });
 
-test('render.js couples the sea to the music as multipliers, never as the value itself', () => {
-  /* The test for whether a reactive effect is tasteful: set the gain to zero and the thing you
-   * are driving must be exactly what it was. Every coupling in the sea is `x * (1 + audio)`,
-   * so silence is the sea as it always was and there is no branch for the quiet case.
+test('the sea modulates its FIELD gently and its APPEARANCE freely', () => {
+  /* The distinction this guards cost eight hundred jittering streaks to learn.
    *
-   * The sea is driven by audio/listen.js now (beats and tempo, which this spectrum's smoothing
-   * blurs away) rather than by this spectrum, but the promise is the same one. */
+   * The flow field decides where every particle is HEADING. Swing it hard and the target
+   * velocity under each streak changes faster than the streak can ease toward it, so instead of
+   * water moving to the music you get arrows changing their minds. Appearance — length,
+   * brightness, foam — can swing as far as it likes, because nothing is navigating by it.
+   *
+   * So: the two field drivers are smoothed and have small coefficients, and no particle may be
+   * shoved independently of the field it is following.
+   */
   const src = readFileSync(new URL('../public/client/render.js', import.meta.url), 'utf8');
-  assert.match(src, /const CALM = \{/, 'there is no resting state for the sea');
-  assert.match(src, /setSound\(fn\)/, 'the renderer no longer takes the music');
-  // The multipliers start from 1, so silence leaves the water exactly as it was.
-  for (const name of ['swell', 'surge']) {
-    const assigns = [...src.matchAll(new RegExp(`\\b${name}\\s*=\\s*([^;]+);`, 'g'))].map(m => m[1].trim());
-    assert.ok(assigns.length > 0, `the sea no longer uses ${name}`);
-    for (const a of assigns) assert.match(a, /^1\b/, `${name} = ${a} is not a multiplier from 1`);
+
+  // The field clock and amplitude are eased rather than assigned.
+  for (const name of ['flowRate', 'swell']) {
+    const eased = new RegExp(`${name} \\+= \\(want\\w+ - ${name}\\) \\* ease`);
+    assert.match(src, eased, `${name} is written straight from the music instead of eased toward it`);
   }
-  // The metronome's push is zero until a tempo is trusted, and scaled by how much it is.
-  assert.match(src, /tempoA = sound\.lock \*/, 'the tempo wave no longer waits for a lock');
+
+  // And their coefficients stay small. A field that triples on a beat is the bug.
+  const want = src.match(/const wantT = [^;]+;\s*const wantS = [^;]+;/);
+  assert.ok(want, 'the field drivers are not where this test expects them');
+  for (const n of want[0].match(/\d+\.\d+/g).map(Number)) {
+    assert.ok(n <= 1, `a flow-field coefficient of ${n} is big enough to make the streaks jitter`);
+  }
+
+  // No per-particle shove. `d.x +=` must be the plain step.
+  assert.match(src, /d\.x \+= d\.vx \* dt;/, 'a particle is being moved independently of the field');
+  assert.ok(!/d\.x \+= d\.vx \* dt \* /.test(src), 'a per-particle surge is back');
 });

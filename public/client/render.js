@@ -75,6 +75,11 @@ export function createRenderer(canvas, world) {
   let eqFor = null, eqCoast = [];            // shoreline tiles with their band, per map
   const eqLen = new Float32Array(16);        // drawn bar lengths, in tiles, eased
   let flowT = 0, swell = 1, tempoA = 0;
+  // How fast the flow field's clock runs, smoothed. See drawSea for why this is not read
+  // straight off the music.
+  let flowRate = 1;
+  // The vignette, cached against the view size it was built for.
+  let vignette = null, vignetteFor = null;
   const tempoAt = { x: 0, y: 0, r0: 0 };    // where the concentric wave starts: the coast
   const TEMPO_WAVELENGTH = TILE_PX * 5;      // crest to crest, one beat apart
   const pulses = [];
@@ -551,6 +556,8 @@ export function createRenderer(canvas, world) {
     ctx.lineCap = 'round';
     ctx.strokeStyle = PALETTE.foam;
     // The streaks brighten with the top end and stretch with the mids: busy music, busy water.
+    // Appearance, not direction — these can swing as hard as they like, because nothing is
+    // navigating by them. This is where the music gets to be loud.
     const bright = Math.min(2.4, 0.85 + lifted(sound.high) * 1.4 + sound.beat * 0.8);
     const stretch = 1 + lifted(sound.mid) * 1.8 + sound.beat * 0.9;
     for (const d of drops) {
@@ -559,12 +566,14 @@ export function createRenderer(canvas, world) {
       // field reads as water being pushed rather than as dots teleporting along a curve.
       d.vx += (fx - d.vx) * 0.08;
       d.vy += (fy - d.vy) * 0.08;
-      // The surge. A kick pushes the whole field along for a moment, which is the one coupling
-      // you feel rather than see — the water visibly gets ahead of itself on a downbeat. From
-      // the beat pulse, which decays in a fifth of a second, so it is a shove and not a speed.
-      const surge = 1 + sound.beat * 0.8;
-      d.x += d.vx * dt * surge;
-      d.y += d.vy * dt * surge;
+      /* No per-particle surge here any more.
+       *
+       * It used to multiply the position step by up to 1.8 on a beat, which moves a streak
+       * independently of the field it is meant to be following — the definition of jitter, and
+       * eight hundred of them at once. The shove survives where it belongs: in `swell`, which
+       * pushes the FIELD and therefore moves every streak the same way. */
+      d.x += d.vx * dt;
+      d.y += d.vy * dt;
 
       // Wrap round the visible sea. Cheaper than respawning and keeps the density even.
       if (d.x < -M) d.x += W + M * 2; else if (d.x > W + M) d.x -= W + M * 2;
@@ -690,6 +699,29 @@ export function createRenderer(canvas, world) {
     // that is not reads as a sprite rather than as a boat.
     // Rides the swell: the roll deepens with the bass.
     ctx.rotate(Math.sin(flowT * 0.45) * 0.026 * (1 + lifted(sound.bass) * 2.2));
+
+    /* The water round the hull, which the ship did not have and the rocks did — so the rocks
+     * were sitting IN the sea and the ship was sitting ON it.
+     *
+     * Wider than tall and offset down, because a hull displaces water along its length: a
+     * circular collar round a boat reads as a buoy. It breathes on the same beat as the rocks
+     * and a touch harder, since there is more of it to move.
+     */
+    const lap = sound.beat * 0.8 + lifted(sound.bass) * 0.55;
+    ctx.save();
+    ctx.strokeStyle = PALETTE.foam;
+    ctx.globalAlpha = 0.09 + 0.16 * lap;
+    ctx.lineWidth = (2.6 + lap * 2.4) / SHIP_SCALE * SHIP_SCALE;
+    ctx.beginPath();
+    ctx.ellipse(0, 7, 30 * (1 + lap * 0.12), 11 * (1 + lap * 0.2), 0, 0, 7);
+    ctx.stroke();
+    ctx.globalAlpha = 0.045 + 0.08 * lap;
+    ctx.lineWidth = 8 + lap * 7;
+    ctx.beginPath();
+    ctx.ellipse(0, 8, 40 * (1 + lap * 0.26), 15 * (1 + lap * 0.34), 0, 0, 7);
+    ctx.stroke();
+    ctx.restore();
+
     ctx.scale(SHIP_SCALE, SHIP_SCALE);
     drawShip(ctx);
     ctx.restore();
@@ -826,15 +858,28 @@ export function createRenderer(canvas, world) {
       // from the eye as the ship does.
       ctx.globalAlpha = ROCK_ALPHA;
 
-      // The water piling up around it. Wide and faint — a bright collar is what made these look
-      // like islands rather than like something barely breaking the surface.
-      ctx.globalAlpha = 0.12 + 0.04 * Math.sin(flowT * 1.1 + k.phase) + 0.22 * sound.beat;
+      /* The water piling up around it, and the place the sea's pulse is easiest to read.
+       *
+       * A rock is the only fixed thing in a moving current, so it is where a swell actually
+       * SHOWS — everywhere else the water moves with the wave and nothing happens. Both rings
+       * grow and brighten on the beat, and the outer one grows more: a collar that only gets
+       * brighter is a light, a collar that spreads is water.
+       *
+       * The rings are a quarter-beat behind the kick, which is the time it takes a swell to
+       * reach a rock that is a few metres offshore — and it is also what stops the rock, the
+       * shoreline and the ship all flashing on the same frame like a row of light bulbs. */
+      const lap = sound.beat * 0.75 + lifted(sound.bass) * 0.5;
+      ctx.globalAlpha = 0.12 + 0.04 * Math.sin(flowT * 1.1 + k.phase) + 0.3 * lap;
       ctx.strokeStyle = PALETTE.foam;
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.ellipse(x, y, k.r * 1.25, k.r * 1.05, 0, 0, 7); ctx.stroke();
-      ctx.globalAlpha = 0.06;
-      ctx.lineWidth = 9;
-      ctx.beginPath(); ctx.ellipse(x, y, k.r * 1.6, k.r * 1.35, 0, 0, 7); ctx.stroke();
+      ctx.lineWidth = 3 + lap * 2.2;
+      ctx.beginPath();
+      ctx.ellipse(x, y, k.r * (1.25 + lap * 0.1), k.r * (1.05 + lap * 0.1), 0, 0, 7);
+      ctx.stroke();
+      ctx.globalAlpha = 0.06 + 0.1 * lap;
+      ctx.lineWidth = 9 + lap * 7;
+      ctx.beginPath();
+      ctx.ellipse(x, y, k.r * (1.6 + lap * 0.34), k.r * (1.35 + lap * 0.34), 0, 0, 7);
+      ctx.stroke();
 
       // The mass itself. Every tone is mixed well down toward the deep sea, so the rock is a
       // shape you notice rather than an object that announces itself.
@@ -951,9 +996,28 @@ export function createRenderer(canvas, world) {
   function drawSea(vw, vh, ox, oy, dtMs) {
     if (!seaNear) return;
     seaT += dtMs / 1000;
-    // The music's clock and push. See `sound` at the top of the renderer.
-    flowT += (dtMs / 1000) * (1 + lifted(sound.level) * 2.2 + sound.beat * 1.2);
-    swell = 1 + lifted(sound.bass) * 3.2 + sound.beat * 1.6;
+
+    /* The music's clock and push. See `sound` at the top of the renderer.
+     *
+     * BOTH OF THESE DRIVE THE FLOW FIELD, which is the one place reactivity has to be gentle,
+     * and the reason eight hundred white streaks were jittering.
+     *
+     * The field decides where every particle is HEADING. Swing its amplitude between 1x and
+     * 5.8x on every beat and the target velocity under each streak changes faster than the
+     * streak can ease toward it, so instead of water moving to the music you get eight hundred
+     * arrows changing their minds. Same for the clock: multiplying the rate time passes at by
+     * up to 4.2x does not make the water busier, it makes it look like a video being scrubbed.
+     *
+     * So the field gets a fraction of what it had, and both are SMOOTHED on top of the
+     * listener's own smoothing — water has mass, and a wave train cannot change its mind in a
+     * frame. What the music still moves freely is how each streak LOOKS: length, brightness,
+     * the foam, the glints. Appearance can snap because nothing is navigating by it. */
+    const wantT = 1 + lifted(sound.level) * 0.5 + sound.beat * 0.25;
+    const wantS = 1 + lifted(sound.bass) * 0.85 + sound.beat * 0.4;
+    const ease = 1 - Math.pow(1 - 0.07, dtMs / 16.7);
+    flowRate += (wantT - flowRate) * ease;
+    swell += (wantS - swell) * ease;
+    flowT += (dtMs / 1000) * flowRate;
     tempoA = sound.lock * (10 + lifted(sound.bass) * 26);
     {
       const [lx, ly, lw, lh] = landBounds();
@@ -1643,6 +1707,37 @@ export function createRenderer(canvas, world) {
     for (const p of alive) drawTipsy(ctx, p, ox, oy);
     for (const p of alive) drawStamina(ctx, p, ox, oy);
     drawFloaters(ox, oy, dtMs);
+
+    /* A vignette that breathes with the music, drawn last so it sits over everything.
+     *
+     * Two jobs at once, which is why it earns the fill. Flat, it does what every vignette does:
+     * darkens the corners so the eye goes to the middle, where you are. Breathing, it is the
+     * only reactive thing on screen that touches the WHOLE frame — the sea moves, the rocks
+     * lap, the shoreline lights, but all of that is out at the edges and none of it reaches the
+     * board. A kick now squeezes the picture very slightly, everywhere.
+     *
+     * Deliberately tiny. The range is 0.30 to about 0.40 of a corner that is already dark, which
+     * is at the edge of noticeable in a still frame and the right amount while moving — the
+     * failure mode of a reactive vignette is a screen that pumps, and a pumping screen in a game
+     * you are trying to read is unplayable.
+     *
+     * Cached per view: a radial gradient is cheap but not free, and this one only changes when
+     * the board is resized.
+     */
+    const squeeze = sound.beat * 0.22 + lifted(sound.bass) * 0.12;
+    if (vignetteFor !== `${vw}x${vh}`) {
+      vignetteFor = `${vw}x${vh}`;
+      const vg = ctx.createRadialGradient(vw / 2, vh / 2, Math.min(vw, vh) * 0.34,
+        vw / 2, vh / 2, Math.max(vw, vh) * 0.78);
+      vg.addColorStop(0, 'rgba(0,0,0,0)');
+      vg.addColorStop(0.65, 'rgba(4,7,12,0.22)');
+      vg.addColorStop(1, 'rgba(2,4,8,0.62)');
+      vignette = vg;
+    }
+    ctx.globalAlpha = 0.3 + squeeze * 0.45;
+    ctx.fillStyle = vignette;
+    ctx.fillRect(-4, -4, vw + 8, vh + 8);
+    ctx.globalAlpha = 1;
 
     if (flash > 0.004) {
       ctx.fillStyle = `rgba(${flashColour},${flash * 0.5})`;
