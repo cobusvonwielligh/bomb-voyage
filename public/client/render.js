@@ -7,12 +7,12 @@
 import {
   TILE_PX, CHUNK_TILES, UNITS_PER_TILE, TRACER_SAMPLES, FUSE_TICKS, FIRE_TICKS, STATUS,
   BLOCK, BLOCK_HP, SEA_MARGIN_TILES, SPAWN_POP_TICKS, SPAWN_POP_SCALE, MIN_ZOOM, MAX_ZOOM,
-  PERK_FADE_TICKS, STAMINA_SHOW_AT, staminaMaxFor, PUDDLE_FADE_TICKS,
+  PERK_FADE_TICKS, STAMINA_SHOW_AT, staminaMaxFor, PUDDLE_FADE_TICKS, TICK_MS, TICK_HZ,
 } from '/shared/constants.js';
 import { cellType, cellHp } from '/shared/maps.js';
 import {
   drawTile, drawFire, drawPerk, drawRock, drawShip, playerShades, PALETTE, bake, bakeSea,
-  PERK_GLOWS,
+  PERK_GLOWS, drawBombLive,
 } from '/assets/art.js';
 import { bombTile } from '/shared/sim/bombs.js';
 
@@ -79,6 +79,7 @@ export function createRenderer(canvas, world) {
   const TEMPO_WAVELENGTH = TILE_PX * 5;      // crest to crest, one beat apart
   const pulses = [];
   const glow = [];
+  const bombClock = { tick: -1, at: 0 };    // when world.tick last changed; see the bomb loop
   /* How far above quiet a band is, 0..1, LINEARLY.
    *
    * This used to be curved (x^1.5 from 0.35) so the music's usual level barely moved the water.
@@ -1619,10 +1620,26 @@ export function createRenderer(canvas, world) {
       ctx.restore();
     }
 
+    /* Bombs, counting down in real time.
+     *
+     * A bomb bursts on the client when `world.tick` reaches its `at` — and `world.tick` only moves
+     * when a snapshot lands, two ticks at a time. Reading it directly would step the countdown 15
+     * times a second. So the time left is measured against that same tick, carried forward
+     * smoothly by the time since it last changed and capped just short of the next one: the ring
+     * and the fuse run continuously and still reach zero on the frame the blast appears. */
+    if (world.tick !== bombClock.tick) { bombClock.tick = world.tick; bombClock.at = performance.now(); }
+    const tickNow = world.tick + Math.min(1.95, (performance.now() - bombClock.at) / TICK_MS);
     for (const b of world.bombs) {
-      const phase = Math.max(0, Math.min(1, 1 - (b.at - world.tick) / FUSE_TICKS));
-      ctx.drawImage(baked.bombs[(b.o ?? b.owner) % 16][Math.min(7, (phase * 8) | 0)],
-        ox + b.tx * TILE_PX, oy + b.ty * TILE_PX);
+      const owner = (b.o ?? b.owner) % 16;
+      ctx.save();
+      ctx.translate(ox + b.tx * TILE_PX, oy + b.ty * TILE_PX);
+      drawBombLive(ctx, baked.bombs[owner], {
+        leftS: Math.max(0, b.at - tickNow) / TICK_HZ,
+        fullS: FUSE_TICKS / TICK_HZ,
+        colorIndex: owner,
+        t: seaT + b.id * 0.37,
+      });
+      ctx.restore();
     }
 
     // Fire over the bombs that made it, under the people it is about to kill.
