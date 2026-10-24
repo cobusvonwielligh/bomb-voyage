@@ -2626,8 +2626,7 @@ export function createRenderer(canvas, world) {
     c.save();
     c.globalCompositeOperation = 'lighter';
     for (let k = 0; k < n; k++) {
-      // Outside the friend-or-foe ring (see drawAllegiance), so the two never sit on each other.
-      const r = TILE_PX * (0.68 + 0.16 * k);
+      const r = TILE_PX * (0.62 + 0.16 * k);
       const turn = seaT * (k ? -0.9 : 0.6) + p.i;
       // The second ring is broken into arcs, so two rings read as two at a glance.
       const arcs = k ? 6 : 1;
@@ -2650,20 +2649,38 @@ export function createRenderer(canvas, world) {
     c.restore();
   }
 
-  /* Friend or foe, always on: a thin white ring round you and a thin red one round everybody
-   * else. Sixteen coat colours tell you WHO; this tells you the only thing that matters in the
-   * half second before a bomb goes down — is that me. Thin and steady, under the shield rings,
-   * so it reads as an outline rather than an effect. Nothing while spectating: with no "you",
-   * nobody is an enemy. */
-  function drawAllegiance(c, p, cx, cy, isMe) {
+  /* Friend or foe, always on: half a pixel of white round the edge of your own pirate and half a
+   * pixel of red round everybody else's. Sixteen coat colours tell you WHO; this tells you the
+   * one thing that matters in the half second before a bomb goes down — is that me.
+   *
+   * It follows the sprite's own silhouette rather than sitting on a circle: a flat copy of the
+   * sprite in the outline colour, drawn half a pixel out in each of the four directions behind
+   * it, so only a hairline shows past the edge. The flat copies are made once per sprite and
+   * colour and cached. Nothing while spectating, where nobody is an enemy. */
+  const ALLY_EDGE = 'rgba(255,255,255,0.95)', FOE_EDGE = 'rgba(255,64,64,0.95)';
+  const EDGE_PX = 0.5;
+  const silhouettes = new Map();      // sprite canvas -> { [colour]: canvas }
+  function silhouette(sprite, colour) {
+    let set = silhouettes.get(sprite);
+    if (!set) silhouettes.set(sprite, set = {});
+    if (set[colour]) return set[colour];
+    const el = document.createElement('canvas');
+    el.width = sprite.width; el.height = sprite.height;
+    const g = el.getContext('2d');
+    g.drawImage(sprite, 0, 0);
+    g.globalCompositeOperation = 'source-in';
+    g.fillStyle = colour;
+    g.fillRect(0, 0, el.width, el.height);
+    return (set[colour] = el);
+  }
+
+  /** The outline, at (x, y) in the same space and size the sprite is about to be drawn in. */
+  function drawEdge(c, sprite, x, y, isMe) {
     if (world.you < 0) return;
-    c.save();
-    c.lineWidth = 1.3;
-    c.strokeStyle = isMe ? 'rgba(255,255,255,0.85)' : 'rgba(255,72,72,0.75)';
-    c.beginPath();
-    c.arc(cx, cy, TILE_PX * 0.56, 0, Math.PI * 2);
-    c.stroke();
-    c.restore();
+    const sil = silhouette(sprite, isMe ? ALLY_EDGE : FOE_EDGE);
+    for (const [dx, dy] of [[EDGE_PX, 0], [-EDGE_PX, 0], [0, EDGE_PX], [0, -EDGE_PX]]) {
+      c.drawImage(sil, x + dx, y + dy, TILE_PX, TILE_PX);
+    }
   }
 
   function drawOne(c, p, ox, oy, isMe) {
@@ -2745,18 +2762,17 @@ export function createRenderer(canvas, world) {
       c.save();
       c.translate(px + TILE_PX / 2, py + TILE_PX / 2);
       c.scale(sx, sy);
+      drawEdge(c, sprite, -TILE_PX / 2, -TILE_PX / 2, isMe);
       c.drawImage(sprite, -TILE_PX / 2, -TILE_PX / 2);
       c.restore();
     } else {
+      drawEdge(c, sprite, Math.round(px), Math.round(py), isMe);
       c.drawImage(sprite, Math.round(px), Math.round(py));
     }
     c.globalAlpha = 1;
 
     // Not while they are still landing at twenty times their size: the rings would sit inside.
-    if (pop < 1.5) {
-      drawAllegiance(c, p, px + TILE_PX / 2, py + TILE_PX / 2, isMe);
-      drawShields(c, p, px + TILE_PX / 2, py + TILE_PX / 2);
-    }
+    if (pop < 1.5) drawShields(c, p, px + TILE_PX / 2, py + TILE_PX / 2);
     drawStatusPips(c, p, px, py);
 
     const label = nameLabel(p.name, isMe ? PALETTE.gold : playerShades(p.i).light);
