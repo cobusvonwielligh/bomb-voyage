@@ -168,16 +168,36 @@ function handle(req, res) {
     return res.end('not found');
   }
   const ext = path.extname(file);
-  const size = fs.statSync(file).size;
-  // No content hashing (there is no build step), so never cache HTML and cache the rest briefly.
-  // The theme is the one big file and it never changes within a deploy, so it gets a long one.
+  const stat = fs.statSync(file);
+  const size = stat.size;
+  /* Caching, with no build step and no content hashes.
+   *
+   * CODE IS NEVER SERVED STALE. It used to be: everything that was not HTML got five minutes of
+   * max-age, so for five minutes after every deploy a browser could be running a MIX of old and
+   * new modules — each file cached on its own clock. That is how ice "did not render": a fresh
+   * art.js beside a cached constants.js (or the reverse) and the block type the server was sending
+   * had no drawing code, so the tile drew as nothing and the sea showed through the hole. On a day
+   * with several deploys that is not an edge case.
+   *
+   * So code — .js, .css, .json, .html — is `no-cache`: always revalidated, never trusted. With an
+   * ETag (size and mtime; rsync -a preserves mtimes, so it changes only when the file did) an
+   * unchanged file costs a 304 with no body, which on one hostname over one connection is
+   * nothing. Images and fonts keep a short max-age plus the ETag; the music, which never changes
+   * within a deploy and is megabytes, keeps a day. */
+  const etag = `W/"${size.toString(36)}-${Math.floor(stat.mtimeMs).toString(36)}"`;
+  const code = ext === '.html' || ext === '.js' || ext === '.mjs' || ext === '.css' || ext === '.json';
   const head = {
     'Content-Type': MIME[ext] || 'application/octet-stream',
-    'Cache-Control': ext === '.html' ? 'no-cache'
+    'Cache-Control': code ? 'no-cache'
       : ext === '.mp3' ? 'public, max-age=86400'
       : 'public, max-age=300',
     'Accept-Ranges': 'bytes',
+    ETag: etag,
   };
+  if (!req.headers.range && req.headers['if-none-match'] === etag) {
+    res.writeHead(304, { 'Cache-Control': head['Cache-Control'], ETag: etag });
+    return res.end();
+  }
 
   /* Byte ranges.
    *
