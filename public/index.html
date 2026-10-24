@@ -450,6 +450,19 @@
   ></span>
 </div>
 
+<!-- The emote picker. A compass, because the keys are a compass — up, left, down, right — so
+     there is nothing to learn beyond "hold shift". Centred on the board rather than the window,
+     like every other centred thing here, and `pointer-events: none` throughout: it is a legend,
+     not a menu, and the keyboard is the only way to use it. -->
+<div id="emotePick" aria-hidden="true">
+  <div class="ring">
+    <span class="ekey up"><b></b><i>W</i></span>
+    <span class="ekey left"><b></b><i>A</i></span>
+    <span class="ekey down"><b></b><i>S</i></span>
+    <span class="ekey right"><b></b><i>D</i></span>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <div id="menu">

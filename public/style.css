@@ -2330,6 +2330,74 @@ body.dead #rank { color: #8a5a5a; }
   }
 }
 
+/* ─── emotes ──────────────────────────────────────────────────────────────────
+ * The picker, while Shift is held.
+ *
+ * Over the board and centred on it, so it is where your eyes are — but it appears INSTANTLY
+ * and leaves instantly, because it is on screen for about a third of a second and a fade-out
+ * would still be going when you need to see what you just walked into.
+ *
+ * Nothing here takes a pointer event. It is a legend for keys you are already holding, not a
+ * menu, and a menu you could click would be a second way to do the same thing with different
+ * timing.
+ */
+#emotePick {
+  position: fixed; z-index: 8; pointer-events: none;
+  top: calc(var(--bar) + var(--gap) * 2);
+  left: var(--gap);
+  width: calc(100vw - var(--side) - var(--gap) * 3);
+  height: calc(100vh - var(--bar) - var(--gap) * 3);
+  display: none; place-items: center;
+}
+#emotePick.on { display: grid; }
+@media (max-width: 1080px) { #emotePick { width: calc(100vw - var(--gap) * 2); } }
+
+/* `.ekey`, not `.slot`. `.slot` is the volume fader's pop-out, three thousand lines up, and it
+   sets `opacity: 0; height: 0` on itself — exactly the two properties a second component called
+   the same thing would least like to inherit. Two unrelated things with one class name is a bug
+   waiting for whichever one is edited next. */
+.ring { position: relative; width: 190px; height: 190px; }
+.ring .ekey {
+  position: absolute;
+  display: grid; place-items: center;
+  width: 58px; height: 58px;
+  margin: -29px 0 0 -29px;
+  border-radius: 50%;
+  background: #0d1117e8;
+  border: 1.5px solid #ffffff1f;
+  box-shadow: 0 6px 20px #000a;
+  /* Each one springs out from the middle, staggered by direction, so the cross assembles
+     rather than appearing. 90ms total — fast enough that it has finished before you have
+     chosen, which is the point: the animation must never be something you wait through.
+ 
+     SCALE ONLY, and no `backwards`. Animating opacity with a backwards fill means the slot
+     sits at zero until the animation starts — so anything that stops animations running at all
+     leaves an invisible picker, which is a worse outcome than never having animated it. At
+     worst this now pops in at full size. */
+  animation: emotePop .09s cubic-bezier(.2, 1.6, .4, 1);
+}
+.ring .up    { left: 50%; top: 14%; }
+.ring .left  { left: 14%; top: 50%; animation-delay: .02s; }
+.ring .down  { left: 50%; top: 86%; animation-delay: .04s; }
+.ring .right { left: 86%; top: 50%; animation-delay: .06s; }
+@keyframes emotePop {
+  from { transform: scale(.3); }
+  to   { transform: scale(1); }
+}
+
+.ring .ekey b { font-size: 26px; line-height: 1; }
+/* The key cap, under the glyph. Small and dim: you need it once. */
+.ring .ekey i {
+  position: absolute; bottom: -4px;
+  font-family: var(--nums); font-style: normal; font-size: 9px; font-weight: 700;
+  letter-spacing: .1em;
+  color: var(--gold);
+  background: #0d1117; border-radius: 3px; padding: 1px 4px;
+  border: 1px solid #ffffff1a;
+}
+
+@media (prefers-reduced-motion: reduce) { .ring .ekey { animation: none; } }
+
 /* ─── toast ───────────────────────────────────────────────────────────────────
  * z-index above the menu: the first thing it ever has to say is "server full".
  */

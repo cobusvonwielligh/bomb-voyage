@@ -104,6 +104,14 @@ export function createRenderer(canvas, world) {
   let aimTx = 0, aimTy = 0, aimSeen = false;
   // 0..1, the fade-in when the bracket returns after your last bomb detonates.
   let aimIn = 0;
+
+  /* What people are saying, above their heads.
+   *
+   * Seat index -> { text, until }. Short chat only: a bubble is a glance, and anything you have
+   * to read is a thing you read in the chat panel where it will still be there in ten seconds.
+   */
+  const says = new Map();
+  const SAY_MS = 3400;
   let depth = null, depthFor = '';     // the depth gradient, rebuilt only when the view changes
 
   // Sun glints on the open water. Cheap, stateless, and most of what makes a surface read wet.
@@ -1954,6 +1962,74 @@ export function createRenderer(canvas, world) {
    * the way down, because a shadow on the ground is a projection of an upright thing and an
    * unsquashed copy reads as a second player lying underneath the first.
    */
+  /* A speech bubble over somebody's head.
+   *
+   * Drawn in SCREEN space, not board space — the board is scaled to fit the island and at the
+   * zoom floor that is about two thirds, which would make text unreadable exactly when the
+   * board is busiest. The anchor is converted up to screen pixels and the bubble drawn at its
+   * natural size there.
+   *
+   * It follows the player while it is up, because a bubble pinned to where somebody WAS is a
+   * bubble pointing at nothing by the time you look at it.
+   */
+  function drawSays(ox, oy, zoom) {
+    if (!says.size) return;
+    const now = performance.now();
+    ctx.save();
+    // Out of the board transform and into screen pixels.
+    ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    for (const [i, s] of says) {
+      if (s.until <= now) { says.delete(i); continue; }
+      const p = world.players[i];
+      if (!p || !p.alive) { says.delete(i); continue; }
+
+      const bx = (ox + (p.rx / UNITS_PER_TILE) * TILE_PX) * zoom;
+      const by = (oy + (p.ry / UNITS_PER_TILE) * TILE_PX - TILE_PX * 0.95) * zoom;
+
+      // In fast, out slow, and it rises as it goes — the same shape as the floating pickup
+      // text, so everything that appears over a player behaves the same way.
+      const left = s.until - now;
+      const age = SAY_MS - left;
+      const inT = Math.min(1, age / 110);
+      const outT = Math.min(1, left / 420);
+      const a = inT * outT;
+      if (a <= 0.01) continue;
+      const rise = (1 - outT) * 10;
+
+      // Emoji need a bigger box than words do, and a single glyph in a word-sized bubble looks
+      // like a mistake. Measured rather than guessed, so a long name or a short word both fit.
+      const emoji = s.emoji;
+      ctx.font = emoji
+        ? '22px system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif'
+        : '600 12px ui-sans-serif, system-ui, sans-serif';
+      const w = Math.min(190, ctx.measureText(s.text).width + (emoji ? 18 : 20));
+      const h = emoji ? 32 : 22;
+      const x = bx, y = by - rise;
+
+      ctx.globalAlpha = a;
+      // The bubble, then the tail, as one path — a tail drawn separately shows its own outline
+      // where it meets the body.
+      ctx.beginPath();
+      ctx.roundRect(x - w / 2, y - h, w, h, 7);
+      ctx.moveTo(x - 5, y - 1);
+      ctx.lineTo(x, y + 6);
+      ctx.lineTo(x + 5, y - 1);
+      ctx.closePath();
+      ctx.fillStyle = '#f4f7fbee';
+      ctx.fill();
+      ctx.strokeStyle = '#0b0f16aa';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.fillStyle = '#16202b';
+      ctx.fillText(s.text, x, y - h / 2 + (emoji ? 1 : 0));
+    }
+    ctx.restore();
+  }
+
   function drawSunShadows(alive, ox, oy) {
     const set = baked.playerShadows;
     if (!set || !set.length) return;
@@ -2296,6 +2372,20 @@ export function createRenderer(canvas, world) {
   resize();
   return {
     frame, resize, invalidateAll, invalidateTile, mapChanged, addMelt,
+
+    /**
+     * Somebody said something short. Shown over their head for a few seconds.
+     *
+     * Whether it is an emote is decided HERE rather than by the caller: the renderer is what
+     * knows it needs a bigger glyph and a taller bubble for one, and asking main.js to classify
+     * a string it is only forwarding would put that knowledge in two places.
+     */
+    say(i, text) {
+      const t = String(text).slice(0, 24);
+      // Nothing but symbols: an emote. A letter or a digit anywhere makes it speech.
+      const emoji = !/[\p{L}\p{N}]/u.test(t);
+      says.set(i, { text: t, emoji, until: performance.now() + SAY_MS });
+    },
     /** Where the sea gets its music from: `dtMs => analysis`, called once a frame. */
     setSound(fn) { soundOf = fn; },
     /**

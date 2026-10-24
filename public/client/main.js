@@ -550,6 +550,22 @@ const net = createNet({
     who.textContent = m.i === -1 ? '' : `${m.name}: `;
     if (m.i >= 0) who.style.color = playerColor(m.i);
     li.append(who, document.createTextNode(m.msg));   // textContent only: never innerHTML
+    /* Short lines also appear over the speaker's head.
+     *
+     * This is what makes emotes and chat one feature rather than two: an emote is just a very
+     * short message, so anything that makes a bubble for short chat makes one for emotes too,
+     * with no second path to keep in step.
+     *
+     * NOT commands. `/kick bob` is addressed to the server, the reply comes back as a SERVER
+     * line, and putting the command itself over somebody's head would broadcast a thing they
+     * typed privately to the room. Not the server's own lines either (`i === -1`) — nobody is
+     * standing there to say them.
+     */
+    const SAY_MAX = 24;
+    if (m.i >= 0 && m.msg.length <= SAY_MAX && !m.msg.startsWith('/')) {
+      renderer?.say(m.i, m.msg);
+    }
+
     const mentioned = world.me() && m.msg.toLowerCase().includes(world.me().name.toLowerCase());
     if (m.i === world.you) li.className = 'mine';
     else if (mentioned) li.className = 'mention';
@@ -599,7 +615,36 @@ const nameOf = i => (i === world.you ? 'you' : world.players[i]?.name ?? '?');
 const chatHasFocus = () => document.activeElement === $('chatInput');
 // Note: no isTyping override. It defaults to typingSomewhere(), which asks whether focus is in
 // ANY text field — passing chatHasFocus here is what made WASD unusable in the name box.
+/* The four emotes, in compass order: up, left, down, right.
+ *
+ * Four and not eight. Eight needs diagonals, diagonals need two keys, and the whole value of
+ * this is that it is one key and over before you have thought about it. These four cover what
+ * anybody actually says mid-round: well played, help, sorry, and laughing at you.
+ */
+const EMOTES = ['\u{1F44D}', '\u{1F198}', '\u{1F605}', '\u{1F480}'];
+
+/* An emote IS a chat message.
+ *
+ * Not a new message type, and that is the whole design. It goes down the existing chat path, so
+ * the server sanitises it, rate-limits it and broadcasts it with no new code; it lands in the
+ * log like anything else; and the bubble above the player comes free, because short chat
+ * messages already get one. One mechanism, two features, nothing to keep in step.
+ */
+function sendEmote(slot) {
+  const e = EMOTES[slot];
+  if (e && world.ready) net.send({ t: 'chat', msg: e });
+}
+
+// The picker's glyphs come from the same array, so the legend and what it sends cannot drift
+// apart. Here rather than at the top of the file: `EMOTES` is a const, and reading it before
+// its declaration is executed is a temporal dead zone error, not an undefined.
+for (const [i, el] of [...document.querySelectorAll('#emotePick .ekey b')].entries()) {
+  el.textContent = EMOTES[i] ?? '';
+}
+
 const input = createInput({
+  onEmote: sendEmote,
+  onEmoteMenu: on => $('emotePick').classList.toggle('on', on),
   onReserved: what => toast(`${what} is not in this build yet`),
 });
 

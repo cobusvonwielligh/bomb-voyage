@@ -12,9 +12,27 @@ const BINDINGS = {
 
 // Keys Game of Bombs has and this build does not. Swallowing them with a hint beats doing
 // nothing, which just reads as broken to a returning player.
+/* Keys Game of Bombs has and this build does not. Swallowing them with a hint beats doing
+ * nothing, which just reads as broken to a returning player.
+ *
+ * Shift used to be here. It is the emote modifier now — see createInput's `onEmote` — which is
+ * a better use of a key people already reach for, and the detonator hint survives on L. */
 const RESERVED = {
-  ShiftLeft: 'detonator', ShiftRight: 'detonator', KeyL: 'detonator',
+  KeyL: 'detonator',
   KeyI: 'safe-house', KeyF: 'jetpack',
+};
+
+/* Hold Shift, tap a direction. Four emotes, on the four keys your hand is already on.
+ *
+ * WASD and the arrows both, because both already mean "a direction" here and somebody who
+ * plays on arrows should not have to move their hand to use this. The mapping is the compass:
+ * up, left, down, right — so the picker can be drawn as a cross and there is nothing to learn.
+ */
+const EMOTE_KEYS = {
+  KeyW: 0, ArrowUp: 0,
+  KeyA: 1, ArrowLeft: 1,
+  KeyS: 2, ArrowDown: 2,
+  KeyD: 3, ArrowRight: 3,
 };
 
 // Input types that take no text. A denylist rather than an allowlist of text types, so the next
@@ -66,17 +84,47 @@ export function createTap(ms = TAP_COOLDOWN_MS, now = () => performance.now()) {
   };
 }
 
-export function createInput({ onReserved, isTyping = typingSomewhere }) {
+export function createInput({ onReserved, onEmote, onEmoteMenu, isTyping = typingSomewhere }) {
   let mask = 0;
   const down = new Set();
+  // Shift held: the picker is open and WASD chooses rather than walks.
+  let picking = false;
 
   const recompute = () => {
     mask = 0;
     for (const code of down) mask |= BINDINGS[code] || 0;
   };
 
+  const setPicking = on => {
+    if (picking === on) return;
+    picking = on;
+    /* Everything stops when the picker opens.
+     *
+     * Holding Shift takes WASD away from walking, so the mask has to be cleared or you keep
+     * sliding in whatever direction you were last pressing — which is the single worst thing
+     * a UI mode can do in a game where standing still is a decision. You stop, you choose, you
+     * let go. Deliberate, brief, and entirely yours: nothing opens this but your own hand. */
+    if (on) { down.clear(); recompute(); }
+    onEmoteMenu?.(on);
+  };
+
   addEventListener('keydown', e => {
     if (isTyping?.()) return;
+
+    // Shift down: open the picker. Before the repeat guard, because the FIRST shift keydown is
+    // the one that opens it and a held shift repeats like anything else.
+    if (e.key === 'Shift') { e.preventDefault(); setPicking(true); return; }
+
+    if (picking) {
+      const slot = EMOTE_KEYS[e.code];
+      if (slot !== undefined) {
+        e.preventDefault();
+        if (!e.repeat) onEmote?.(slot);
+        return;
+      }
+      // Any other key while picking: close rather than swallow. Escape should always escape.
+      if (e.code === 'Escape') { e.preventDefault(); setPicking(false); return; }
+    }
     // Auto-repeat carries no information here: the key is already in `down`, so the mask is
     // already right. Swallowing it early keeps the reserved-key hint from firing thirty times a
     // second at somebody leaning on Shift.
@@ -88,6 +136,7 @@ export function createInput({ onReserved, isTyping = typingSomewhere }) {
   });
 
   addEventListener('keyup', e => {
+    if (e.key === 'Shift') { setPicking(false); return; }
     if (!BINDINGS[e.code]) return;
     // Never gate keyup on isTyping: focusing a field mid-stride would otherwise strand the key
     // down forever and you would walk into a wall until you pressed it again.
@@ -97,10 +146,15 @@ export function createInput({ onReserved, isTyping = typingSomewhere }) {
   });
 
   // Losing focus mid-stride would otherwise leave you walking into a wall forever.
-  addEventListener('blur', () => { down.clear(); recompute(); });
+  // Losing focus mid-stride would otherwise leave you walking into a wall forever — and would
+  // leave the picker open over a game you are no longer looking at.
+  addEventListener('blur', () => { down.clear(); recompute(); setPicking(false); });
 
   return {
-    get mask() { return mask; },
+    /* Zero while the picker is open. The simulation reads this, so a held Shift is genuinely
+     * "no input" rather than a UI overlay with movement continuing underneath it. */
+    get mask() { return picking ? 0 : mask; },
+    get picking() { return picking; },
     /** Is this physical key down right now? Edge detection lives with the caller. */
     isDown(code) { return down.has(code); },
     clear() { down.clear(); recompute(); },
