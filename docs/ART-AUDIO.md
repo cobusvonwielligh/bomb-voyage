@@ -120,7 +120,7 @@ Acceptance: with 16 bots on screen, you can follow any one of them by tracer alo
 | Sprite | Frames | Notes |
 |---|---|---|
 | Player | 4 directions × 2 walk frames + 1 death | Tinted per player. Changeling draws it flipped vertically. Reduction draws it at 50 % scale. |
-| Bomb | 3 pulse frames | Pulses faster as the fuse runs out. Tinted to the owner. |
+| Bomb | 1 baked body per owner + live overlay | Iron sphere, owner-coloured band with rivets, brass collar. The timing is drawn live every frame from the real time left: a countdown ring on the floor (full ring = 2.4 s, owner colour → orange → red, a bead on the leading end), a rope fuse whose remaining length IS the remaining time with the spark on its end, and the last 0.8 s red-hot and pulsing faster, white for the final fifth of a second. `drawBombBody` / `drawBombLive` in `art.js`. |
 | Fire | centre, arm, tip × 4 rotations | Three-colour ramp from §2. |
 | Floor | 3 variants | Chosen by a hash of the cell coordinates, so it never looks tiled. |
 | Soft wall | 1 + 1 damaged | |

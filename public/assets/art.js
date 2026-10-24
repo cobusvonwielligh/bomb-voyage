@@ -616,21 +616,197 @@ export const DIRS = { R: 0, U: 1, L: 2, D: 3 };
 
 // ─── bomb, fire, perks ────────────────────────────────────────────────────────
 
-/** phase 0..1 through the fuse; pulse accelerates as it runs out. */
-export function drawBomb(c, { phase = 0, colorIndex = 0 }) {
-  const S = TILE_PX, k = playerShades(colorIndex);
-  const pulse = 1 + 0.12 * Math.sin(phase * Math.PI * 2 * (3 + phase * 9));
-  const r = 11 * pulse;
-  c.save(); c.translate(S / 2, S / 2 + 2);
-  c.beginPath(); c.ellipse(0, 9, r * 0.9, 3, 0, 0, 7); c.fillStyle = 'rgba(0,0,0,0.3)'; c.fill();
-  c.beginPath(); c.arc(0, 0, r, 0, 7); c.fillStyle = '#1b2029'; c.fill();
-  c.beginPath(); c.arc(-r * 0.3, -r * 0.35, r * 0.28, 0, 7); c.fillStyle = 'rgba(255,255,255,0.3)'; c.fill();
-  // owner ring — you must be able to tell whose bomb you are standing next to
-  c.beginPath(); c.arc(0, 0, r - 1, 0, 7); c.strokeStyle = k.base; c.lineWidth = 2; c.stroke();
-  // fuse spark
-  px(c, -1, -r - 4, 2, 4, '#6b7585');
-  c.beginPath(); c.arc(0, -r - 5, 2 + phase * 2, 0, 7); c.fillStyle = PALETTE.fireCore; c.fill();
+/* The bomb.
+ *
+ * Two halves, because they change at different rates:
+ *
+ *   drawBombBody  everything that never changes — baked once per player colour at boot. A
+ *                 cast-iron sphere lit from the top left, a band in the OWNER's colour wrapped
+ *                 round its equator with rivets (whose bomb is this, at a glance), a brass collar
+ *                 the fuse goes into, a specular glint and a rim of reflected light.
+ *   drawBombLive  everything that says WHEN, drawn every frame from the real time left. A
+ *                 countdown ring on the floor that drains clockwise from twelve — a full ring is
+ *                 always the full 2.4 s, so a fast-fuse bomb visibly starts at half — and a rope
+ *                 fuse that physically burns down, its remaining length IS the remaining time,
+ *                 with the spark riding the burning end. In the last 0.8 s the bomb swells and
+ *                 pulses red-hot, faster and faster, and the last fifth of a second is white.
+ *
+ * The old one was a dark circle with a fixed stub of fuse, eight frames of a gentle pulse, and no
+ * way to tell a bomb with two seconds left from one with a quarter of a second — which is the
+ * only thing about a bomb anybody standing next to it wants to know. */
+const BOMB_R = 10.5;
+const BOMB_CY = 19;                  // centre, in tile pixels: low, so the fuse fits above it
+const BOMB_RING_R = 14.2;
+const BOMB_WARN_S = 0.8;
+const BRASS = '#b8892e', BRASS_LIT = '#f0cf72', BRASS_DARK = '#6f4f12';
+
+export function drawBombBody(c, { colorIndex = 0 } = {}) {
+  const S = TILE_PX, k = playerShades(colorIndex), r = BOMB_R;
+  c.save();
+  c.translate(S / 2, BOMB_CY);
+
+  // The sphere: one radial ramp from a lit top-left down to nearly black at the far edge.
+  const g = c.createRadialGradient(-r * 0.4, -r * 0.45, r * 0.08, 0, 0, r);
+  g.addColorStop(0, '#76829a');
+  g.addColorStop(0.32, '#2e3644');
+  g.addColorStop(1, '#090c11');
+  c.beginPath(); c.arc(0, 0, r, 0, 7); c.fillStyle = g; c.fill();
+
+  // The owner's band, wrapped round the equator: a lower half-ellipse seen slightly from above,
+  // clipped to the sphere, with a lit upper edge and a shadowed lower one so it reads as painted
+  // ON a ball rather than across a disc.
+  c.save();
+  c.beginPath(); c.arc(0, 0, r, 0, 7); c.clip();
+  const band = (dy, w, colour) => {
+    c.beginPath(); c.ellipse(0, -1.2 + dy, r + 1, r * 0.42, 0, 0.02, Math.PI - 0.02);
+    c.lineWidth = w; c.strokeStyle = colour; c.stroke();
+  };
+  band(0, 4.4, k.base);
+  band(-1.9, 1, k.light);
+  band(2, 1, k.dark);
+  // Rivets along it.
+  for (const a of [0.3, 0.5, 0.7]) {
+    const x = (r + 1) * Math.cos(Math.PI * a), y = -1.2 + r * 0.42 * Math.sin(Math.PI * a);
+    c.beginPath(); c.arc(x, y, 0.95, 0, 7); c.fillStyle = 'rgba(240,244,250,0.85)'; c.fill();
+  }
+  // The same shading again over the band, so it turns away into the dark with the iron.
+  const wrap = c.createRadialGradient(-r * 0.4, -r * 0.45, r * 0.4, 0, 0, r * 1.02);
+  wrap.addColorStop(0, 'rgba(0,0,0,0)');
+  wrap.addColorStop(1, 'rgba(0,0,0,0.62)');
+  c.fillStyle = wrap; c.fillRect(-r, -r, r * 2, r * 2);
   c.restore();
+
+  // Reflected light along the bottom right, in the owner's colour: it separates the bomb from
+  // the floor, and on a dark tile it is most of what you see of the silhouette.
+  c.beginPath(); c.arc(0, 0, r - 0.9, Math.PI * 0.08, Math.PI * 0.62);
+  c.lineWidth = 1.5; c.strokeStyle = k.light; c.globalAlpha = 0.5; c.stroke(); c.globalAlpha = 1;
+
+  // The glint: a hard specular and a pinprick, top left, matching every other light in the game.
+  c.save();
+  c.translate(-r * 0.42, -r * 0.46); c.rotate(-0.65);
+  c.beginPath(); c.ellipse(0, 0, 3.1, 1.7, 0, 0, 7); c.fillStyle = 'rgba(255,255,255,0.72)'; c.fill();
+  c.restore();
+  c.beginPath(); c.arc(-r * 0.1, -r * 0.7, 0.8, 0, 7); c.fillStyle = 'rgba(255,255,255,0.55)'; c.fill();
+
+  c.beginPath(); c.arc(0, 0, r, 0, 7); c.lineWidth = 1; c.strokeStyle = 'rgba(4,6,9,0.9)'; c.stroke();
+
+  // The brass collar the fuse goes into: a short cylinder with a dark mouth.
+  rr(c, -4.5, -r - 3, 9, 5, 1.5, BRASS);
+  px(c, -3.3, -r - 2.4, 1.6, 3.6, BRASS_LIT);
+  px(c, -4.5, -r + 1, 9, 1, BRASS_DARK);
+  c.beginPath(); c.ellipse(0, -r - 3, 4.5, 1.3, 0, 0, 7); c.fillStyle = BRASS_DARK; c.fill();
+  c.beginPath(); c.ellipse(0, -r - 3, 2.8, 0.8, 0, 0, 7); c.fillStyle = '#251906'; c.fill();
+  c.restore();
+}
+
+/** The fuse's resting curve, from the mouth of the collar. Quadratic: start, control, end. */
+const FUSE = { x0: 0, y0: -BOMB_R - 3, cx: 1.5, cy: -BOMB_R - 10, x1: 7.5, y1: -BOMB_R - 11.5 };
+const fuseAt = t => {
+  const u = 1 - t;
+  return [
+    u * u * FUSE.x0 + 2 * u * t * FUSE.cx + t * t * FUSE.x1,
+    u * u * FUSE.y0 + 2 * u * t * FUSE.cy + t * t * FUSE.y1,
+  ];
+};
+
+/**
+ * Everything that says when. `c` is at the tile's top-left corner.
+ *
+ * @param body   this owner's baked body, or null to draw it fresh (the preview harness)
+ * @param leftS  seconds until it goes off, as a float — the caller interpolates between ticks
+ * @param fullS  what a full ring means: the normal fuse. A fast fuse starts part-way round.
+ * @param t      seconds, for the flicker and the warning pulse
+ */
+export function drawBombLive(c, body, { leftS, fullS, colorIndex = 0, t = 0 }) {
+  const S = TILE_PX, k = playerShades(colorIndex);
+  const f = Math.max(0, Math.min(1, leftS / fullS));
+  const cx = S / 2, cy = BOMB_CY;
+  const warn = Math.max(0, Math.min(1, 1 - leftS / BOMB_WARN_S));       // 0 until the last 0.8 s
+  // The warning pulse gets FASTER, not just stronger: 3 Hz rising to 16 Hz at the end.
+  const wob = Math.sin(t * Math.PI * 2 * (3 + 13 * warn * warn));
+
+  // 1. The countdown ring, on the floor, under the bomb.
+  c.save();
+  c.lineCap = 'round';
+  c.beginPath(); c.arc(cx, cy, BOMB_RING_R, 0, Math.PI * 2);
+  c.lineWidth = 3.4; c.strokeStyle = 'rgba(0,0,0,0.38)'; c.stroke();
+  if (f > 0) {
+    // Owner's colour while there is time, through orange to red as it runs out.
+    const hot = Math.max(0, Math.min(1, 1 - leftS / 1.2));
+    c.strokeStyle = hot <= 0 ? k.base : `hsl(${(38 - 30 * hot) | 0} 100% ${(58 + 6 * hot) | 0}%)`;
+    if (hot > 0.5) { c.shadowColor = c.strokeStyle; c.shadowBlur = 6 * hot; }
+    c.beginPath(); c.arc(cx, cy, BOMB_RING_R, -Math.PI / 2, -Math.PI / 2 + f * Math.PI * 2);
+    c.lineWidth = 2.4; c.stroke();
+    c.shadowBlur = 0;
+    // A bead on the leading end, so the eye can follow the ring moving rather than reading it.
+    const a = -Math.PI / 2 + f * Math.PI * 2;
+    c.beginPath(); c.arc(cx + Math.cos(a) * BOMB_RING_R, cy + Math.sin(a) * BOMB_RING_R, 1.9, 0, 7);
+    c.fillStyle = '#ffffff'; c.fill();
+  }
+  c.restore();
+
+  // 2. The body, breathing — and in the last 0.8 s, swelling and shaking with the pulse.
+  const scale = 1 + 0.018 * Math.sin(t * 5) + warn * (0.05 + 0.045 * wob);
+  c.save();
+  c.translate(cx, cy); c.scale(scale, scale); c.translate(-cx, -cy);
+  if (body) c.drawImage(body, 0, 0); else drawBombBody(c, { colorIndex });
+
+  // Red-hot: additive red over the iron, flashing with the pulse, and white at the very end.
+  if (warn > 0) {
+    c.globalCompositeOperation = 'lighter';
+    c.beginPath(); c.arc(cx, cy, BOMB_R, 0, 7);
+    c.fillStyle = `rgba(255,62,30,${(warn * (0.32 + 0.3 * Math.max(0, wob))).toFixed(3)})`;
+    c.fill();
+    if (leftS < 0.2) {
+      c.fillStyle = `rgba(255,240,210,${(0.55 * (1 - leftS / 0.2)).toFixed(3)})`;
+      c.fill();
+    }
+    c.globalCompositeOperation = 'source-over';
+  }
+
+  // 3. The fuse: what is left of it, from the collar to the burning end.
+  c.translate(cx, cy);
+  if (f > 0.01) {
+    c.beginPath();
+    c.moveTo(FUSE.x0, FUSE.y0);
+    const steps = Math.max(2, Math.ceil(f * 10));
+    for (let i = 1; i <= steps; i++) c.lineTo(...fuseAt((i / steps) * f));
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    c.lineWidth = 2.6; c.strokeStyle = '#3a2c18'; c.stroke();         // its own shadow edge
+    c.lineWidth = 1.8; c.strokeStyle = '#c9b183'; c.stroke();         // the rope
+    c.setLineDash([1.2, 1.4]);
+    c.lineWidth = 1.8; c.strokeStyle = '#7c6440'; c.stroke();         // the twist of the braid
+    c.setLineDash([]);
+  }
+
+  // 4. The spark, riding the burning end: a glow, a hot core and a few flying sparks.
+  const [sx, sy] = fuseAt(f);
+  const flick = 0.75 + 0.25 * Math.sin(t * 47) * Math.sin(t * 31);
+  const glow = c.createRadialGradient(sx, sy, 0, sx, sy, 6.5 + warn * 3);
+  glow.addColorStop(0, `rgba(255,246,200,${0.95 * flick})`);
+  glow.addColorStop(0.35, `rgba(255,170,60,${0.6 * flick})`);
+  glow.addColorStop(1, 'rgba(255,90,20,0)');
+  c.globalCompositeOperation = 'lighter';
+  c.fillStyle = glow;
+  c.beginPath(); c.arc(sx, sy, 6.5 + warn * 3, 0, 7); c.fill();
+  c.strokeStyle = PALETTE.fireCore; c.lineWidth = 0.9; c.lineCap = 'round';
+  for (let i = 0; i < 4; i++) {
+    // Deterministic in time rather than Math.random, so a paused frame is not a shimmering one.
+    const a = (t * 9.7 + i * 1.7) % (Math.PI * 2);
+    const len = 1.8 + 2.4 * Math.abs(Math.sin(t * 23 + i * 2.3));
+    c.globalAlpha = 0.85 * flick;
+    c.beginPath(); c.moveTo(sx, sy); c.lineTo(sx + Math.cos(a) * len, sy + Math.sin(a) * len - 0.5); c.stroke();
+  }
+  c.globalAlpha = 1;
+  c.globalCompositeOperation = 'source-over';
+  c.beginPath(); c.arc(sx, sy, 1.3, 0, 7); c.fillStyle = '#fffbe8'; c.fill();
+  c.restore();
+}
+
+/** The whole bomb at a point in its fuse, 0..1 — for the preview harness. */
+export function drawBomb(c, { phase = 0, colorIndex = 0 }) {
+  const fullS = 2.4;
+  drawBombLive(c, null, { leftS: (1 - phase) * fullS, fullS, colorIndex, t: phase * 7 });
 }
 
 /** kind: 'core' | 'arm' | 'tip'. rot in quarter turns. age 0..1 fades it out. */
@@ -1331,12 +1507,9 @@ export function bake({ playerCount = 16 } = {}) {
         set.push(el);
       }
     out.players.push(set);
-    const b = [];
-    for (let p = 0; p < 8; p++) {
-      const el = canvas();
-      drawBomb(el.getContext('2d'), { phase: p / 8, colorIndex: i });
-      b.push(el);
-    }
+    // One body per owner. Everything that changes with the fuse is drawn live — see drawBombLive.
+    const b = canvas();
+    drawBombBody(b.getContext('2d'), { colorIndex: i });
     out.bombs.push(b);
   }
 
