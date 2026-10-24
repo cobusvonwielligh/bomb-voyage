@@ -554,7 +554,9 @@
       <img src="/assets/img/bomb-barrels.png" alt="" width="440" height="440" />
     </div>
 
-    <div id="mascot">
+    <!-- `.mascot-dash` is the size knob, and it is his alone — nothing else on the page uses it.
+         It sets the BOX, never the <img>, for the reason spelled out beside it in style.css. -->
+    <div id="mascot" class="mascot-dash">
       <img src="/assets/img/mascot.png" alt="" width="210" height="210" />
       <!-- What he says when you hover PLAY. Inside #mascot so it rides the bob with him. -->
       <div id="menuSay"></div>
@@ -564,15 +566,6 @@
 
 <script type="module" src="/client/main.js"></script>
 <style>
-  /* ========================================
-   LANDING PAGE MASCOT
-   Keep the main mascot at its original size
-   ======================================== */
-  #mascot img {
-    width: 210px;
-    height: 210px;
-  }
-
   /* ========================================
    IN-GAME AVATAR / FACE
    Shrink by 15% and move slightly up

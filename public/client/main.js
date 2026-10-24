@@ -9,6 +9,7 @@ import {
   MAX_SKATES, MAX_SHIELDS, MAX_STAMINA_LEVELS, IDLE_DISCONNECT_MS, RESPAWN_DELAY_TICKS, TILE_PX,
   MAX_BOMBS_CARRIED, MAX_RADIUS, START_BOMBS, START_RADIUS,
   STAMINA_SHOW_AT, staminaMaxFor, POWDER_RADIUS, PERK, STATUS, VOLUME_MUSIC_DEFAULT,
+  CHAT_MIN_INTERVAL_MS,
 } from '/shared/constants.js';
 import { createNet } from './net.js';
 import { createInput, typingSomewhere, createTap } from './input.js';
@@ -619,9 +620,9 @@ const chatHasFocus = () => document.activeElement === $('chatInput');
  *
  * Four and not eight. Eight needs diagonals, diagonals need two keys, and the whole value of
  * this is that it is one key and over before you have thought about it. These four cover what
- * anybody actually says mid-round: well played, help, sorry, and laughing at you.
+ * anybody actually says mid-round: nice one, no, that was funny, and love it.
  */
-const EMOTES = ['\u{1F44D}', '\u{1F198}', '\u{1F605}', '\u{1F480}'];
+const EMOTES = ['\u{1F44D}', '\u{1F44E}', '\u{1F602}', '❤️'];
 
 /* An emote IS a chat message.
  *
@@ -629,11 +630,29 @@ const EMOTES = ['\u{1F44D}', '\u{1F198}', '\u{1F605}', '\u{1F480}'];
  * the server sanitises it, rate-limits it and broadcasts it with no new code; it lands in the
  * log like anything else; and the bubble above the player comes free, because short chat
  * messages already get one. One mechanism, two features, nothing to keep in step.
+ *
+ * The cooldown is longer than the server's own chat interval on purpose: the server simply
+ * drops anything faster, so a client that allowed faster would be firing emotes that silently
+ * never happened.
  */
+const EMOTE_COOLDOWN_MS = CHAT_MIN_INTERVAL_MS + 200;
+let emoteAt = 0;
 function sendEmote(slot) {
   const e = EMOTES[slot];
-  if (e && world.ready) net.send({ t: 'chat', msg: e });
+  const now = performance.now();
+  if (!e || !world.ready || now - emoteAt < EMOTE_COOLDOWN_MS) return;
+  emoteAt = now;
+  net.send({ t: 'chat', msg: e });
 }
+
+/* One emote per Shift.
+ *
+ * The wheel goes the moment you pick, even with Shift still down, and does not come back until
+ * you have let go and held again. Holding Shift is the question; picking is the answer; leaving
+ * the question on screen after it has been answered is a legend sitting over the board while
+ * you are trying to see what you walked into. */
+let pickerSpent = false;
+const showPicker = on => $('emotePick').classList.toggle('on', on && !pickerSpent);
 
 // The picker's glyphs come from the same array, so the legend and what it sends cannot drift
 // apart. Here rather than at the top of the file: `EMOTES` is a const, and reading it before
@@ -643,8 +662,15 @@ for (const [i, el] of [...document.querySelectorAll('#emotePick .ekey b')].entri
 }
 
 const input = createInput({
-  onEmote: sendEmote,
-  onEmoteMenu: on => $('emotePick').classList.toggle('on', on),
+  onEmote: slot => {
+    sendEmote(slot);
+    pickerSpent = true;
+    showPicker(false);
+  },
+  onEmoteMenu: on => {
+    if (!on) pickerSpent = false;      // Shift released: the next hold gets a wheel again
+    showPicker(on);
+  },
   onReserved: what => toast(`${what} is not in this build yet`),
 });
 
