@@ -2838,6 +2838,15 @@ body.dead #rank { color: #8a5a5a; }
   max-width: 100%;
   max-height: 100%;
   overflow-y: auto;
+  /* A floor under both panes, so switching tabs does not throw the panel up or down the screen.
+     It is centred in its box, so any change in height moves BOTH edges and the whole thing
+     appears to jump. The boards grow with the player count; this is roughly where a full island
+     puts them, and the rules sheet is cut to the same cloth. */
+  min-height: min(62vh, 520px);
+}
+/* The tabs stay put at the top; only what is under them changes size. */
+#scoresCard > div {
+  width: 100%;
 }
 
 @media (max-width: 1080px) {
@@ -2885,27 +2894,34 @@ body.dead #rank { color: #8a5a5a; }
   display: none;
 }
 
-/* The sheet itself: an icon and a name on one line, the sentence under it. A two-column grid was
-   the obvious layout and the wrong one, because the sentences are long and a narrow second
-   column turns every one of them into four ragged lines. */
+/* The sheet itself. Name on the left, sentence on the right, one row each.
+ *
+ * It was a stack: icon and name on one line, the sentence under it, which ran to eight rows of
+ * two lines and made the panel twice the height of the boards it shares a key with. Side by
+ * side, the names column is a list you can run your eye down, and the whole sheet is as tall as
+ * the scoreboard rather than twice it. */
 #rulesPane .rline {
   margin: 0 0 14px;
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--dim);
-  max-width: 62ch;
+  max-width: 78ch;
 }
 #rulesPane dl.rules {
-  margin: 0 0 16px;
+  display: grid;
+  grid-template-columns: 136px 1fr;
+  align-items: baseline;
+  gap: 7px 16px;
+  margin: 0 0 18px;
 }
 #rulesPane dt {
   display: flex;
   align-items: center;
   gap: 7px;
-  margin-top: 10px;
+  margin: 0;
   font-family: var(--display);
-  font-size: 12px;
-  letter-spacing: 0.12em;
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--gold);
 }
@@ -2916,10 +2932,34 @@ body.dead #rank { color: #8a5a5a; }
   flex: none;
 }
 #rulesPane dd {
-  margin: 2px 0 0 22px;
+  margin: 0;
   font-size: 12.5px;
   line-height: 1.45;
   color: #c8d2de;
+}
+
+/* Scoring: a wrapping row of chips rather than a paragraph of numbers. A sentence is read; a
+   row of figures is scanned, which is all anybody does with a scoring table. */
+#rulesPane ul.score {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+#rulesPane ul.score li {
+  background: #ffffff08;
+  border: 1px solid #ffffff12;
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-size: 12px;
+  color: var(--dim);
+}
+#rulesPane ul.score b {
+  font-family: var(--nums);
+  color: var(--gold);
+  margin-right: 5px;
 }
 #scores table {
   width: 100%;
