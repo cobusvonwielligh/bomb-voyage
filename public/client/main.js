@@ -5,12 +5,15 @@
 // revisit — right now vanilla is the smaller answer.
 
 import {
-  TICK_MS, TICK_HZ, NAME_MAX_CHARS, UNITS_PER_TILE, IN_BOMB, playerColor,
+  TICK_MS, TICK_HZ, NAME_MAX_CHARS, UNITS_PER_TILE, IN_BOMB, IN_SLIDE, playerColor,
   MAX_SKATES, MAX_SHIELDS, MAX_STAMINA_LEVELS, IDLE_DISCONNECT_MS, RESPAWN_DELAY_TICKS, TILE_PX,
   MAX_BOMBS_CARRIED, MAX_RADIUS, START_BOMBS, START_RADIUS,
   POWDER_RADIUS, PERK, STATUS, VOLUME_MUSIC_DEFAULT,
-  CHAT_MIN_INTERVAL_MS,
+  CHAT_MIN_INTERVAL_MS, STREAK_WINDOW_TICKS,
 } from '/shared/constants.js';
+// The one number the password box needs to quote at somebody. The rules themselves live on the
+// server — see badPassword in server/accounts.js — and this is only the hint text.
+import { PASSWORD_MIN } from '/shared/constants.js';
 import { createNet } from './net.js';
 import { createInput, typingSomewhere, createTap } from './input.js';
 import { createWorld } from './world.js';
@@ -20,6 +23,7 @@ import { createSfx } from './audio/sfx.js';
 import { createListener } from './audio/listen.js';
 import { createQuips, MENU_QUIPS } from './quips.js';
 import { createMenuViz } from './menuviz.js';
+import { store } from './store.js';
 import { bombTile } from '/shared/sim/bombs.js';
 import { MAPS } from '/shared/maps.js';
 
@@ -117,7 +121,7 @@ $('play').addEventListener('blur', hideMenuQuip);
  * something they have to discover and switch back.
  */
 const AUTO_KEY = 'bv.autoRespawn';
-let autoRespawn = localStorage.getItem(AUTO_KEY) === '1';
+let autoRespawn = store.get(AUTO_KEY) === '1';
 
 /* The three in-game beds, in rotation order. The theme is not one of them: it belongs to the
  * landing page and is excluded for the whole of a round. */
@@ -127,6 +131,19 @@ const BEDS = ['drift', 'suspend', 'undertow'];
 // moment a round begins — there is no point analysing audio nobody is looking at.
 const menuViz = createMenuViz({ canvas: $('menuViz'), music });
 menuViz.start();
+
+/* The same visualiser again, between rounds.
+ *
+ * A second instance rather than moving the first: they are two canvases in two different boxes,
+ * and `createMenuViz` was already written to own no global state so that exactly this would be
+ * possible (see the note on `pointer`). The two are never running at once — the menu one stops
+ * when a round starts, this one only runs during an intermission — so the cost is one idle
+ * object for the whole session.
+ *
+ * Each instance keeps its own `spectrum`, which is correct precisely because only one of them is
+ * ever reading the analyser at a time.
+ */
+const roundViz = createMenuViz({ canvas: $('roundViz'), music });
 
 /* The pointer, fed to the menu visualiser so the motes can get out of its way.
  *
@@ -240,6 +257,49 @@ function syncNowPlaying() {
  * `on` is gold and means playing; `muted` greys the level bar. The level itself rides on a CSS
  * custom property so the bar under the icon needs no second element and no layout.
  */
+/* One tab makes the noise. Whichever one you are looking at.
+ *
+ * Three tabs of this game open — which happens constantly, because the link gets reopened rather
+ * than switched to — meant three copies of the same soundtrack a few hundred milliseconds apart.
+ * That is not three times the music, it is a phaser, and it is the single most obvious way the
+ * site can sound broken.
+ *
+ * A `BroadcastChannel` is the whole mechanism: the tab that becomes visible shouts, every other
+ * tab hears it and cedes, and the one that shouted takes the speakers. Last claim wins, which is
+ * right — the most recent thing you looked at is the thing you meant.
+ *
+ * Ceding is NOT muting: the music keeps running silently (`music.cede`), so coming back finds the
+ * track where it would have been rather than restarting it mid-phrase, and the volume slider still
+ * shows what the person chose rather than a zero they did not ask for.
+ *
+ * A browser without BroadcastChannel keeps the old behaviour, which is "every tab plays". That is
+ * the correct fallback: the alternative would be a tab that has no way to claim the audio back and
+ * is therefore silent forever.
+ */
+const audioBus = typeof BroadcastChannel === 'function' ? new BroadcastChannel('bv.audio') : null;
+
+function claimAudio() {
+  music.cede(false);
+  sfx.cede(false);
+  audioBus?.postMessage({ claim: Date.now() });
+}
+
+if (audioBus) {
+  audioBus.onmessage = e => {
+    if (!e.data?.claim) return;
+    music.cede(true);
+    sfx.cede(true);
+    syncAudio();
+  };
+  // Visibility rather than focus alone: switching tabs fires this, and so does coming back to a
+  // minimised window. `focus` is kept as well for the case of two windows side by side, where
+  // both are visible and the click decides.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) claimAudio(); });
+  addEventListener('focus', claimAudio);
+  // And on the way in, so the tab you just opened is the one you hear.
+  if (!document.hidden) claimAudio();
+}
+
 const syncAudio = () => {
   const m = $('musicCtl'), f = $('sfxCtl');
   $('vol').value = Math.round(music.volume * 100);
@@ -407,8 +467,8 @@ const net = createNet({
         case 'gullhit': {
           renderer?.gullHit(e);
           if (e.by >= 0 && world.players[e.by]) {
-            killFeed(`${nameOf(e.by)} downed a gull${e.cx !== undefined ? ' · it dropped gold' : ''}`,
-              { youKilled: e.by === world.you });
+            const spoils = e.coins ? ` · ${e.coins} gold` : e.cx !== undefined ? ' · it dropped gold' : '';
+            killFeed(`${nameOf(e.by)} downed a gull${spoils}`, { youKilled: e.by === world.you });
           }
           break;
         }
@@ -427,6 +487,24 @@ const net = createNet({
           break;
         }
 
+        /* Somebody slid. The dust and the streaks are drawn straight off `slideV` in the
+         * renderer — they have to be, so your own slide starts on the frame you asked for it
+         * rather than a round trip later — so this event exists for the NOISE alone, which is
+         * the one part that cannot be derived from a snapshot without firing again on every
+         * replay of the same tick. */
+        case 'slide':
+          sfx.playAtUnits('slide', e.x, e.y, { theirs: e.i !== world.you });
+          break;
+
+        // Barged by one. The question mark is drawn from the status bit; this is the thump.
+        case 'dazed':
+          sfx.playAtUnits('dazed', e.x, e.y, { theirs: e.i !== world.you });
+          if (e.i === world.you) {
+            renderer?.addShake(0.3);
+            renderer?.addFlash(0.18, '255,224,74');
+          }
+          break;
+
         case 'spawn':
           // Only your own. Sixteen players respawning at ten seconds apiece meant something was
           // ballooning across the board every few seconds, which buried the thing the effect is
@@ -444,6 +522,9 @@ const net = createNet({
         case 'died': {
           const who = world.players[e.i];
           const by = world.players[e.by];
+          // The body comes apart where the server says it fell, not where the sprite was being
+          // drawn: a death two tiles from the rendered position is a death in the wrong place.
+          renderer?.addDeathDust(e.i, e.x, e.y);
           killFeed(e.i === e.by
             ? `${nameOf(e.i)} blew ${e.i === world.you ? 'yourself' : 'themselves'} up`
             : `${nameOf(e.by)} bombed ${nameOf(e.i)}`,
@@ -507,6 +588,10 @@ const net = createNet({
     }
     allTime = m.top || [];
     hostSeat = m.host ?? -1;
+    // The renderer draws a crown over the host's head, so it needs the same fact. On the world
+    // rather than passed in: `drawOne` runs sixteen times a frame and the renderer has no other
+    // channel for per-round facts that arrive once a second.
+    world.host = hostSeat;
     if (scoresOpen) renderScores();
   },
   /**
@@ -518,17 +603,34 @@ const net = createNet({
 
   onStreak: m => {
     const el = $('streak');
-    // How far up the ladder, from the name the server sent. Everything scales off it: the type
-    // gets bigger, the chord gets wider, the sweep gets longer.
-    const step = m.ace ? 1
-      : m.kind.startsWith('RAMPAGE') ? 0.85
-      : m.kind.startsWith('ULTRA') ? 0.65
-      : m.kind.startsWith('TRIPLE') ? 0.35 : 0;
-    const tier = m.ace ? 'ace' : step >= 0.85 ? 's4' : step >= 0.65 ? 's4' : step >= 0.35 ? 's3' : 's2';
+    /* How far up the ladder. `n` is the rung — 2 for a double through 5 for a rampage, 6 for an
+     * ace — and the prefix matching is the fallback for a server that predates the field.
+     * Everything scales off `step`: the type gets bigger, the chord gets wider, and the rainbow
+     * pours faster. */
+    const step = m.n !== undefined
+      ? Math.min(1, Math.max(0, (m.n - 2) / 4))
+      : m.ace ? 1
+        : m.kind.startsWith('RAMPAGE') ? 0.85
+          : m.kind.startsWith('ULTRA') ? 0.65
+            : m.kind.startsWith('TRIPLE') ? 0.35 : 0;
+    const tier = m.ace ? 'ace' : step >= 0.65 ? 's4' : step >= 0.35 ? 's3' : 's2';
 
-    el.querySelector('.big').textContent = `${m.kind}!!`;
-    withBotIcons(el.querySelector('.who'), m.i === world.you ? 'you' : m.name);
+    /* One period of the rainbow, in seconds, per rung: 2.2 for a double, then 1.6, 1.1, 0.75,
+     * and 0.5 for an ace. The colours never change, so the SPEED is the whole escalation — and
+     * because the same value drives the banner, the chat line and the name in the corner, the
+     * three read as one event moving at one pace. */
+    const flow = `${(2.2 - step * 1.7).toFixed(2)}s`;
+    const big = el.querySelector('.big');
+    const who = el.querySelector('.who');
+    big.textContent = `${m.kind}!!`;
+    withBotIcons(who, m.i === world.you ? 'you' : m.name);
     el.className = tier;
+    for (const part of [big, who]) {
+      part.classList.add('rainbow');
+      part.style.setProperty('--flow', flow);
+    }
+    // Your own name in the corner, for as long as the run could still continue. See streakGlow.
+    if (m.i === world.you) streakGlow(flow);
 
     /* Not while you are dead.
      *
@@ -558,8 +660,26 @@ const net = createNet({
       // happening at all — and no flash, which would read as something having hit you.
       renderer?.addShake(0.08 + step * 0.16);
     }
-    killFeed(`${m.i === world.you ? 'you' : m.name}: ${m.kind}!!`,
-      { youKilled: m.i === world.you });
+    /* The same announcement, in the feed, in the same rainbow at the same speed.
+     *
+     * The banner is gone in two and a half seconds and it only ever shows the LAST thing that
+     * happened; the feed is the record, and a run of four lines pouring colour at four different
+     * speeds is the clearest picture of a round anybody gets. Built by hand rather than through
+     * `killFeed` because this is the one feed line with structure in it: the name and the
+     * announcement are separate spans so each can carry the gradient on its own.
+     */
+    const li = document.createElement('li');
+    li.className = `feed streakLine${m.i === world.you ? ' kill' : ''}`;
+    const nameEl = document.createElement('span');
+    nameEl.className = 'rainbow';
+    nameEl.style.setProperty('--flow', flow);
+    withBotIcons(nameEl, m.i === world.you ? 'you' : m.name);
+    const kindEl = document.createElement('span');
+    kindEl.className = 'rainbow';
+    kindEl.style.setProperty('--flow', flow);
+    kindEl.textContent = `${m.kind}!!`;
+    li.append(nameEl, document.createTextNode(' · '), kindEl);
+    pushLine(li);
   },
   onChat: m => {
     const li = document.createElement('li');
@@ -604,6 +724,18 @@ const net = createNet({
     $('menu').style.display = 'grid';
     $('hud').classList.remove('on');
     $('play').disabled = false;
+    /* Turned away because of a password, which is not an error — it is the next step.
+     *
+     * So it gets the box and a sentence, and NOT a toast: a toast says "something went wrong",
+     * and the right reading of "pick a password for yourself" is "the sign-up is one field
+     * long". `auth` tells us which of the three it is; see askPassword.
+     */
+    if (m.auth) {
+      askPassword(m.auth, m.why);
+      nameInput.blur();
+      return;
+    }
+    closePassword();
     toast(m.why);
     if (m.forget) {
       // net.js has already dropped the stored id, so pressing play again simply works.
@@ -834,7 +966,9 @@ function loop(now) {
     // not sending it is the difference between ignored and never asked.
     // Between rounds the server simulates nothing, so predicting would walk you off on your own.
     if (observing || roundOverUntil) continue;
-    const mask = input.mask;
+    // The slide bit rides on this tick's mask only. `takeSlide` clears as it reads, so the five
+    // steps a stalled frame can run cannot turn one double-tap into five launches.
+    const mask = input.mask | (input.takeSlide() ? IN_SLIDE : 0);
     localBombFeedback(mask);
     world.predict(tick, mask);
     const me = world.me();
@@ -851,6 +985,7 @@ function loop(now) {
     syncCountdown(now);
   } else {
     idlePing(now);
+    syncCountIn();
     fuseTicks();
     world.updateFires();
     world.interpolate(net.serverTickNow(), dt);
@@ -895,6 +1030,27 @@ function castText(el, text) {
   if (el.dataset.text === s) return;
   el.textContent = s;
   el.dataset.text = s;
+}
+
+/* Your own name, in the corner, while your run is live.
+ *
+ * The banner is about the kill; this is about the player, so it stays up for as long as the run
+ * could still continue — STREAK_WINDOW_TICKS, the same window the server uses to decide whether
+ * the next kill counts. When it lapses the name goes back to its cast gold, which is itself
+ * information: the run is over.
+ *
+ * A fresh kill inside the window simply replaces the timer and the speed, so a streak that keeps
+ * climbing never drops back to gold in between.
+ */
+let streakGlowTimer = 0;
+
+function streakGlow(flow) {
+  const el = $('who');
+  el.style.setProperty('--flow', flow);
+  el.classList.add('rainbow');
+  clearTimeout(streakGlowTimer);
+  streakGlowTimer = setTimeout(() => el.classList.remove('rainbow'),
+    (STREAK_WINDOW_TICKS / TICK_HZ) * 1000);
 }
 
 function setValue(el, text, { worse = false, calm = false } = {}) {
@@ -1192,6 +1348,13 @@ let roundOverTimer = 0;
 function startIntermission(ms) {
   document.body.classList.add('intermission');
   input.clear();
+  // The board is hidden for the next twenty seconds and the music keeps playing, so the thing
+  // that was listening to it on the landing page comes back for exactly that long.
+  roundViz.start();
+  // A round that ended inside its own count-in would otherwise leave the digit hanging over the
+  // scoreboard. Cleared here rather than hidden by CSS, so the next round starts it cleanly.
+  $('countIn').classList.remove('on', 'hot');
+  countInShown = -1;
   const fill = $('roundBar').firstElementChild;
   fill.style.animation = 'none';
   void fill.offsetWidth;                 // restart, or a second intermission starts full
@@ -1202,6 +1365,9 @@ function startIntermission(ms) {
 function endIntermission() {
   clearTimeout(roundOverTimer);
   roundOverUntil = 0;
+  // Back to the board. Nothing analyses audio nobody is looking at — the same rule the menu one
+  // follows when a round starts.
+  roundViz.stop();
   document.body.classList.remove('intermission');
   $('dead').style.display = 'none';
   $('respawn').style.display = '';
@@ -1217,6 +1383,59 @@ function syncCountdown(now) {
   const text = s > 0 ? `next round in ${s}s` : 'here we go';
   const el = $('roundCountdown');
   if (el.textContent !== text) el.textContent = text;     // called every frame; write once a second
+}
+
+/* ─── the count-in ──────────────────────────────────────────────────────────────
+ *
+ * Five seconds at the top of every round, under the clock, ticking like one.
+ *
+ * Driven from the ROUND'S OWN TICK rather than from a local timer, which is the only detail here
+ * that matters: `world.tick` restarts at zero with every fresh state the server installs, so the
+ * digit everybody is looking at is the same digit at the same instant, with no message to send
+ * and nothing to keep in step. It also means somebody who joins four seconds into a round sees
+ * "1" and then GO — the truth — rather than a fresh five seconds of their own.
+ *
+ * Presentation only. The simulation is live underneath it: the round clock is already running and
+ * a bomb placed on the first tick goes off on schedule. This is the beat that tells a room full of
+ * people the map has loaded and the fight is on, not a gate on the fight — gating movement is a
+ * server rule and would want its own state on the wire. Easy to add if it is wanted.
+ */
+const COUNT_IN_SECONDS = 5;
+const COUNT_IN_TICKS = COUNT_IN_SECONDS * TICK_HZ;
+let countInShown = -1;             // the digit on screen, so each second is written once
+
+function syncCountIn() {
+  const el = $('countIn');
+  const left = COUNT_IN_TICKS - world.tick;
+  // Over, or not this round: the GO frame is left to finish its own animation.
+  if (left < -TICK_HZ || !world.ready) {
+    if (countInShown !== -1) { el.classList.remove('on', 'hot'); countInShown = -1; }
+    return;
+  }
+  // 5..1 while there is time left, then 0 for the GO beat.
+  const n = Math.max(0, Math.ceil(left / TICK_HZ));
+  if (n === countInShown) return;
+  countInShown = n;
+
+  const num = $('countInN');
+  el.classList.add('on');
+  el.classList.toggle('hot', n > 0 && n <= 2);
+  num.classList.toggle('go', n === 0);
+  num.textContent = n > 0 ? String(n) : 'GO';
+  // Restart the tick animation on every digit: without this the class is already applied and
+  // the second one simply replaces the text inside a finished animation.
+  num.style.animation = 'none';
+  void num.offsetWidth;
+  num.style.animation = '';
+
+  if (n > 0) {
+    // The same voice the round clock's last seconds use, climbing the same way — so the end of
+    // the count-in and the end of the round sound like the same clock.
+    sfx.play('tick', undefined, undefined, { urgency: (COUNT_IN_SECONDS - n) / COUNT_IN_SECONDS });
+  } else {
+    sfx.play('go');
+    renderer?.addFlash(0.2, '237,194,78');
+  }
 }
 
 /** YOU DIED, across the middle of the board. Separate from the card, which is the controls. */
@@ -1428,7 +1647,11 @@ function renderScores() {
     const tr = document.createElement('tr');
     const r = ranks.get(p.i);
     placeCell(tr, n);
-    cell(tr, p.name, playerColor(p.i));
+    // The crown rides with the name here exactly as it does on the live list: same mark, same
+    // size, same meaning. See `td.host` in style.css — it is one mask, so there is one crown in
+    // the project and three places that show it.
+    const nameCell = cell(tr, p.name, playerColor(p.i));
+    if (p.i === hostSeat) nameCell.classList.add('host');
     // The rank ladder is the thing returning Game of Bombs players recognise first, so it gets a
     // column of its own rather than a tooltip.
     cell(tr, r ? `${r.level} \u00b7 ${r.tier}` : '\u2014', null, true);
@@ -1509,7 +1732,7 @@ for (const ev of ['pointerdown', 'keydown', 'touchstart']) {
 
 const nameInput = $('name');
 nameInput.maxLength = NAME_MAX_CHARS;
-nameInput.value = localStorage.getItem('bv.name') || '';
+nameInput.value = store.get('bv.name') || '';
 
 /**
  * @param observe watch instead of play. A spectator takes no seat, so this is also the way in
@@ -1521,10 +1744,19 @@ function play(observe = false) {
   // A spectator still needs a name for the chat, but not a chosen one.
   if (!name && !observe) { nameInput.focus(); return; }
   if ($('play').disabled) return;          // double-click would otherwise open a second socket
+  /* The password, if the box is open, and the box is only open because the server asked.
+   *
+   * Read here and passed straight down to `connect`: it is never stored, never kept in a module
+   * variable, and the field is cleared the moment it has been sent. The only thing that persists
+   * is the token the server sends back, which is what stops the box ever opening again on this
+   * machine. See trustFor in client/net.js.
+   */
+  const pw = pwOpen && !observe ? $('pw').value : '';
+  if (pwOpen && !observe && !pw) { $('pw').focus(); return; }
   $('play').disabled = true;
   observing = observe;
   document.body.classList.toggle('observing', observe);
-  localStorage.setItem('bv.name', name);
+  store.set('bv.name', name);
   renderer = createRenderer($('game'), world);
   // Gulls. The renderer decides when one calls and when one comes down, because it is the
   // only thing that knows where they are drawn; the sounds belong here with the rest.
@@ -1537,7 +1769,16 @@ function play(observe = false) {
     // a swell lands when the kick is heard rather than a few frames before it.
     const c = music.seaAnalyser?.context;
     const latencyS = c ? (c.outputLatency || 0) + (c.baseLatency || 0) : 0;
-    return listen(music.seaAnalyser, music.audible, dtMs, latencyS);
+    const s = listen(music.seaAnalyser, music.audible, dtMs, latencyS);
+    /* How loud it is SET, which the listener cannot know.
+     *
+     * The sea's analyser is tapped before the volume fader — deliberately, so the water reads the
+     * music's content rather than the slider — which means nothing downstream can tell a muted
+     * track from a silent one. The coast needs that difference to decide whether to light at all,
+     * so it is added here, where both facts are in scope.
+     */
+    s.vol = music.audible ? music.volume : 0;
+    return s;
   });
   sfx.start().then(() => sfx.play('click'));
   /* Out of the theme and into a bed, immediately and at random.
@@ -1593,7 +1834,49 @@ function play(observe = false) {
     const mine = (bomb.o ?? bomb.owner) === world.you;
     renderer?.addShake((mine ? 0.75 : 0.5) * (1 - d / 8));
   };
-  net.connect(name || 'watcher', observe);
+  net.connect(name || 'watcher', observe, pw || null);
+  // Out of the DOM as soon as it has gone down the socket. There is no reason for it to still be
+  // in a form field behind the game, and a cleared field is also the signal that a retry needs
+  // it typed again rather than silently re-sending the one that was just refused.
+  $('pw').value = '';
+}
+
+/* The password box: shut until the server asks for it, and it says WHY it is asking.
+ *
+ * Three states and they are genuinely different situations:
+ *
+ *   signup  this name has never been claimed. Whatever is typed here becomes its password, so the
+ *           field is `new-password` and a manager will offer to generate and save one.
+ *   need    the name is claimed and this browser is not trusted. `current-password`.
+ *   bad     the last attempt was wrong, or there have been too many. Same field, red note, and
+ *           the value cleared — never left in place to be re-sent by a reconnect.
+ */
+let pwOpen = false;
+
+function askPassword(mode, why) {
+  pwOpen = true;
+  const group = $('pwGroup');
+  const note = $('pwNote');
+  const input = $('pw');
+  group.hidden = false;
+  input.type = 'password';
+  input.autocomplete = mode === 'signup' ? 'new-password' : 'current-password';
+  input.placeholder = mode === 'signup' ? `at least ${PASSWORD_MIN} characters` : 'your password';
+  $('pwLabel').textContent = mode === 'signup' ? 'SET PASSWORD:' : 'PASSWORD:';
+  note.hidden = false;
+  note.className = mode === 'bad' || mode === 'wait' ? 'bad' : '';
+  note.textContent = mode === 'signup'
+    ? `"${nameInput.value.trim()}" is yours to claim. Pick a password — you will only be asked for it again on a new browser.`
+    : why;
+  input.value = '';
+  input.focus();
+}
+
+function closePassword() {
+  pwOpen = false;
+  $('pwGroup').hidden = true;
+  $('pwNote').hidden = true;
+  $('pw').value = '';
 }
 
 /** True while this tab is watching rather than playing. Read by the HUD and the input loop. */
@@ -1602,6 +1885,12 @@ let observing = false;
 $('play').onclick = () => play(false);
 $('watch').onclick = () => play(true);
 nameInput.onkeydown = e => { if (e.key === 'Enter') play(false); };
+// Enter in the password box plays, so a sign-in is name, tab, password, enter and nothing else.
+$('pw').onkeydown = e => { if (e.key === 'Enter') play(false); };
+// A different name is a different account, so whatever was typed for the last one is wrong by
+// definition — and leaving it there is how somebody sends one person's password to another's
+// sign-in. Closed rather than cleared: the server will ask again if it needs to.
+nameInput.oninput = () => { if (pwOpen) closePassword(); };
 
 // Switching to spectating from the death screen. A fresh connection rather than a mode flag on
 // the open one: the server frees the seat on disconnect, which is the point — somebody waiting
@@ -1684,7 +1973,7 @@ $('respawn').onclick = askRespawn;
 $('autoRespawn').checked = autoRespawn;
 $('autoRespawn').onchange = e => {
   autoRespawn = e.target.checked;
-  localStorage.setItem(AUTO_KEY, autoRespawn ? '1' : '0');
+  store.set(AUTO_KEY, autoRespawn ? '1' : '0');
   sfx.play('click');
   // Turned on while already waiting out a countdown that has finished: honour it now rather
   // than on the next death, which would be a setting that appears not to work.

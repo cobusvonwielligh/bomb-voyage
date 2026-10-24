@@ -326,6 +326,15 @@
 <!-- Centred on the BOARD, not the window: the side panel is 340px of chrome, and an
      announcement centred on the viewport sits visibly off to one side of the thing you are
      looking at. -->
+<!-- The count-in: five seconds at the top of every round, in the same cast gold as the clock it
+     sits under. The ring is a second hand — one sweep per count — so the thing reads as a clock
+     ticking rather than as a number changing. Driven from the round's own tick in client/main.js,
+     which is why everybody sees the same digit at the same moment. -->
+<div id="countIn" aria-hidden="true">
+  <span class="ring"></span>
+  <span class="n castSm" id="countInN">5</span>
+</div>
+
 <div id="centre">
   <div id="streak"><span class="big"></span><span class="who"></span></div>
   <div id="deadBanner">
@@ -334,6 +343,11 @@
 </div>
 
 <div id="dead">
+  <!-- The landing page's visualiser, between rounds, in the same place relative to the card.
+       `#dead` happens to be exactly the board's box, so a canvas at inset:0 inside it puts the
+       bars on the board's own left and right edges — the same frame the menu card gets. First in
+       the markup so the card paints over it. See client/menuviz.js. -->
+  <canvas id="roundViz" aria-hidden="true"></canvas>
   <div class="card small edge">
     <h1 id="deadTitle">round over</h1>
     <div id="roundTable">
@@ -439,15 +453,35 @@
         <dt><svg><use href="#i-keg" /></svg>powder kegs</dt>
         <dd>Rare barrels that erupt in a huge blast the moment they break. One a round at least.</dd>
         <dt><svg><use href="#i-bolt" /></svg>stamina</dt>
-        <dd>Sprint about ten seconds, then you limp. Stopping to catch your breath is a decision.</dd>
-        <dt><svg><use href="#i-boot" /></svg>perks</dt>
-        <dd>Extra bombs, bigger fire, boots, a shield, stim, and rum: tough, and hard to steer.</dd>
+        <dd>
+          Run about eleven seconds, then you limp. The bar under your boots says how much is
+          left, and the notch in it is what a slide costs. Stopping is a decision.
+        </dd>
+        <dt><svg><use href="#i-boot" /></svg>the slide</dt>
+        <dd>
+          Double-tap a direction to dash it: three and a half tiles in half a second, a fifth of
+          your wind, and no steering or bombs until it runs out. Slide through somebody and they
+          are left seeing stars &mdash; no bombs, a quarter slower, for a moment.
+        </dd>
+        <dt><svg><use href="#i-fire" /></svg>perks</dt>
+        <dd>
+          Extra bombs, bigger fire, boots, a shield, stim, and rum: tough, and hard to steer.
+          Bombs and fire both cap at five &mdash; the flames under a bomb say how far it reaches.
+        </dd>
+        <dt><svg><use href="#i-shield" /></svg>shields</dt>
+        <dd>
+          One blast each, and never two at once: a shield that saves you buys half a second in
+          which nothing can touch you, so a chain reaction costs one shield rather than both.
+        </dd>
         <dt><svg><use href="#i-ice" /></svg>ice</dt>
         <dd>Melts into a puddle when hit. Half pace, and you slide when you let go.</dd>
         <dt><svg><use href="#i-coin" /></svg>gold</dt>
         <dd>The rarest drop. Worth 400, and nothing at all until the board is counted.</dd>
         <dt><svg><use href="#i-gull" /></svg>seagulls</dt>
-        <dd>Catch one in a blast at the bottom of its dive and it drops gold. Watch its shadow.</dd>
+        <dd>
+          Catch one in any blast of yours and three gold coins fly straight to you. They cross
+          the island twice as often as they used to, and dawdle while they are over it.
+        </dd>
         <dt><svg><use href="#i-skull" /></svg>streaks</dt>
         <dd>Double, triple, ultra, rampage, and an ACE for the whole island in one run.</dd>
       </dl>
@@ -596,6 +630,24 @@
           autofocus
         />
       </div>
+      <!-- The password, hidden until the server asks for it — which is the first time a name is
+           claimed, and the first time it arrives from a browser the server has not seen. After
+           that this browser holds a token and the box never appears again. See server/accounts.js
+           and the `auth` branch of onRejected in client/main.js.
+
+           `autocomplete` is on and correct per mode (new-password / current-password) so a real
+           password manager can do its job: the alternative is sixteen people typing the same four
+           letters, which is worse security than any amount of hardening here can buy back. -->
+      <div class="playerid-group" id="pwGroup" hidden>
+        <label for="pw" id="pwLabel">PASSWORD:</label>
+        <input
+          id="pw"
+          type="password"
+          placeholder="your password"
+          autocomplete="current-password"
+        />
+      </div>
+      <p id="pwNote" hidden></p>
       <button id="play">play</button>
       <!-- Always available, including when every seat is taken: a spectator costs nobody a
            place, so "full" is not a reason to turn one away. -->
@@ -610,6 +662,14 @@
             ><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>
           </dt>
           <dd>Move</dd>
+
+          <dt>
+            <kbd>&#8592;</kbd><kbd>&#8592;</kbd> <span class="or">twice</span>
+          </dt>
+          <dd>Slide that way &mdash; fast, costly, and it knocks people silly</dd>
+
+          <dt><kbd class="wide">Shift</kbd> + a direction</dt>
+          <dd>Emote</dd>
 
           <dt>
             <kbd class="wide">Space</kbd> <span class="or">or</span>
