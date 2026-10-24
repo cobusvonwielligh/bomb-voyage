@@ -106,6 +106,16 @@ $('play').addEventListener('focus', showMenuQuip);
 $('play').addEventListener('pointerleave', hideMenuQuip);
 $('play').addEventListener('blur', hideMenuQuip);
 
+/* Auto respawn, remembered across sessions.
+ *
+ * A preference rather than a per-round choice, so it lives in localStorage beside the volume
+ * sliders. Default OFF: respawning the instant you die skips the ten seconds in which you can
+ * read who killed you and where, and turning that on should be somebody's decision rather than
+ * something they have to discover and switch back.
+ */
+const AUTO_KEY = 'bv.autoRespawn';
+let autoRespawn = localStorage.getItem(AUTO_KEY) === '1';
+
 /* The three in-game beds, in rotation order. The theme is not one of them: it belongs to the
  * landing page and is excluded for the whole of a round. */
 const BEDS = ['drift', 'suspend', 'undertow'];
@@ -675,6 +685,25 @@ function loop(now) {
  * the reflow the browser coalesces both changes into no change at all, and two pickups in quick
  * succession only flash once.
  */
+/**
+ * Write text into a cast-gold element.
+ *
+ * Cast text has a transparent fill with a gradient clipped through it, which means it can carry
+ * neither a text-shadow (it would show through the inside of every glyph) nor a filter (that
+ * forces a compositing layer, and a text-clip composited is what turned the name into a black
+ * smudge). So the drop shadow is a SECOND COPY of the same text, in a pseudo-element behind it
+ * — plain opaque text, which can take any shadow you like.
+ *
+ * CSS cannot read an element's text content, only its attributes. `data-text` is the copy the
+ * pseudo-element reads, and this is the one place that keeps the two in step.
+ */
+function castText(el, text) {
+  const s = String(text);
+  if (el.dataset.text === s) return;
+  el.textContent = s;
+  el.dataset.text = s;
+}
+
 function setValue(el, text, { worse = false, calm = false } = {}) {
   if (!el || el.textContent === String(text)) return;
   const first = el.textContent === '' || el.textContent === '--';
@@ -791,8 +820,16 @@ function drawRespawn(me) {
   const secs = Math.ceil(left / TICK_HZ);
   // The moment it becomes pressable, once. You have been watching a number for ten seconds;
   // this is what lets you stop watching it.
-  if (btn.disabled && left === 0) sfx.play('ready');
+  const justUnlocked = btn.disabled && left === 0;
+  if (justUnlocked) sfx.play('ready');
   btn.disabled = left > 0;
+  /* Auto respawn fires on that same edge, and only on it.
+   *
+   * On the EDGE rather than on `left === 0`, because this function runs five times a second for
+   * as long as you are dead: without the edge it would send a respawn request every 200 ms
+   * until the server got round to honouring one. The request is debounced downstream as well,
+   * but a guard that relies on the debounce is a guard that breaks when somebody retunes it. */
+  if (justUnlocked && autoRespawn) askRespawn();
   // Calm: this ticks once a second right in front of you, and the full bump is a strobe.
   setValue(btn, left > 0 ? `respawn in ${secs}\u2026` : 'respawn', { calm: true });
 }
@@ -837,7 +874,7 @@ function drawHud() {
   }
   if (secs > COUNTDOWN_FROM) tickedAt = -1;
 
-  $('vClock').textContent = `${mm}:${ss}`;
+  castText($('vClock'), `${mm}:${ss}`);
   $('clock').classList.toggle('low', secs <= 60);
   $('vPing').textContent = `${net.rtt}ms`;
   $('vOnline').textContent = world.players.filter(Boolean).length;
@@ -847,7 +884,7 @@ function drawHud() {
     // Watching. Everything that is about YOU is meaningless, so it is emptied rather than left
     // showing the last player who happened to be in the slot.
     if (observing) {
-      $('who').textContent = 'spectating';
+      castText($('who'), 'spectating');
       setValue($('rank'), '');
       $('dead').style.display = 'none';
       renderLive();
@@ -856,7 +893,7 @@ function drawHud() {
   }
 
   const mine = ranks.get(world.you);
-  $('who').textContent = me.name;
+  castText($('who'), me.name);
   setValue($('rank'), mine ? mine.tier : '');
   drawXp(mine);
   setValue($('vKills'), me.kills);
@@ -1282,6 +1319,21 @@ addEventListener('keydown', e => {
 
 $('leave').onclick = createTap()(leave);
 $('respawn').onclick = askRespawn;
+
+/* The checkbox, and the stored value, kept in step in one place.
+ *
+ * `checked` is set from storage at boot rather than from the markup, so the box always shows
+ * what will actually happen — a checkbox whose state is a guess is worse than no checkbox.
+ */
+$('autoRespawn').checked = autoRespawn;
+$('autoRespawn').onchange = e => {
+  autoRespawn = e.target.checked;
+  localStorage.setItem(AUTO_KEY, autoRespawn ? '1' : '0');
+  sfx.play('click');
+  // Turned on while already waiting out a countdown that has finished: honour it now rather
+  // than on the next death, which would be a setting that appears not to work.
+  if (autoRespawn && !$('respawn').disabled && $('dead').style.display !== 'none') askRespawn();
+};
 
 // Ducking hangs off focus, not off the keys that usually cause it — clicking into the chat box
 // with the mouse is the same thing to the person doing it.

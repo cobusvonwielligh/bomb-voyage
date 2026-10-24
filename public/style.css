@@ -258,39 +258,51 @@ canvas#game {
  * something is always moving behind them. The thin edge stays, because without it pale gold on
  * a translucent panel over bright water is not type, it is a suggestion. */
 .castSm {
-  /* FLAT GOLD FIRST. This is the whole point of the rule's shape.
+  /* Layer one: gold text with a real drop shadow. Opaque, unclipped, ordinary.
    *
-   * Everything below upgrades it to metal, and every one of those upgrades can fail
-   * independently — an engine without `background-clip: text`, a compositor that gives up on
-   * text-clipping under a filter, a font that has not loaded yet. When the old version failed
-   * it failed to a BLACK SMUDGE: the fill was already transparent, so all that survived was
-   * five near-black drop-shadows of glyphs nobody could see.
+   * This is BOTH the fallback and the shadow. An engine that cannot do text-clipping stops
+   * here and gets gold type with a shadow under it, which is a perfectly good result — the rule
+   * never has a failure mode worse than not having written it.
    *
-   * Set the colour before taking it away and the worst case is plain gold text, which is what
-   * this was a month ago and is perfectly fine. Never leave a rule whose failure mode is worse
-   * than not having written it. */
+   * Three shadow layers: a hard offset that reads as thickness, a soft one that lifts it off
+   * the panel, and a warm bloom so the gold looks like it is giving light rather than sitting
+   * on top of something dark. */
   color: var(--gold);
-  text-shadow: var(--rim);
+  text-shadow:
+    0 2px 0 #000,
+    0 4px 10px #000c,
+    0 0 20px #edc24e59;
+  position: relative;
 }
 
 @supports ((-webkit-background-clip: text) or (background-clip: text)) {
-  .castSm {
+  /* Layer two: the metal, as a second copy of the text laid exactly on top.
+   *
+   * THE ORDER IS THE WHOLE POINT, and getting it the other way round is what the first attempt
+   * did. `background-clip: text` makes the gold part of the element's BACKGROUND, and a
+   * background paints before negative-z children — so a shadow copy behind it covered the gold
+   * instead of sitting under it, and the name went dark again.
+   *
+   * Inverted, both layers land where they belong: the parent's inline text (and its shadow)
+   * paints first, then this positioned pseudo-element paints over it. No filter anywhere, so
+   * nothing gets its own compositing layer and the bug that started all this cannot come back.
+   *
+   * `data-text` is written by castText() in main.js; no attribute simply means no second layer.
+   */
+  .castSm[data-text]::after {
+    content: attr(data-text);
+    position: absolute; inset: 0;
     background: linear-gradient(180deg, #a06a12 0%, var(--gold-hi) 34%, var(--gold) 62%, #8a5a10 100%);
     -webkit-background-clip: text; background-clip: text;
     -webkit-text-fill-color: transparent; color: transparent;
-    /* The thin edge as a text STROKE, not as four drop-shadows.
-     *
-     * A filter forces the element onto its own compositing layer, and a text-clipped gradient
-     * that then gets composited is where this broke: in a real browser the name came out as a
-     * dark blur even though every computed style was correct and a headless render was fine.
-     * `-webkit-text-stroke` needs no layer and no filter at all.
-     *
-     * `paint-order: stroke fill` puts the stroke UNDER the fill. Without it the stroke is
-     * centred on the glyph outline and eats half a pixel off every stem, which at this size is
-     * most of the stem. */
+    /* The thin edge, as a stroke rather than drop-shadows — no filter, no layer. Under the
+       fill, or it eats half a pixel off every stem, which at this size is most of the stem. */
     -webkit-text-stroke: 0.9px #140d02;
     paint-order: stroke fill;
     text-shadow: none;
+    /* Match the parent's clipping exactly, or a long name's metal outruns its own shadow. */
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    pointer-events: none;
   }
 }
 
@@ -832,12 +844,11 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
    A display face turns anything with a lowercase 'rn' or a '1' in it into a puzzle at 17px. */
 /* Your name, beside the mascot's face. The display face, cast in gold: it is the one piece of
    text on screen that is about YOU, and the only reason it was ever the accent colour.
-   `text-shadow: none` explicitly, because an id beats a class and `.castSm` cannot be trusted
-   to win it — see the note where the orphan rule used to be. */
+   No `text-shadow` here — an id beats a class, so declaring it would silently cancel the drop
+   shadow `.castSm` provides, which is exactly what it did until this comment replaced it. */
 #who {
   font-family: var(--display); font-weight: 400; font-size: 23px;
   letter-spacing: .04em; display: block;
-  text-shadow: none;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 #rank {
@@ -1321,6 +1332,28 @@ input[type=range] { width: 64px; accent-color: var(--gold); }
 }
 .ghost:hover { color: var(--ink); border-color: #ffffff38; background: #ffffff0f; }
 .card.round .ghost { display: none; }
+.card.round #autoRow { display: none; }
+
+/* Auto respawn.
+ *
+ * Under the button rather than beside it, and quiet: it is a setting, not a fourth choice, and
+ * the respawn button has to stay the one thing the eye lands on. The whole row is the hit
+ * target — a 13px checkbox on its own is a dexterity test. */
+#autoRow {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 10px; padding: 7px 9px;
+  border-radius: 8px;
+  font-family: var(--nums); font-size: 11.5px;
+  letter-spacing: .1em; text-transform: uppercase;
+  color: var(--dim);
+  cursor: pointer; user-select: none;
+  transition: color .12s, background .12s;
+}
+#autoRow:hover { color: var(--ink); background: #ffffff0a; }
+#autoRow input { accent-color: var(--gold); width: 14px; height: 14px; margin: 0; cursor: pointer; }
+/* On, it says so: the label takes the accent, so you can tell at a glance without reading the
+   box — which matters because you are about to stop looking at this card entirely. */
+#autoRow:has(input:checked) { color: var(--gold); }
 
 /* Leaving is the one choice on this card you cannot undo, so it is the one that is coloured.
    Still a ghost button — it is an alternative, not the thing you came here to press — but a red
