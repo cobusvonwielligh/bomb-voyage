@@ -45,13 +45,13 @@ left.
 | | |
 |---|---|
 | <img src="docs/readme/icons/bomb.svg" width="18" align="center"> **Bombs and fire** | A cross-shaped blast, stopped by walls, passed on to any bomb it touches. |
-| <img src="docs/readme/icons/fire.svg" width="18" align="center"> **Powder kegs** | Rare barrels that erupt in a huge blast the moment they break. At least one every round. |
+| <img src="docs/readme/icons/keg.svg" width="18" align="center"> **Powder kegs** | Rare barrels that erupt in a huge blast the moment they break. At least one every round. |
 | <img src="docs/readme/icons/bolt.svg" width="18" align="center"> **Stamina** | Sprint for about ten seconds, then you limp. Stopping to catch your breath is a decision. |
 | <img src="docs/readme/icons/boot.svg" width="18" align="center"> **Perks** | Extra bombs, bigger fire, boots, a shield, stim for stamina, and rum, which makes you tough and very hard to steer. |
-| <img src="docs/readme/icons/shield.svg" width="18" align="center"> **Ice** | Melts into a puddle when hit. Half pace, and you slide when you let go. |
+| <img src="docs/readme/icons/ice.svg" width="18" align="center"> **Ice** | Melts into a puddle when hit. Half pace, and you slide when you let go. |
 | <img src="docs/readme/icons/coin.svg" width="18" align="center"> **Gold** | The rarest drop. Changes nothing in the round, counts for a great deal on the leaderboard. |
-| <img src="docs/readme/icons/note.svg" width="18" align="center"> **Seagulls** | They cross the sky now and then. Catch one in a blast at the bottom of its dive and it drops gold. Watch its shadow. |
-| <img src="docs/readme/icons/crown.svg" width="18" align="center"> **Kill streaks** | Double, triple, ultra, rampage, and an **ACE** for wiping out the whole island in one run. |
+| <img src="docs/readme/icons/gull.svg" width="18" align="center"> **Seagulls** | They cross the sky now and then. Catch one in a blast at the bottom of its dive and it drops gold. Watch its shadow. |
+| <img src="docs/readme/icons/skull.svg" width="18" align="center"> **Kill streaks** | Double, triple, ultra, rampage, and an **ACE** for wiping out the whole island in one run. |
 
 ## <img src="docs/readme/icons/medal-gold.svg" width="18" align="center"> Medals
 
